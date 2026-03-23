@@ -1,0 +1,6 @@
+name: bad-fallback-agent
+steps:
+  - name: step
+    script: echo hello
+    fallback:
+      agent: ./nonexistent.md

@@ -1,0 +1,3 @@
+steps:
+  - name: step-one
+    script: echo hello

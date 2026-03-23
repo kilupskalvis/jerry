@@ -1,0 +1,4 @@
+name: missing-agent
+steps:
+  - name: gen
+    agent: ./nonexistent-agent.md

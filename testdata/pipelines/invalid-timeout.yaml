@@ -1,0 +1,5 @@
+name: bad-timeout
+steps:
+  - name: step
+    script: echo hello
+    timeout: abc

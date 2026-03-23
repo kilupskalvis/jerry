@@ -1,0 +1,8 @@
+name: dup-output-key
+steps:
+  - name: step-one
+    script: echo one
+    output_key: same_key
+  - name: step-two
+    script: echo two
+    output_key: same_key
