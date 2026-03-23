@@ -1,0 +1,14 @@
+# Build artifacts
+motif
+motif-*
+
+# Plans (local development specs)
+.motif_plans/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
