@@ -101,6 +101,11 @@ func NewSearchTool(repoRoot string) Tool {
 					}
 				}
 
+				// Skip sensitive files.
+				if IsSensitivePath(relPath) {
+					return nil
+				}
+
 				// Skip large files.
 				info, statErr := d.Info()
 				if statErr != nil || info.Size() > MaxSearchFileSize {

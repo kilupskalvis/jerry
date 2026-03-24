@@ -46,16 +46,20 @@ func NewGlobTool(repoRoot string) Tool {
 				return fmt.Sprintf("Error: invalid glob pattern '%s': %s", pattern, err), nil
 			}
 
-			// Filter out directories — only return files.
+			// Filter out directories and sensitive files — only return safe files.
 			var files []string
 			for _, match := range matches {
 				info, statErr := fs.Stat(fsys, match)
 				if statErr != nil {
 					continue
 				}
-				if !info.IsDir() {
-					files = append(files, match)
+				if info.IsDir() {
+					continue
 				}
+				if IsSensitivePath(match) {
+					continue
+				}
+				files = append(files, match)
 			}
 
 			if len(files) == 0 {

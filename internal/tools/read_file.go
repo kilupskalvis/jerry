@@ -44,6 +44,10 @@ func NewReadFileTool(repoRoot string) Tool {
 				return pathErr, nil
 			}
 
+			if IsSensitivePath(path) {
+				return fmt.Sprintf("Error: access denied — '%s' is a sensitive file (may contain secrets)", path), nil
+			}
+
 			info, err := os.Stat(absPath)
 			if err != nil {
 				if os.IsNotExist(err) {
