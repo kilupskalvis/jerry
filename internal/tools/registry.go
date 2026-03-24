@@ -69,6 +69,9 @@ func NewRegistry(repoRoot string, env map[string]string) *Registry {
 	r.register(NewSearchTool(repoRoot))
 	r.register(NewRunCommandTool(repoRoot, envSlice))
 	r.register(NewListDirectoryTool(repoRoot))
+	r.register(NewGitLogTool(repoRoot))
+	r.register(NewGitDiffTool(repoRoot))
+	r.register(NewGitBlameTool(repoRoot))
 
 	return r
 }

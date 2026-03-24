@@ -619,7 +619,7 @@ func TestKnownToolNames(t *testing.T) {
 	reg := tools.NewRegistry(root, nil)
 
 	names := reg.KnownToolNames()
-	if len(names) != 6 {
-		t.Errorf("expected 6 known tools, got %d: %v", len(names), names)
+	if len(names) != 9 {
+		t.Errorf("expected 9 known tools, got %d: %v", len(names), names)
 	}
 }
