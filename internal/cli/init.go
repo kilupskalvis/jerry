@@ -68,6 +68,7 @@ func runInit(targetPath string) error {
 		filepath.Join(motifDir, "scripts", "echo-context.sh"): echoContextScript,
 		filepath.Join(motifDir, ".gitignore"):                 motifGitignore,
 		filepath.Join(motifDir, "agents", ".gitkeep"):         "",
+		filepath.Join(motifDir, "config.yaml"):                defaultConfigYAML,
 	}
 
 	for path, content := range files {
@@ -114,6 +115,16 @@ cat "$MOTIF_CONTEXT_FILE"
 echo ""
 echo "Run ID:    $MOTIF_RUN_ID"
 echo "Step Name: $MOTIF_STEP_NAME"
+`
+
+const defaultConfigYAML = `# Motif configuration — defaults for all agents and pipelines.
+# Agent frontmatter values take precedence over these defaults.
+#
+# defaults:
+#   model: claude-sonnet-4-6
+#   timeout: 600s
+#   max_iterations: 50
+#   context_window: 200000
 `
 
 const motifGitignore = `runs/

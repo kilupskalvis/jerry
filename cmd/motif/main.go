@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	"github.com/kilupskalvis/motif/internal/agent"
 	"github.com/kilupskalvis/motif/internal/cli"
 	"github.com/kilupskalvis/motif/internal/config"
+	"github.com/kilupskalvis/motif/internal/errors"
 	"github.com/kilupskalvis/motif/internal/llm"
 	"github.com/kilupskalvis/motif/internal/output"
 	"github.com/kilupskalvis/motif/internal/pipeline"
@@ -26,35 +28,36 @@ func main() {
 }
 
 func run() int {
-	// Set up signal handling — Ctrl+C propagates cancellation through the pipeline.
 	signalCtx, signalCancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)
 	defer signalCancel()
 
 	printer := output.NewPrinter(os.Stdout, os.Stderr)
-
-	// Build the app with lazy initialization.
-	// Some commands (like init) don't need .motif/ to exist.
 	app := buildApp(printer)
-
 	rootCmd := cli.NewRootCmd(app)
 
 	if execErr := rootCmd.ExecuteContext(signalCtx); execErr != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "motif: error: %s\n", execErr.Error())
+
+		// Exit code 4 for resume-specific errors.
+		var motifErr *errors.Error
+		if stderrors.As(execErr, &motifErr) {
+			switch motifErr.Code {
+			case errors.CodeRunNotFound, errors.CodeRunNotResumable, errors.CodePipelineChanged:
+				return 4
+			}
+		}
 		return 1
 	}
 	return 0
 }
 
 // buildApp constructs the CLI app with all dependencies.
-// If .motif/ is not found, Loader and Engine will be nil —
-// commands that need them (run, validate) check for this.
 func buildApp(printer *output.Printer) *cli.App {
 	app := &cli.App{
 		Printer: printer,
 	}
 
-	// Try to find .motif/ directory
 	cwd, cwdErr := os.Getwd()
 	if cwdErr != nil {
 		return app
@@ -62,37 +65,79 @@ func buildApp(printer *output.Printer) *cli.App {
 
 	motifDir, repoRoot, findErr := config.FindMotifDir(cwd)
 	if findErr != nil {
-		// Not in a Motif project — init command will still work
 		return app
 	}
 
-	// Build config
+	// Load .motif/config.yaml.
+	fileConfig, cfgErr := config.LoadFileConfig(motifDir, "config.yaml")
+	if cfgErr != nil {
+		printer.Warning("failed to load config.yaml: %s", cfgErr)
+		fileConfig = &config.FileConfig{}
+	}
+
+	// Load .env file from repo root.
+	dotEnv, dotEnvErr := config.LoadDotEnv(repoRoot, ".env")
+	if dotEnvErr != nil {
+		printer.Warning("failed to load .env: %s", dotEnvErr)
+		dotEnv = map[string]string{}
+	}
+
+	// Merge environments: process env takes precedence over .env values.
+	secretEnv := collectSecretEnv()
+	for key, val := range dotEnv {
+		if _, exists := secretEnv[key]; !exists {
+			secretEnv[key] = val
+		}
+	}
+
+	// Resolve default model: env var → config.yaml.
+	defaultModel := os.Getenv("MOTIF_DEFAULT_MODEL")
+	if defaultModel == "" {
+		defaultModel = fileConfig.Defaults.Model
+	}
+
+	// Resolve default timeout.
+	defaultTimeout := config.DefaultStepTimeoutValue
+	if fileConfig.Defaults.Timeout.Duration > 0 {
+		defaultTimeout = fileConfig.Defaults.Timeout.Duration
+	}
+
 	cfg := config.Config{
 		MotifDir:           motifDir,
 		RepoRoot:           repoRoot,
-		Env:                collectSecretEnv(),
-		DefaultStepTimeout: config.DefaultStepTimeoutValue,
-		DefaultModel:       os.Getenv("MOTIF_DEFAULT_MODEL"),
+		Env:                secretEnv,
+		DefaultStepTimeout: defaultTimeout,
+		DefaultModel:       defaultModel,
+		FileConfig:         fileConfig,
 	}
 
-	// Build dependencies
 	loader := pipeline.NewLoader(motifDir)
-
 	runsDir := filepath.Join(motifDir, "runs")
 	stateStore := state.NewFileStateStore(runsDir)
-
 	scriptExec := script.NewExecutor(cfg.RepoRoot, cfg.Env)
 
-	// Build agent executor with real LLM client if API key is available.
+	// Build agent infrastructure.
 	toolRegistry := tools.NewRegistry(cfg.RepoRoot, cfg.Env)
-	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), cfg.DefaultModel, nil)
+	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), cfg.DefaultModel, fileConfig)
 
-	var llmClient llm.Client
-	if anthropicKey := os.Getenv("ANTHROPIC_API_KEY"); anthropicKey != "" {
-		llmClient = llm.NewAnthropicClient(anthropicKey, cfg.DefaultModel)
+	// Resolve API keys from environment and .env.
+	anthropicKey := resolveKey("ANTHROPIC_API_KEY", secretEnv)
+	openaiKey := resolveKey("OPENAI_API_KEY", secretEnv)
+
+	// Build default LLM client from first available API key.
+	var defaultClient llm.Client
+	if anthropicKey != "" {
+		defaultClient = llm.NewAnthropicClient(anthropicKey, cfg.DefaultModel)
+	} else if openaiKey != "" {
+		defaultClient = llm.NewOpenAIClient(openaiKey, cfg.DefaultModel)
 	}
 
-	agentExec := agent.NewExecutor(agentLoader, toolRegistry, llmClient, nil, printer)
+	var compactor *llm.Compactor
+	if defaultClient != nil {
+		compactor = llm.NewCompactor(defaultClient)
+	}
+
+	agentExec := agent.NewExecutor(agentLoader, toolRegistry, defaultClient, compactor, printer)
 
 	engine := pipeline.NewEngine(
 		[]pipeline.StepExecutor{agentExec, scriptExec},
@@ -108,13 +153,22 @@ func buildApp(printer *output.Printer) *cli.App {
 	return app
 }
 
+// resolveKey returns the value of an env var, checking the process environment
+// first, then the provided dotenv map.
+func resolveKey(envVar string, dotEnv map[string]string) string {
+	if val := os.Getenv(envVar); val != "" {
+		return val
+	}
+	return dotEnv[envVar]
+}
+
 // collectSecretEnv collects environment variables with the MOTIF_SECRET_ prefix.
 func collectSecretEnv() map[string]string {
 	env := make(map[string]string)
 	for _, entry := range os.Environ() {
-		parts := strings.SplitN(entry, "=", 2)
-		if len(parts) == 2 && strings.HasPrefix(parts[0], "MOTIF_SECRET_") {
-			env[parts[0]] = parts[1]
+		key, val, found := strings.Cut(entry, "=")
+		if found && strings.HasPrefix(key, "MOTIF_SECRET_") {
+			env[key] = val
 		}
 	}
 	return env
