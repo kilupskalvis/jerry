@@ -252,16 +252,13 @@ func (l *Loader) warnings(p *Pipeline) []string {
 	for i := range p.Steps {
 		step := &p.Steps[i]
 		if step.If != "" {
-			warns = append(warns, fmt.Sprintf("step %q: conditional execution ('if') is not supported until Phase 3 — will be ignored", step.Name))
+			warns = append(warns, fmt.Sprintf("step %q: conditional execution ('if') is not yet supported — will be ignored", step.Name))
 		}
 		if step.Gate {
-			warns = append(warns, fmt.Sprintf("step %q: gate steps are not supported until Phase 3 — will be ignored", step.Name))
+			warns = append(warns, fmt.Sprintf("step %q: gate steps are not yet supported — will be ignored", step.Name))
 		}
 		if len(step.Parallel) > 0 {
-			warns = append(warns, fmt.Sprintf("step %q: parallel execution is not supported until Phase 3 — will be ignored", step.Name))
-		}
-		if step.Agent != "" {
-			warns = append(warns, fmt.Sprintf("step %q: agent steps are not supported until Phase 2 — will be skipped during execution", step.Name))
+			warns = append(warns, fmt.Sprintf("step %q: parallel execution is not yet supported — will be ignored", step.Name))
 		}
 	}
 

@@ -72,8 +72,13 @@ func resumePipeline(runCtx context.Context, app *App, runID string, force bool) 
 		return pipelineErr
 	}
 
-	// Determine resume point.
+	// Determine resume point: find the last failed step and restart from there.
+	// If the last step result is a failure, re-run it. Otherwise start from the
+	// next unexecuted step.
 	fromStep := len(runState.StepResults)
+	if fromStep > 0 && runState.StepResults[fromStep-1].Status == state.StepFailed {
+		fromStep-- // re-run the failed step
+	}
 	if fromStep >= len(pipelineDef.Steps) {
 		return motifErrors.New(motifErrors.CodeRunNotResumable,
 			"all steps already completed in saved state")
@@ -87,6 +92,11 @@ func resumePipeline(runCtx context.Context, app *App, runID string, force bool) 
 					"does not match saved state (expected %q). Cannot safely resume.",
 					pipelineDef.Steps[i].Name, i, saved.Name))
 		}
+	}
+
+	// Remove the failed step result so RunFrom doesn't produce a duplicate.
+	if fromStep < len(runState.StepResults) {
+		runState.StepResults = runState.StepResults[:fromStep]
 	}
 
 	existingStore := contextstore.RestoreFromSnapshot(runState.Context)
