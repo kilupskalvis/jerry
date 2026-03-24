@@ -88,4 +88,7 @@ type StateStore interface {
 	// ListRuns returns summary information for all stored runs,
 	// ordered by start time (most recent first).
 	ListRuns() ([]RunSummary, error)
+
+	// RunDir returns the absolute path to a run's directory.
+	RunDir(runID string) string
 }

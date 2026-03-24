@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -43,6 +45,7 @@ type mockStateStore struct {
 	checkpointCalls int
 	finalCalls      int
 	lastState       *state.RunState
+	runsDir         string // temp dir for log files
 }
 
 func (m *mockStateStore) InitRun(runState state.RunState) error {
@@ -69,6 +72,16 @@ func (m *mockStateStore) LoadRun(_ string) (*state.RunState, error) {
 
 func (m *mockStateStore) ListRuns() ([]state.RunSummary, error) {
 	return nil, nil
+}
+
+func (m *mockStateStore) RunDir(runID string) string {
+	base := m.runsDir
+	if base == "" {
+		base = os.TempDir()
+	}
+	dir := filepath.Join(base, runID)
+	_ = os.MkdirAll(dir, 0o755)
+	return dir
 }
 
 func newTestEngine(exec pipeline.StepExecutor, stateStore state.StateStore) *pipeline.Engine {

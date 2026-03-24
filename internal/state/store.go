@@ -124,6 +124,11 @@ func (s *FileStateStore) ListRuns() ([]RunSummary, error) {
 	return summaries, nil
 }
 
+// RunDir returns the absolute path to a run's directory.
+func (s *FileStateStore) RunDir(runID string) string {
+	return filepath.Join(s.runsDir, runID)
+}
+
 // appendToLog appends a step result as a single NDJSON line to log.json.
 func (s *FileStateStore) appendToLog(runDir string, result StepResult) error {
 	logPath := filepath.Join(runDir, "log.json")

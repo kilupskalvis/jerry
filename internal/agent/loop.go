@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	motifErrors "github.com/kilupskalvis/motif/internal/errors"
 	"github.com/kilupskalvis/motif/internal/llm"
 	"github.com/kilupskalvis/motif/internal/output"
+	"github.com/kilupskalvis/motif/internal/state"
 )
 
 // MaxRetryIterations is the maximum additional iterations allowed during
@@ -84,6 +86,7 @@ func (l *Loop) Run(
 			return nil, loopCtx.Err()
 		}
 
+		llmStart := time.Now()
 		response, sendErr := l.client.Send(loopCtx, systemMessage, messages, toolDefs)
 
 		// Reactive compaction: context too long.
@@ -103,6 +106,23 @@ func (l *Loop) Run(
 		result.TotalUsage.InputTokens += response.Usage.InputTokens
 		result.TotalUsage.OutputTokens += response.Usage.OutputTokens
 		result.Iterations++
+
+		// Log LLM call.
+		if lw := state.LogWriterFrom(loopCtx); lw != nil {
+			toolNames := make([]string, len(response.ToolCalls))
+			for i, tc := range response.ToolCalls {
+				toolNames[i] = tc.Name
+			}
+			lw.Log(state.LogLLMCall, agentCfg.Name, state.LLMCallData{
+				Iteration:          result.Iterations,
+				Model:              agentCfg.Model,
+				TokensInput:        response.Usage.InputTokens,
+				TokensOutput:       response.Usage.OutputTokens,
+				DurationMs:         time.Since(llmStart).Milliseconds(),
+				StopReason:         response.StopReason,
+				ToolCallsRequested: toolNames,
+			})
+		}
 
 		// Proactive compaction: approaching context window limit.
 		messages = l.proactiveCompact(loopCtx, agentCfg, systemMessage, messages, response, result)
@@ -266,13 +286,30 @@ func (l *Loop) executeToolCalls(
 		ToolCalls: response.ToolCalls,
 	})
 
+	lw := state.LogWriterFrom(loopCtx)
 	for _, call := range response.ToolCalls {
 		result.ToolCalls++
-		l.printer.Info("      tool: %s", call.Name)
 
+		toolStart := time.Now()
 		toolResult, toolErr := dispatch(loopCtx, call)
+		toolDuration := time.Since(toolStart)
+		success := toolErr == nil
+
 		if toolErr != nil {
 			toolResult = fmt.Sprintf("Error executing %s: %s", call.Name, toolErr.Error())
+		}
+
+		l.printer.ToolProgress(result.Iterations, call.Name, summarizeToolCall(call, toolResult))
+
+		if lw != nil {
+			lw.Log(state.LogToolCall, "", state.ToolCallData{
+				Iteration:       result.Iterations,
+				Tool:            call.Name,
+				Arguments:       call.Arguments,
+				DurationMs:      toolDuration.Milliseconds(),
+				ResultSizeBytes: len(toolResult),
+				Success:         success,
+			})
 		}
 
 		messages = append(messages, llm.Message{
@@ -283,6 +320,36 @@ func (l *Loop) executeToolCalls(
 	}
 
 	return messages
+}
+
+// summarizeToolCall produces a short summary of a tool call for progress output.
+func summarizeToolCall(call llm.ToolCall, result string) string {
+	switch call.Name {
+	case "read_file", "write_file":
+		if path, ok := call.Arguments["path"].(string); ok {
+			return path
+		}
+	case "glob":
+		if pattern, ok := call.Arguments["pattern"].(string); ok {
+			return pattern
+		}
+	case "search_codebase":
+		if query, ok := call.Arguments["query"].(string); ok {
+			return fmt.Sprintf("%q", query)
+		}
+	case "run_command":
+		if cmd, ok := call.Arguments["command"].(string); ok {
+			if len(cmd) > 60 {
+				cmd = cmd[:60] + "..."
+			}
+			return cmd
+		}
+	case "list_directory":
+		if path, ok := call.Arguments["path"].(string); ok {
+			return path
+		}
+	}
+	return ""
 }
 
 // buildSystemMessage constructs the system prompt from the agent's instructions,

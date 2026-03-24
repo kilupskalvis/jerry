@@ -48,10 +48,8 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 	runID := generateRunID()
 	startTime := time.Now()
 
-	// Initialize context store
 	ctxStore := contextstore.NewStore(runID, trigger)
 
-	// Initialize run state
 	runState := state.RunState{
 		RunID:        runID,
 		PipelineName: pipelineDef.Name,
@@ -67,6 +65,27 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		return &runState, motifErrors.Wrap(motifErrors.CodeStateWriteFailed,
 			"failed to initialize run state", initErr)
 	}
+
+	// Create structured log writer for this run.
+	logWriter, logErr := state.NewLogWriter(e.stateStore.RunDir(runID))
+	if logErr != nil {
+		e.printer.Warning("failed to create log writer: %s", logErr)
+	}
+	defer func() { _ = logWriter.Close() }()
+
+	stepNames := make([]string, len(pipelineDef.Steps))
+	for i, s := range pipelineDef.Steps {
+		stepNames[i] = s.Name
+	}
+	logWriter.Log(state.LogPipelineStart, "", state.PipelineStartData{
+		RunID:         runID,
+		Pipeline:      pipelineDef.Name,
+		TriggerIntent: trigger.Intent,
+		Steps:         stepNames,
+	})
+
+	// Inject log writer into context for executors to use.
+	runCtx = state.WithLogWriter(runCtx, logWriter)
 
 	e.printer.Info("Running pipeline: %s (%d steps)", pipelineDef.Name, len(pipelineDef.Steps))
 
@@ -95,6 +114,10 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		}
 
 		e.printer.StepStart(step.Name)
+		logWriter.Log(state.LogStepStart, step.Name, state.StepStartData{
+			Type:      stepType(step),
+			AgentFile: step.Agent,
+		})
 
 		// Create step context with timeout
 		stepTimeout := e.resolveTimeout(step)
@@ -150,7 +173,11 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 			_ = e.stateStore.SaveFinal(runState)
 
 			e.printer.StepFailed(step.Name, execErr.Error())
+			logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
+				Status: "failed", DurationMs: stepDuration.Milliseconds(),
+			})
 			e.printer.PipelineFailed(step.Name, execErr.Error(), runID)
+			e.logPipelineEnd(logWriter, &runState, startTime)
 
 			return &runState, execErr
 		}
@@ -181,6 +208,9 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		_ = e.stateStore.SaveCheckpoint(runState)
 
 		e.printer.StepSuccess(step.Name, stepDuration)
+		logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
+			Status: "success", DurationMs: stepDuration.Milliseconds(),
+		})
 	}
 
 	// Pipeline completed successfully
@@ -191,8 +221,31 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 	_ = e.stateStore.SaveFinal(runState)
 
 	e.printer.PipelineComplete(time.Since(startTime), runID)
+	e.logPipelineEnd(logWriter, &runState, startTime)
 
 	return &runState, nil
+}
+
+// logPipelineEnd writes the pipeline_end event to the log.
+func (e *Engine) logPipelineEnd(lw *state.LogWriter, runState *state.RunState, startTime time.Time) {
+	var completed, failed, skipped int
+	for _, r := range runState.StepResults {
+		switch r.Status {
+		case state.StepSuccess:
+			completed++
+		case state.StepFailed:
+			failed++
+		case state.StepSkipped:
+			skipped++
+		}
+	}
+	lw.Log(state.LogPipelineEnd, "", state.PipelineEndData{
+		Status:         string(runState.Status),
+		DurationMs:     time.Since(startTime).Milliseconds(),
+		StepsCompleted: completed,
+		StepsFailed:    failed,
+		StepsSkipped:   skipped,
+	})
 }
 
 // executeWithRetries runs a step, retrying on failure according to the step's retry config.

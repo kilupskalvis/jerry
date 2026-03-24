@@ -86,6 +86,11 @@ func (l *Loader) LoadFile(path string) (*Pipeline, error) {
 	return &p, nil
 }
 
+// MotifDir returns the .motif/ directory path this loader reads from.
+func (l *Loader) MotifDir() string {
+	return l.motifDir
+}
+
 // LoadAll reads and validates all pipelines in .motif/pipelines/.
 // Returns a slice of results so validation can report on all files.
 func (l *Loader) LoadAll() ([]LoadResult, error) {
