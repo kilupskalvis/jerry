@@ -41,7 +41,7 @@ func run() int {
 		var motifErr *errors.Error
 		if stderrors.As(execErr, &motifErr) {
 			switch motifErr.Code {
-			case errors.CodeMotifDirNotFound, errors.CodeValidationFailed:
+			case errors.CodeMotifDirNotFound:
 				return 2
 			case errors.CodeRunNotFound, errors.CodeRunNotResumable, errors.CodePipelineChanged:
 				return 4

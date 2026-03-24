@@ -1,4 +1,4 @@
-// motif logs: view execution history and run details.
+// motif logs: view project overview, execution history, and run details.
 
 package cli
 
@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,8 +27,8 @@ func newLogsCmd(app *App) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "logs [run-id]",
-		Short: "View execution logs",
-		Long:  "List recent runs or show detailed logs for a specific run.",
+		Short: "View project overview and execution logs",
+		Long:  "Show project overview and recent runs, or detailed logs for a specific run.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if app.StateStore == nil {
@@ -40,7 +41,7 @@ func newLogsCmd(app *App) *cobra.Command {
 			}
 
 			if len(args) == 0 {
-				return listRuns(app)
+				return showOverview(app)
 			}
 
 			return showRunDetail(app, args[0], stepFilter, showTools, showLLM, showJSON)
@@ -56,7 +57,27 @@ func newLogsCmd(app *App) *cobra.Command {
 	return cmd
 }
 
-func listRuns(app *App) error {
+func showOverview(app *App) error {
+	if app.Loader != nil {
+		motifDir := app.Loader.MotifDir()
+		fmt.Fprintf(os.Stderr, "Motif project: %s\n", motifDir)
+
+		pipelineNames := listFilesWithExt(filepath.Join(motifDir, "pipelines"), ".yaml", ".yml")
+		if len(pipelineNames) > 0 {
+			fmt.Fprintf(os.Stderr, "Pipelines: %d (%s)\n", len(pipelineNames), strings.Join(pipelineNames, ", "))
+		} else {
+			fmt.Fprintln(os.Stderr, "Pipelines: none")
+		}
+
+		agentNames := listFilesWithExt(filepath.Join(motifDir, "agents"), ".md")
+		if len(agentNames) > 0 {
+			fmt.Fprintf(os.Stderr, "Agents: %d (%s)\n", len(agentNames), strings.Join(agentNames, ", "))
+		} else {
+			fmt.Fprintln(os.Stderr, "Agents: none")
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
 	summaries, listErr := app.StateStore.ListRuns()
 	if listErr != nil {
 		return listErr
@@ -66,6 +87,17 @@ func listRuns(app *App) error {
 		fmt.Fprintln(os.Stderr, "No runs found.")
 		return nil
 	}
+
+	var completed, failed int
+	for _, s := range summaries {
+		switch s.Status {
+		case state.StatusCompleted:
+			completed++
+		case state.StatusFailed:
+			failed++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Runs: %d total (%d completed, %d failed)\n\n", len(summaries), completed, failed)
 
 	fmt.Fprintln(os.Stderr, "Recent runs:")
 	limit := 20
@@ -102,7 +134,6 @@ func showRunDetail(app *App, runID, stepFilter string, showTools, showLLM, showJ
 		return loadErr
 	}
 
-	// Read structured log entries.
 	runDir := app.StateStore.RunDir(runID)
 	entries, _ := state.ReadLogEntries(runDir)
 
@@ -115,7 +146,7 @@ func showRunDetail(app *App, runID, stepFilter string, showTools, showLLM, showJ
 	}
 
 	if stepFilter != "" {
-		return showStepDetail(runState, entries, stepFilter)
+		return showStepDetail(entries, stepFilter)
 	}
 
 	if showTools {
@@ -126,11 +157,13 @@ func showRunDetail(app *App, runID, stepFilter string, showTools, showLLM, showJ
 		return showLLMCalls(entries)
 	}
 
-	// Default: run overview.
 	return showRunOverview(runState, entries)
 }
 
-func showRunOverview(runState *state.RunState, _ []state.LogEntry) error {
+// showRunOverview prints the run summary: header, token totals, per-step stats,
+// files changed, and errors. All tool-specific knowledge comes from the stored
+// Summary field — this function is completely tool-agnostic.
+func showRunOverview(runState *state.RunState, entries []state.LogEntry) error {
 	fmt.Fprintf(os.Stderr, "Run: %s\n", runState.RunID)
 	fmt.Fprintf(os.Stderr, "Pipeline: %s\n", runState.PipelineName)
 	fmt.Fprintf(os.Stderr, "Status: %s\n", runState.Status)
@@ -140,30 +173,101 @@ func showRunOverview(runState *state.RunState, _ []state.LogEntry) error {
 		fmt.Fprintf(os.Stderr, "Duration: %s\n", formatLogDuration(duration))
 	}
 
+	var totalInput, totalOutput int
+	for _, entry := range entries {
+		if entry.Type != state.LogLLMCall {
+			continue
+		}
+		var data state.LLMCallData
+		if json.Unmarshal(entry.Data, &data) == nil {
+			totalInput += data.TokensInput
+			totalOutput += data.TokensOutput
+		}
+	}
+	if totalInput > 0 || totalOutput > 0 {
+		fmt.Fprintf(os.Stderr, "Tokens: %dk input, %dk output (%dk total)\n",
+			totalInput/1000, totalOutput/1000, (totalInput+totalOutput)/1000)
+	}
+
+	stepStats := aggregateByStep(entries)
+
 	fmt.Fprintln(os.Stderr, "\nSteps:")
 	for _, r := range runState.StepResults {
-		var symbol string
+		symbol := "✓"
 		switch r.Status {
 		case state.StepFailed:
 			symbol = "✗"
 		case state.StepSkipped:
 			symbol = "⊘"
-		default:
-			symbol = "✓"
 		}
 		duration := time.Duration(r.DurationMs) * time.Millisecond
-		fmt.Fprintf(os.Stderr, "  %s %-16s %-8s %s\n",
-			symbol, r.Name, r.Type, formatLogDuration(duration))
+
+		extra := ""
+		if s, ok := stepStats[r.Name]; ok {
+			parts := []string{}
+			if s.llmCalls > 0 {
+				parts = append(parts, fmt.Sprintf("%d LLM calls", s.llmCalls))
+			}
+			if s.toolCalls > 0 {
+				parts = append(parts, fmt.Sprintf("%d tool calls", s.toolCalls))
+			}
+			if s.tokensIn > 0 {
+				parts = append(parts, fmt.Sprintf("%dk tokens", (s.tokensIn+s.tokensOut)/1000))
+			}
+			if len(parts) > 0 {
+				extra = "  " + strings.Join(parts, ", ")
+			}
+		}
+
+		fmt.Fprintf(os.Stderr, "  %s %-16s %-8s %s%s\n",
+			symbol, r.Name, r.Type, formatLogDuration(duration), extra)
 	}
+
+	// Files changed — detected by tool calls that have both path and content args.
+	filesWritten := extractWrittenFiles(entries)
+	if len(filesWritten) > 0 {
+		fmt.Fprintln(os.Stderr, "\nFiles changed:")
+		for _, f := range filesWritten {
+			fmt.Fprintf(os.Stderr, "  ~ %s\n", f)
+		}
+	}
+
+	for _, r := range runState.StepResults {
+		if r.Status == state.StepFailed && r.Error != nil {
+			fmt.Fprintf(os.Stderr, "\nError in step %q: %s\n", r.Name, r.Error.Message)
+		}
+	}
+
 	return nil
 }
 
-func showStepDetail(_ *state.RunState, entries []state.LogEntry, stepName string) error {
-	fmt.Fprintf(os.Stderr, "Step: %s\n\n", stepName)
+// showStepDetail prints every log entry for a step. Tool call summaries come
+// from the stored Summary field — no tool-specific interpretation here.
+func showStepDetail(entries []state.LogEntry, stepName string) error {
+	s := aggregateByStep(entries)[stepName]
+	if s != nil {
+		parts := []string{}
+		if s.llmCalls > 0 {
+			parts = append(parts, fmt.Sprintf("%d LLM calls", s.llmCalls))
+		}
+		if s.toolCalls > 0 {
+			parts = append(parts, fmt.Sprintf("%d tool calls", s.toolCalls))
+		}
+		if s.tokensIn > 0 {
+			parts = append(parts, fmt.Sprintf("%dk tokens", (s.tokensIn+s.tokensOut)/1000))
+		}
+		if len(parts) > 0 {
+			fmt.Fprintf(os.Stderr, "Step: %s (%s)\n\n", stepName, strings.Join(parts, ", "))
+		} else {
+			fmt.Fprintf(os.Stderr, "Step: %s\n\n", stepName)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Step: %s\n\n", stepName)
+	}
 
-	toolCount := 0
+	hasEntries := false
 	for _, entry := range entries {
-		if entry.Step != stepName && entry.Step != "" {
+		if entry.Step != stepName {
 			continue
 		}
 
@@ -171,31 +275,37 @@ func showStepDetail(_ *state.RunState, entries []state.LogEntry, stepName string
 		case state.LogToolCall:
 			var data state.ToolCallData
 			if json.Unmarshal(entry.Data, &data) == nil {
-				toolCount++
+				hasEntries = true
 				status := "✓"
 				if !data.Success {
 					status = "✗"
 				}
-				fmt.Fprintf(os.Stderr, "  %3d. %s %-16s %dms\n",
-					toolCount, status, data.Tool, data.DurationMs)
+				detail := data.Summary
+				if detail != "" && data.ResultSizeBytes > 0 {
+					detail += fmt.Sprintf(" → %s", formatBytes(data.ResultSizeBytes))
+				}
+				fmt.Fprintf(os.Stderr, "  iter %d: %s %-20s %s\n",
+					data.Iteration, status, data.Tool, detail)
 			}
 		case state.LogLLMCall:
 			var data state.LLMCallData
 			if json.Unmarshal(entry.Data, &data) == nil {
+				hasEntries = true
 				tools := ""
 				if len(data.ToolCallsRequested) > 0 {
 					tools = " → " + strings.Join(data.ToolCallsRequested, ", ")
 				}
-				fmt.Fprintf(os.Stderr, "  [llm iter %d] %dk tokens, %dms%s\n",
+				fmt.Fprintf(os.Stderr, "  [llm iter %d] %d+%d tokens, %s%s\n",
 					data.Iteration,
-					(data.TokensInput+data.TokensOutput)/1000,
-					data.DurationMs, tools)
+					data.TokensInput, data.TokensOutput,
+					formatLogDuration(time.Duration(data.DurationMs)*time.Millisecond),
+					tools)
 			}
 		}
 	}
 
-	if toolCount == 0 {
-		fmt.Fprintln(os.Stderr, "  (no tool calls recorded)")
+	if !hasEntries {
+		fmt.Fprintln(os.Stderr, "  (no entries recorded for this step)")
 	}
 	return nil
 }
@@ -215,7 +325,7 @@ func showToolCalls(entries []state.LogEntry) error {
 		var data state.ToolCallData
 		if json.Unmarshal(entry.Data, &data) == nil {
 			count++
-			fmt.Fprintf(os.Stderr, "    %-16s %dms\n", data.Tool, data.DurationMs)
+			fmt.Fprintf(os.Stderr, "    %-16s %s  %dms\n", data.Tool, data.Summary, data.DurationMs)
 		}
 	}
 	if count == 0 {
@@ -234,16 +344,80 @@ func showLLMCalls(entries []state.LogEntry) error {
 		var data state.LLMCallData
 		if json.Unmarshal(entry.Data, &data) == nil {
 			count++
-			fmt.Fprintf(os.Stderr, "  [%s iter %d] model=%s in=%d out=%d %dms stop=%s\n",
+			fmt.Fprintf(os.Stderr, "  [%s iter %d] model=%s in=%d out=%d %s stop=%s\n",
 				entry.Step, data.Iteration, data.Model,
 				data.TokensInput, data.TokensOutput,
-				data.DurationMs, data.StopReason)
+				formatLogDuration(time.Duration(data.DurationMs)*time.Millisecond),
+				data.StopReason)
 		}
 	}
 	if count == 0 {
 		fmt.Fprintln(os.Stderr, "  (no LLM calls recorded)")
 	}
 	return nil
+}
+
+// extractWrittenFiles collects unique file paths from tool calls that wrote
+// files. Detected generically by the presence of both "path" and "content"
+// in the arguments — no tool name check needed.
+func extractWrittenFiles(entries []state.LogEntry) []string {
+	seen := map[string]bool{}
+	var files []string
+	for _, entry := range entries {
+		if entry.Type != state.LogToolCall {
+			continue
+		}
+		var data state.ToolCallData
+		if json.Unmarshal(entry.Data, &data) != nil || !data.Success {
+			continue
+		}
+		path, hasPath := data.Arguments["path"].(string)
+		_, hasContent := data.Arguments["content"]
+		if hasPath && hasContent && !seen[path] {
+			seen[path] = true
+			files = append(files, path)
+		}
+	}
+	return files
+}
+
+type stepStat struct {
+	llmCalls  int
+	toolCalls int
+	tokensIn  int
+	tokensOut int
+}
+
+func aggregateByStep(entries []state.LogEntry) map[string]*stepStat {
+	stats := map[string]*stepStat{}
+	for _, entry := range entries {
+		if entry.Step == "" {
+			continue
+		}
+		if _, ok := stats[entry.Step]; !ok {
+			stats[entry.Step] = &stepStat{}
+		}
+		s := stats[entry.Step]
+		switch entry.Type {
+		case state.LogLLMCall:
+			var data state.LLMCallData
+			if json.Unmarshal(entry.Data, &data) == nil {
+				s.llmCalls++
+				s.tokensIn += data.TokensInput
+				s.tokensOut += data.TokensOutput
+			}
+		case state.LogToolCall:
+			s.toolCalls++
+		}
+	}
+	return stats
+}
+
+func formatBytes(b int) string {
+	if b < 1024 {
+		return fmt.Sprintf("%dB", b)
+	}
+	return fmt.Sprintf("%.1fKB", float64(b)/1024)
 }
 
 func formatLogDuration(d time.Duration) string {
@@ -253,4 +427,26 @@ func formatLogDuration(d time.Duration) string {
 	minutes := int(d.Minutes())
 	seconds := int(d.Seconds()) % 60
 	return fmt.Sprintf("%dm %ds", minutes, seconds)
+}
+
+func listFilesWithExt(dir string, exts ...string) []string {
+	entries, readErr := os.ReadDir(dir)
+	if readErr != nil {
+		return nil
+	}
+
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		for _, ext := range exts {
+			if strings.HasSuffix(entry.Name(), ext) {
+				name := strings.TrimSuffix(entry.Name(), ext)
+				names = append(names, name)
+				break
+			}
+		}
+	}
+	return names
 }

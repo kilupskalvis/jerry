@@ -120,7 +120,7 @@ func runInit(targetPath, ciPlatform string) error {
 	fmt.Println("  Pipelines: example.yaml, feature.yaml")
 	fmt.Println("")
 	fmt.Println("Run 'motif run example' to try the example pipeline.")
-	fmt.Println("Run 'motif run feature --intent \"...\"' to generate code with AI agents.")
+	fmt.Println("Run 'motif run feature \"describe what to build\"' to generate code with AI agents.")
 	return nil
 }
 

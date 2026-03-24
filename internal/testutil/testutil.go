@@ -48,17 +48,3 @@ func WritePipeline(t *testing.T, motifDir, name, content string) {
 		t.Fatalf("failed to write pipeline %q: %v", name, err)
 	}
 }
-
-// WriteScript writes an executable script file to the given directory.
-func WriteScript(t *testing.T, dir, name, content string) {
-	t.Helper()
-
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("failed to create script dir: %v", err)
-	}
-
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
-		t.Fatalf("failed to write script %q: %v", name, err)
-	}
-}

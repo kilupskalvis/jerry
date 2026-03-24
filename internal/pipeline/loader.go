@@ -36,14 +36,6 @@ func NewLoader(motifDir string) *Loader {
 	return &Loader{motifDir: motifDir}
 }
 
-// LoadResult holds the outcome of loading a single pipeline file.
-type LoadResult struct {
-	Path     string
-	Pipeline *Pipeline
-	Errors   []string
-	Warnings []string
-}
-
 // Load reads and validates a pipeline by name.
 // Looks for .motif/pipelines/<name>.yaml, then .motif/pipelines/<name>.yml.
 func (l *Loader) Load(name string) (*Pipeline, error) {
@@ -106,64 +98,6 @@ func (l *Loader) resolveAgentPaths(p *Pipeline) {
 // MotifDir returns the .motif/ directory path this loader reads from.
 func (l *Loader) MotifDir() string {
 	return l.motifDir
-}
-
-// LoadAll reads and validates all pipelines in .motif/pipelines/.
-// Returns a slice of results so validation can report on all files.
-func (l *Loader) LoadAll() ([]LoadResult, error) {
-	pipelinesDir := filepath.Join(l.motifDir, "pipelines")
-
-	entries, readErr := os.ReadDir(pipelinesDir)
-	if readErr != nil {
-		if os.IsNotExist(readErr) {
-			return nil, nil
-		}
-		return nil, errors.Wrap(errors.CodeInvalidPipeline,
-			"failed to read pipelines directory", readErr)
-	}
-
-	var results []LoadResult
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-
-		path := filepath.Join(pipelinesDir, name)
-		result := LoadResult{Path: path}
-
-		content, readFileErr := os.ReadFile(path)
-		if readFileErr != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to read: %v", readFileErr))
-			results = append(results, result)
-			continue
-		}
-
-		var p Pipeline
-		if unmarshalErr := yaml.Unmarshal(content, &p); unmarshalErr != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("invalid YAML: %v", unmarshalErr))
-			results = append(results, result)
-			continue
-		}
-
-		validationErrs := l.validate(&p)
-		warnings := l.warnings(&p)
-
-		result.Pipeline = &p
-		result.Errors = validationErrs
-		result.Warnings = warnings
-
-		if len(validationErrs) > 0 {
-			result.Pipeline = nil
-		}
-
-		results = append(results, result)
-	}
-
-	return results, nil
 }
 
 // validate runs structural and semantic validation on a pipeline.
@@ -260,26 +194,6 @@ func (l *Loader) validate(p *Pipeline) []string {
 	}
 
 	return errs
-}
-
-// warnings generates non-fatal warnings for features not yet supported.
-func (l *Loader) warnings(p *Pipeline) []string {
-	var warns []string
-
-	for i := range p.Steps {
-		step := &p.Steps[i]
-		if step.If != "" {
-			warns = append(warns, fmt.Sprintf("step %q: conditional execution ('if') is not yet supported — will be ignored", step.Name))
-		}
-		if step.Gate {
-			warns = append(warns, fmt.Sprintf("step %q: gate steps are not yet supported — will be ignored", step.Name))
-		}
-		if len(step.Parallel) > 0 {
-			warns = append(warns, fmt.Sprintf("step %q: parallel execution is not yet supported — will be ignored", step.Name))
-		}
-	}
-
-	return warns
 }
 
 // resolveAgentPath resolves an agent file path relative to the .motif/ directory.

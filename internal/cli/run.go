@@ -1,4 +1,4 @@
-// motif run: executes a pipeline by name.
+// motif run: executes or resumes a pipeline.
 
 package cli
 
@@ -11,7 +11,8 @@ import (
 
 	"github.com/kilupskalvis/motif/internal/contextstore"
 	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/output"
+	"github.com/kilupskalvis/motif/internal/pipeline"
+	"github.com/kilupskalvis/motif/internal/state"
 	"github.com/kilupskalvis/motif/internal/trigger"
 )
 
@@ -19,22 +20,25 @@ func newRunCmd(app *App) *cobra.Command {
 	var (
 		intent       string
 		dryRun       bool
-		verbose      bool
-		quiet        bool
 		triggerFile  string
 		triggerStdin bool
+		resumeRunID  string
+		force        bool
 	)
 
 	cmd := &cobra.Command{
-		Use:   "run <pipeline>",
+		Use:   "run <pipeline> [intent]",
 		Short: "Execute a pipeline",
-		Long:  "Loads and executes a pipeline by name from .motif/pipelines/.",
-		Args:  cobra.ExactArgs(1),
+		Long:  "Run a pipeline by name. Optionally provide an intent as a positional argument.",
+		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if verbose {
-				app.Printer.SetVerbosity(output.VerbosityVerbose)
-			} else if quiet {
-				app.Printer.SetVerbosity(output.VerbosityQuiet)
+			if resumeRunID != "" {
+				return resumePipeline(cmd.Context(), app, resumeRunID, force)
+			}
+
+			// Positional intent: motif run feature "Add health endpoint"
+			if len(args) > 1 && intent == "" {
+				intent = args[1]
 			}
 
 			if dryRun {
@@ -52,15 +56,19 @@ func newRunCmd(app *App) *cobra.Command {
 
 	cmd.Flags().StringVar(&intent, "intent", "", "Trigger intent description")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview pipeline without executing")
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show detailed output including tool arguments")
-	cmd.Flags().BoolVar(&quiet, "quiet", false, "Show only errors and final result")
 	cmd.Flags().StringVar(&triggerFile, "trigger-file", "", "Path to trigger JSON file")
 	cmd.Flags().BoolVar(&triggerStdin, "trigger-stdin", false, "Read trigger JSON from stdin")
+	cmd.Flags().StringVar(&resumeRunID, "resume", "", "Resume a failed run by ID")
+	cmd.Flags().BoolVar(&force, "force", false, "Force resume even if status is 'running'")
+
+	// Hide flags intended for internal/CI use.
+	_ = cmd.Flags().MarkHidden("intent")
+	_ = cmd.Flags().MarkHidden("trigger-file")
+	_ = cmd.Flags().MarkHidden("trigger-stdin")
 
 	return cmd
 }
 
-// resolveTrigger builds TriggerData from the provided flags.
 func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore.TriggerData, error) {
 	sourcesSet := 0
 	if triggerFile != "" {
@@ -79,7 +87,7 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 			return contextstore.TriggerData{}, err
 		}
 		if intent != "" {
-			t.Intent = intent // --intent overrides
+			t.Intent = intent
 		}
 		return *t, nil
 	}
@@ -113,7 +121,6 @@ func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerD
 		return loadErr
 	}
 
-	// Pre-flight: validate all agent definitions before running any step.
 	if app.AgentLoader != nil {
 		for _, step := range pipelineDef.Steps {
 			if step.Agent == "" {
@@ -161,9 +168,72 @@ func dryRunPipeline(app *App, pipelineName, intent string) error {
 	fmt.Fprintln(os.Stderr, "\nValidation: pipeline is valid")
 	fmt.Fprintf(os.Stderr, "\nTo execute: motif run %s", pipelineName)
 	if intent != "" {
-		fmt.Fprintf(os.Stderr, " --intent %q", intent)
+		fmt.Fprintf(os.Stderr, " %q", intent)
 	}
 	fmt.Fprintln(os.Stderr)
 
 	return nil
+}
+
+func resumePipeline(runCtx context.Context, app *App, runID string, force bool) error {
+	if app.Loader == nil || app.Engine == nil || app.StateStore == nil {
+		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
+			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
+	}
+
+	runState, loadErr := app.StateStore.LoadRun(runID)
+	if loadErr != nil {
+		return motifErrors.New(motifErrors.CodeRunNotFound,
+			fmt.Sprintf("run %q not found", runID))
+	}
+
+	switch runState.Status {
+	case state.StatusCompleted:
+		return motifErrors.New(motifErrors.CodeRunNotResumable,
+			fmt.Sprintf("run %q is already completed — nothing to resume", runID))
+	case state.StatusRunning:
+		if !force {
+			return motifErrors.New(motifErrors.CodeRunNotResumable,
+				fmt.Sprintf("run %q has status 'running' — if the process crashed, use --force to resume", runID))
+		}
+	case state.StatusFailed:
+		// Normal case — proceed.
+	}
+
+	var pipelineErr error
+	var pipelineDef *pipeline.Pipeline
+	if runState.PipelineFile != "" {
+		pipelineDef, pipelineErr = app.Loader.LoadFile(runState.PipelineFile)
+	} else {
+		pipelineDef, pipelineErr = app.Loader.Load(runState.PipelineName)
+	}
+	if pipelineErr != nil {
+		return pipelineErr
+	}
+
+	fromStep := len(runState.StepResults)
+	if fromStep > 0 && runState.StepResults[fromStep-1].Status == state.StepFailed {
+		fromStep--
+	}
+	if fromStep >= len(pipelineDef.Steps) {
+		return motifErrors.New(motifErrors.CodeRunNotResumable,
+			"all steps already completed in saved state")
+	}
+
+	for i, saved := range runState.StepResults {
+		if i < len(pipelineDef.Steps) && saved.Name != pipelineDef.Steps[i].Name {
+			return motifErrors.New(motifErrors.CodePipelineChanged,
+				fmt.Sprintf("pipeline structure has changed — step %q at position %d "+
+					"does not match saved state (expected %q). Cannot safely resume.",
+					pipelineDef.Steps[i].Name, i, saved.Name))
+		}
+	}
+
+	if fromStep < len(runState.StepResults) {
+		runState.StepResults = runState.StepResults[:fromStep]
+	}
+
+	existingStore := contextstore.RestoreFromSnapshot(runState.Context)
+	_, runErr := app.Engine.RunFrom(runCtx, *pipelineDef, fromStep, existingStore, runState)
+	return runErr
 }

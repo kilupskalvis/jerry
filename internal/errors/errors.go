@@ -50,9 +50,6 @@ const (
 	// Git tool errors.
 	CodeGitNotAvailable = "GIT_NOT_AVAILABLE"
 
-	// Validation errors.
-	CodeValidationFailed = "VALIDATION_FAILED"
-
 	// Configuration errors.
 	CodeConfigInvalid = "CONFIG_INVALID"
 )
