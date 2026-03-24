@@ -95,7 +95,7 @@ func TestInitCmd_CreatesAgents(t *testing.T) {
 	_ = rootCmd.Execute()
 
 	agentsDir := filepath.Join(tmpDir, ".motif", "agents")
-	for _, name := range []string{"context.md", "plan.md", "generate.md"} {
+	for _, name := range []string{"plan.md", "generate.md"} {
 		path := filepath.Join(agentsDir, name)
 		info, statErr := os.Stat(path)
 		if statErr != nil {
@@ -120,8 +120,8 @@ func TestInitCmd_CreatesFeaturePipeline(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf("feature.yaml not created: %v", readErr)
 	}
-	if !contains(string(content), "context") || !contains(string(content), "generate") {
-		t.Error("feature.yaml should reference context and generate agents")
+	if !contains(string(content), "generate") {
+		t.Error("feature.yaml should reference generate agent")
 	}
 }
 

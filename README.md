@@ -36,12 +36,10 @@ Motif defines a protocol and runtime that makes AI code generation composable. T
 # .motif/pipelines/feature.yaml
 name: feature
 steps:
-  - name: context
-    agent: ./agents/context.md        # Analyze the codebase
   - name: plan
-    agent: ./agents/plan.md           # Plan the implementation
+    agent: ./agents/plan.md           # Analyze codebase and plan changes
   - name: generate
-    agent: ./agents/generate.md       # Write the code
+    agent: ./agents/generate.md       # Implement the plan
   - name: validate
     script: go test ./...             # Run tests
 ```
@@ -112,27 +110,26 @@ After writing all files, run the build and test suite.
 **Steps communicate through a shared context object.** Each step reads from keys written by previous steps and writes to its own `output_key`. No step talks to another directly — the context is the only interface:
 
 ```
-trigger → context agent → plan agent → generate agent → validate script
-           writes:          reads:        reads:           reads:
-           codebase         codebase      codebase         artifacts
-                            writes:       plan
-                            plan          writes:
-                                          generation
+trigger → plan agent → generate agent → validate script
+           reads:        reads:           reads:
+           trigger       trigger          generation
+           writes:       plan
+           plan          writes:
+                         generation
 ```
 
 **The runtime** handles orchestration, tool execution, retries, state persistence, context window management, and structured logging. It supports Anthropic (Claude) and OpenAI (GPT) via their official SDKs, with automatic provider selection based on the model name.
 
 ## Core Agents
 
-`motif init` ships three production agents:
+`motif init` ships two agents:
 
-| Agent | Purpose | Iteration Budget |
-|-------|---------|-----------------|
-| `context.md` | Analyze codebase structure, conventions, and relevant files | 30 |
-| `plan.md` | Produce an ordered list of file changes with dependencies | 20 |
-| `generate.md` | Implement the plan, run build and tests, fix failures | 50 |
+| Agent | Purpose | Tools | Iteration Budget |
+|-------|---------|-------|-----------------|
+| `plan.md` | Explore the codebase and produce an ordered implementation plan | read_file, search_codebase, glob, list_directory, git_log | 30 |
+| `generate.md` | Implement the plan, run build and tests, fix failures | read_file, write_file, glob, search_codebase, run_command, list_directory, git_log | 50 |
 
-These are starting points. Customize them by adding your team's conventions to the Markdown body. See [docs/customizing-agents.md](docs/customizing-agents.md).
+These are starting points. Add your team's conventions to the Markdown body, split into more steps, or replace with your own agents. See [docs/customizing-agents.md](docs/customizing-agents.md).
 
 ## Commands
 

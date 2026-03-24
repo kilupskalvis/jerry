@@ -13,7 +13,7 @@ import (
 	"github.com/kilupskalvis/motif/internal/errors"
 )
 
-//go:embed agents/context.md agents/plan.md agents/generate.md agents/feature.yaml agents/github-pr.sh agents/github-workflow.yml agents/gitlab-ci.yml
+//go:embed agents/plan.md agents/generate.md agents/feature.yaml agents/github-pr.sh agents/github-workflow.yml agents/gitlab-ci.yml
 var embeddedAgents embed.FS
 
 func newInitCmd() *cobra.Command {
@@ -91,7 +91,6 @@ func runInit(targetPath, ciPlatform string) error {
 		src  string
 		perm os.FileMode
 	}{
-		filepath.Join(motifDir, "agents", "context.md"):      {src: "agents/context.md", perm: 0o644},
 		filepath.Join(motifDir, "agents", "plan.md"):         {src: "agents/plan.md", perm: 0o644},
 		filepath.Join(motifDir, "agents", "generate.md"):     {src: "agents/generate.md", perm: 0o644},
 		filepath.Join(motifDir, "pipelines", "feature.yaml"): {src: "agents/feature.yaml", perm: 0o644},
@@ -117,8 +116,8 @@ func runInit(targetPath, ciPlatform string) error {
 	}
 
 	fmt.Printf("Motif initialized in %s\n", targetPath)
-	fmt.Println("  Core agents: context.md, plan.md, generate.md")
-	fmt.Println("  Pipelines:   example.yaml, feature.yaml")
+	fmt.Println("  Agents:    plan.md, generate.md")
+	fmt.Println("  Pipelines: example.yaml, feature.yaml")
 	fmt.Println("")
 	fmt.Println("Run 'motif run example' to try the example pipeline.")
 	fmt.Println("Run 'motif run feature --intent \"...\"' to generate code with AI agents.")

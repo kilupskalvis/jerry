@@ -2,9 +2,6 @@ name: feature
 description: "Generate a feature implementation from a description"
 
 steps:
-  - name: context
-    agent: ./agents/context.md
-
   - name: plan
     agent: ./agents/plan.md
 
