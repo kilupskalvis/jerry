@@ -45,13 +45,13 @@ func (p *Printer) StepSuccess(name string, duration time.Duration) {
 
 // StepFailed prints the step failure indicator to stderr.
 // Format: "  ✗ <name> — <message>"
-func (p *Printer) StepFailed(name string, message string) {
+func (p *Printer) StepFailed(name, message string) {
 	fmt.Fprintf(p.stderr, "  ✗ %s — %s\n", name, message)
 }
 
 // StepSkipped prints the step skipped indicator to stderr.
 // Format: "  ⊘ <name> — <reason>"
-func (p *Printer) StepSkipped(name string, reason string) {
+func (p *Printer) StepSkipped(name, reason string) {
 	fmt.Fprintf(p.stderr, "  ⊘ %s — %s\n", name, reason)
 }
 
@@ -78,7 +78,7 @@ func (p *Printer) PipelineComplete(duration time.Duration, runID string) {
 // Format: "motif: Pipeline failed at step '<name>': <message>"
 //
 //	"motif: Run saved: <runID>"
-func (p *Printer) PipelineFailed(stepName string, message string, runID string) {
+func (p *Printer) PipelineFailed(stepName, message, runID string) {
 	fmt.Fprintf(p.stderr, "motif: Pipeline failed at step '%s': %s\n", stepName, message)
 	fmt.Fprintf(p.stderr, "motif: Run saved: %s\n", runID)
 }

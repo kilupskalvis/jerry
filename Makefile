@@ -1,0 +1,33 @@
+.PHONY: build test lint fmt vet clean install-hooks
+
+# Build the motif binary.
+build:
+	go build -o motif ./cmd/motif
+
+# Run all tests with race detector.
+test:
+	go test -race -count=1 ./... -timeout 120s
+
+# Run golangci-lint.
+lint:
+	golangci-lint run ./...
+
+# Format all Go files.
+fmt:
+	gofmt -w .
+	goimports -w -local github.com/kilupskalvis/motif .
+
+# Run go vet.
+vet:
+	go vet ./...
+
+# Run all checks (what CI would run).
+ci: fmt vet lint test build
+
+# Remove build artifacts.
+clean:
+	rm -f motif motif-*
+
+# Install git hooks.
+install-hooks:
+	./scripts/install-hooks.sh

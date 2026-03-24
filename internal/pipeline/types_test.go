@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/pipeline"
 	"gopkg.in/yaml.v3"
+
+	"github.com/kilupskalvis/motif/internal/pipeline"
 )
 
 func TestDuration_UnmarshalYAML(t *testing.T) {

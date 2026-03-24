@@ -1,3 +1,5 @@
+// Step executor interface and shared types for pipeline step execution.
+
 package pipeline
 
 import (

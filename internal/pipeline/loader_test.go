@@ -96,7 +96,7 @@ func TestLoad_PipelineDiscovery_YML(t *testing.T) {
 	// Write a .yml file manually
 	pipelinesDir := filepath.Join(motifDir, "pipelines")
 	content := []byte("name: yml-test\nsteps:\n  - name: s\n    script: echo hi\n")
-	if err := os.WriteFile(filepath.Join(pipelinesDir, "alt.yml"), content, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pipelinesDir, "alt.yml"), content, 0o644); err != nil {
 		t.Fatalf("failed to write yml file: %v", err)
 	}
 
@@ -314,7 +314,7 @@ steps:
 
 // Helper
 
-func assertValidationError(t *testing.T, yamlContent string, expectedSubstring string) {
+func assertValidationError(t *testing.T, yamlContent, expectedSubstring string) {
 	t.Helper()
 
 	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{

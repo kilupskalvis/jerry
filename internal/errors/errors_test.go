@@ -56,13 +56,13 @@ func TestWrap(t *testing.T) {
 	if err.Message != "script failed" {
 		t.Errorf("Message = %q, want %q", err.Message, "script failed")
 	}
-	if err.Cause != cause {
+	if !stderrors.Is(err.Cause, cause) {
 		t.Error("Cause should be the wrapped error")
 	}
 
 	// Unwrap should return the cause
 	unwrapped := stderrors.Unwrap(err)
-	if unwrapped != cause {
+	if !stderrors.Is(unwrapped, cause) {
 		t.Errorf("Unwrap() = %v, want %v", unwrapped, cause)
 	}
 }

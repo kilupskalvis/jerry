@@ -1,3 +1,5 @@
+// Atomic JSON file writes via temp file + fsync + rename.
+
 package state
 
 import (
@@ -25,29 +27,29 @@ func AtomicWriteJSON(path string, data any) error {
 	}
 
 	if _, writeErr := tmpFile.Write(content); writeErr != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to write temp file", writeErr)
 	}
 
 	// Ensure data is flushed to disk before rename
 	if syncErr := tmpFile.Sync(); syncErr != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to sync temp file", syncErr)
 	}
 
 	if closeErr := tmpFile.Close(); closeErr != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to close temp file", closeErr)
 	}
 
 	// Atomic rename (on POSIX systems)
 	if renameErr := os.Rename(tmpPath, path); renameErr != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to rename temp file to target", renameErr)
 	}

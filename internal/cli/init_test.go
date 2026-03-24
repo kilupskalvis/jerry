@@ -60,7 +60,7 @@ func TestInitCmd_CreatesScripts(t *testing.T) {
 	}
 
 	// Should be executable
-	if info.Mode()&0111 == 0 {
+	if info.Mode()&0o111 == 0 {
 		t.Error("echo-context.sh should be executable")
 	}
 }
@@ -120,7 +120,7 @@ func TestInitCmd_AlreadyExists(t *testing.T) {
 func TestInitCmd_WithPathFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 	targetDir := filepath.Join(tmpDir, "subdir")
-	if mkErr := os.MkdirAll(targetDir, 0755); mkErr != nil {
+	if mkErr := os.MkdirAll(targetDir, 0o755); mkErr != nil {
 		t.Fatalf("failed to create target dir: %v", mkErr)
 	}
 
@@ -138,7 +138,7 @@ func TestInitCmd_WithPathFlag(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
+	return len(s) >= len(substr) && (s == substr || s != "" && containsSubstring(s, substr))
 }
 
 func containsSubstring(s, substr string) bool {

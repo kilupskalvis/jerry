@@ -4,10 +4,11 @@
 package cli
 
 import (
+	"github.com/spf13/cobra"
+
 	"github.com/kilupskalvis/motif/internal/output"
 	"github.com/kilupskalvis/motif/internal/pipeline"
 	"github.com/kilupskalvis/motif/internal/state"
-	"github.com/spf13/cobra"
 )
 
 // App holds the dependencies needed by CLI commands.

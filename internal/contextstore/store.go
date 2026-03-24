@@ -123,20 +123,20 @@ func (s *Store) WriteContextFile() (path string, cleanup func(), err error) {
 	}
 
 	if _, writeErr := tmpFile.Write(data); writeErr != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 		return "", nil, errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to write context to temp file", writeErr)
 	}
 
 	if closeErr := tmpFile.Close(); closeErr != nil {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		return "", nil, errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to close temp context file", closeErr)
 	}
 
 	filePath := tmpFile.Name()
-	return filePath, func() { os.Remove(filePath) }, nil
+	return filePath, func() { _ = os.Remove(filePath) }, nil
 }
 
 // deepCopy creates a full deep copy of the internal context via JSON

@@ -1,3 +1,5 @@
+// motif run: executes a pipeline by name.
+
 package cli
 
 import (
@@ -5,8 +7,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
 	"github.com/spf13/cobra"
+
+	"github.com/kilupskalvis/motif/internal/contextstore"
 )
 
 func newRunCmd(app *App) *cobra.Command {
@@ -27,7 +30,7 @@ func newRunCmd(app *App) *cobra.Command {
 	return cmd
 }
 
-func runPipeline(runCtx context.Context, app *App, pipelineName string, intent string) error {
+func runPipeline(runCtx context.Context, app *App, pipelineName, intent string) error {
 	if app.Loader == nil || app.Engine == nil {
 		fmt.Fprintln(os.Stderr, "motif: error: not in a Motif project (no .motif/ directory found)")
 		fmt.Fprintln(os.Stderr, "  Run 'motif init' to initialize a new project.")

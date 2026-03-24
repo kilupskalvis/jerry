@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -107,7 +108,8 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 	// Handle non-zero exit code
 	if runErr != nil {
 		exitCode := -1
-		if exitErr, ok := runErr.(*exec.ExitError); ok {
+		exitErr := &exec.ExitError{}
+		if stderrors.As(runErr, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
 
@@ -146,7 +148,7 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 
 // buildEnvironment constructs a clean environment for the script.
 // Only includes PATH, HOME, MOTIF_* variables, and MOTIF_SECRET_* from config.
-func (e *Executor) buildEnvironment(stepName string, contextFilePath string) []string {
+func (e *Executor) buildEnvironment(stepName, contextFilePath string) []string {
 	envVars := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),

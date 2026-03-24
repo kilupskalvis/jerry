@@ -1,3 +1,5 @@
+// Pipeline YAML loader with two-pass validation (structural then semantic).
+
 package pipeline
 
 import (
@@ -6,8 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kilupskalvis/motif/internal/errors"
 	"gopkg.in/yaml.v3"
+
+	"github.com/kilupskalvis/motif/internal/errors"
 )
 
 // reservedOutputKeys are context keys that steps cannot use as output_key.

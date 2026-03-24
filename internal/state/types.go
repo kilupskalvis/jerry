@@ -28,30 +28,30 @@ const (
 
 // RunState holds the persistent state of a pipeline run.
 type RunState struct {
-	RunID        string              `json:"run_id"`
-	PipelineName string              `json:"pipeline_name"`
-	PipelineFile string              `json:"pipeline_file"`
-	Status       RunStatus           `json:"status"`
-	StartedAt    time.Time           `json:"started_at"`
-	CompletedAt  *time.Time          `json:"completed_at,omitempty"`
-	CurrentStep  int                 `json:"current_step"`
-	TotalSteps   int                 `json:"total_steps"`
-	StepResults  []StepResult        `json:"step_results"`
+	RunID        string               `json:"run_id"`
+	PipelineName string               `json:"pipeline_name"`
+	PipelineFile string               `json:"pipeline_file"`
+	Status       RunStatus            `json:"status"`
+	StartedAt    time.Time            `json:"started_at"`
+	CompletedAt  *time.Time           `json:"completed_at,omitempty"`
+	CurrentStep  int                  `json:"current_step"`
+	TotalSteps   int                  `json:"total_steps"`
+	StepResults  []StepResult         `json:"step_results"`
 	Context      contextstore.Context `json:"context"`
 }
 
 // StepResult records the outcome of a single step execution.
 type StepResult struct {
-	Name        string     `json:"name"`
-	Type        string     `json:"type"`
-	Status      StepStatus `json:"status"`
-	StartedAt   time.Time  `json:"started_at"`
-	CompletedAt time.Time  `json:"completed_at"`
-	DurationMs  int64      `json:"duration_ms"`
-	RetriesUsed int        `json:"retries_used"`
-	Output      any        `json:"output,omitempty"`
-	Stdout      string     `json:"stdout,omitempty"`
-	Stderr      string     `json:"stderr,omitempty"`
+	Name        string       `json:"name"`
+	Type        string       `json:"type"`
+	Status      StepStatus   `json:"status"`
+	StartedAt   time.Time    `json:"started_at"`
+	CompletedAt time.Time    `json:"completed_at"`
+	DurationMs  int64        `json:"duration_ms"`
+	RetriesUsed int          `json:"retries_used"`
+	Output      any          `json:"output,omitempty"`
+	Stdout      string       `json:"stdout,omitempty"`
+	Stderr      string       `json:"stderr,omitempty"`
 	Error       *ErrorDetail `json:"error,omitempty"`
 }
 

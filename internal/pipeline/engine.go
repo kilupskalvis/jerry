@@ -1,3 +1,5 @@
+// Pipeline engine: sequential step orchestration with retry, fallback, and checkpointing.
+
 package pipeline
 
 import (

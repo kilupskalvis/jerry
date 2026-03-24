@@ -1,3 +1,5 @@
+// motif validate: validates pipeline YAML and directory structure.
+
 package cli
 
 import (

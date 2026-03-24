@@ -1,3 +1,5 @@
+// FileStateStore: persists run state to disk as JSON files.
+
 package state
 
 import (
@@ -24,7 +26,7 @@ func NewFileStateStore(runsDir string) *FileStateStore {
 func (s *FileStateStore) InitRun(runState RunState) error {
 	runDir := filepath.Join(s.runsDir, runState.RunID)
 
-	if mkdirErr := os.MkdirAll(runDir, 0755); mkdirErr != nil {
+	if mkdirErr := os.MkdirAll(runDir, 0o755); mkdirErr != nil {
 		return errors.Wrap(errors.CodeStateWriteFailed,
 			fmt.Sprintf("failed to create run directory %q", runDir), mkdirErr)
 	}
@@ -133,12 +135,12 @@ func (s *FileStateStore) appendToLog(runDir string, result StepResult) error {
 	}
 	line = append(line, '\n')
 
-	logFile, openErr := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, openErr := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if openErr != nil {
 		return errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to open log file", openErr)
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
 	if _, writeErr := logFile.Write(line); writeErr != nil {
 		return errors.Wrap(errors.CodeStateWriteFailed,

@@ -1,3 +1,5 @@
+// motif init: scaffolds a .motif/ directory with example pipeline and scripts.
+
 package cli
 
 import (
@@ -5,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kilupskalvis/motif/internal/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/kilupskalvis/motif/internal/errors"
 )
 
 func newInitCmd() *cobra.Command {
@@ -53,7 +56,7 @@ func runInit(targetPath string) error {
 	}
 
 	for _, dir := range dirs {
-		if mkdirErr := os.MkdirAll(dir, 0755); mkdirErr != nil {
+		if mkdirErr := os.MkdirAll(dir, 0o755); mkdirErr != nil {
 			return errors.Wrap(errors.CodeStateWriteFailed,
 				fmt.Sprintf("failed to create directory %q", dir), mkdirErr)
 		}
@@ -61,16 +64,16 @@ func runInit(targetPath string) error {
 
 	// Write template files
 	files := map[string]string{
-		filepath.Join(motifDir, "pipelines", "example.yaml"): examplePipelineYAML,
+		filepath.Join(motifDir, "pipelines", "example.yaml"):  examplePipelineYAML,
 		filepath.Join(motifDir, "scripts", "echo-context.sh"): echoContextScript,
-		filepath.Join(motifDir, ".gitignore"):                  motifGitignore,
-		filepath.Join(motifDir, "agents", ".gitkeep"):          "",
+		filepath.Join(motifDir, ".gitignore"):                 motifGitignore,
+		filepath.Join(motifDir, "agents", ".gitkeep"):         "",
 	}
 
 	for path, content := range files {
-		perm := os.FileMode(0644)
+		perm := os.FileMode(0o644)
 		if filepath.Ext(path) == ".sh" {
-			perm = 0755
+			perm = 0o755
 		}
 		if writeErr := os.WriteFile(path, []byte(content), perm); writeErr != nil {
 			return errors.Wrap(errors.CodeStateWriteFailed,

@@ -12,7 +12,7 @@ import (
 func TestFindMotifDir_Found(t *testing.T) {
 	tmpDir := t.TempDir()
 	motifDir := filepath.Join(tmpDir, ".motif")
-	if err := os.Mkdir(motifDir, 0755); err != nil {
+	if err := os.Mkdir(motifDir, 0o755); err != nil {
 		t.Fatalf("failed to create .motif dir: %v", err)
 	}
 
@@ -31,13 +31,13 @@ func TestFindMotifDir_Found(t *testing.T) {
 func TestFindMotifDir_FoundInParent(t *testing.T) {
 	tmpDir := t.TempDir()
 	motifDir := filepath.Join(tmpDir, ".motif")
-	if err := os.Mkdir(motifDir, 0755); err != nil {
+	if err := os.Mkdir(motifDir, 0o755); err != nil {
 		t.Fatalf("failed to create .motif dir: %v", err)
 	}
 
 	// Create nested subdirectories
 	nested := filepath.Join(tmpDir, "src", "handlers")
-	if err := os.MkdirAll(nested, 0755); err != nil {
+	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatalf("failed to create nested dirs: %v", err)
 	}
 
@@ -65,7 +65,7 @@ func TestFindMotifDir_NotFound(t *testing.T) {
 func TestFindMotifDir_ReturnsAbsolutePaths(t *testing.T) {
 	tmpDir := t.TempDir()
 	motifDir := filepath.Join(tmpDir, ".motif")
-	if err := os.Mkdir(motifDir, 0755); err != nil {
+	if err := os.Mkdir(motifDir, 0o755); err != nil {
 		t.Fatalf("failed to create .motif dir: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestFindMotifDir_IgnoresFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Create .motif as a file, not a directory
 	motifFile := filepath.Join(tmpDir, ".motif")
-	if err := os.WriteFile(motifFile, []byte("not a directory"), 0644); err != nil {
+	if err := os.WriteFile(motifFile, []byte("not a directory"), 0o644); err != nil {
 		t.Fatalf("failed to create .motif file: %v", err)
 	}
 
