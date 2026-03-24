@@ -38,6 +38,21 @@ const (
 	// Output parsing errors.
 	CodeInvalidOutputJSON     = "INVALID_OUTPUT_JSON"
 	CodeOutputSchemaViolation = "OUTPUT_SCHEMA_VIOLATION"
+
+	// Context compaction errors.
+	CodeCompactionFailed = "COMPACTION_FAILED"
+	CodeContextTooLong   = "CONTEXT_TOO_LONG"
+
+	// Pipeline resume errors.
+	CodeRunNotFound     = "RUN_NOT_FOUND"
+	CodeRunNotResumable = "RUN_NOT_RESUMABLE"
+	CodePipelineChanged = "PIPELINE_CHANGED"
+
+	// Git tool errors.
+	CodeGitNotAvailable = "GIT_NOT_AVAILABLE"
+
+	// Configuration errors.
+	CodeConfigInvalid = "CONFIG_INVALID"
 )
 
 // Error is the standard error type returned by all Motif components.

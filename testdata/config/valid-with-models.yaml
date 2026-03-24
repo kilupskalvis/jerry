@@ -1,0 +1,3 @@
+defaults:
+  model: gpt-4o
+  timeout: 300s

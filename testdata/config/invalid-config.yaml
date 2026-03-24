@@ -1,0 +1,2 @@
+defaults:
+  timeout: [not, a, string]
