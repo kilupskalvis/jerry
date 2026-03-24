@@ -131,16 +131,16 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 		Duration: duration,
 	}
 
-	// If output_key is set, try to parse stdout as JSON
+	// If output_key is set, try to parse stdout as a JSON object.
 	if step.OutputKey != "" {
 		trimmedStdout := strings.TrimSpace(stdout)
 		if trimmedStdout != "" {
-			var parsed any
+			var parsed map[string]any
 			if jsonErr := json.Unmarshal([]byte(trimmedStdout), &parsed); jsonErr == nil {
 				output.Data = parsed
 			}
-			// If JSON parsing fails, Data stays nil — this is not an error
-			// (the step succeeded, we just can't merge output into context)
+			// If parsing fails (invalid JSON or not an object), Data stays nil.
+			// The step still succeeds — we just can't merge output into context.
 		}
 	}
 

@@ -113,6 +113,18 @@ func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerD
 		return loadErr
 	}
 
+	// Pre-flight: validate all agent definitions before running any step.
+	if app.AgentLoader != nil {
+		for _, step := range pipelineDef.Steps {
+			if step.Agent == "" {
+				continue
+			}
+			if _, agentErr := app.AgentLoader.Load(step.Agent); agentErr != nil {
+				return fmt.Errorf("pre-flight validation failed: step %q: %w", step.Name, agentErr)
+			}
+		}
+	}
+
 	_, runErr := app.Engine.Run(runCtx, *pipelineDef, triggerData)
 	return runErr
 }

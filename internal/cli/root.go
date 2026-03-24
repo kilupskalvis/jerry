@@ -6,6 +6,7 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/kilupskalvis/motif/internal/agent"
 	"github.com/kilupskalvis/motif/internal/output"
 	"github.com/kilupskalvis/motif/internal/pipeline"
 	"github.com/kilupskalvis/motif/internal/state"
@@ -14,10 +15,11 @@ import (
 // App holds the dependencies needed by CLI commands.
 // Constructed in main.go and passed to subcommand builders.
 type App struct {
-	Engine     *pipeline.Engine
-	Loader     *pipeline.Loader
-	StateStore state.StateStore
-	Printer    *output.Printer
+	Engine      *pipeline.Engine
+	Loader      *pipeline.Loader
+	AgentLoader *agent.Loader
+	StateStore  state.StateStore
+	Printer     *output.Printer
 }
 
 // NewRootCmd creates the root cobra command with all subcommands.

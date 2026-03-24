@@ -1,4 +1,4 @@
-// motif validate: validates pipeline YAML and directory structure.
+// motif validate: validates pipeline YAML and agent definitions.
 
 package cli
 
@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"github.com/kilupskalvis/motif/internal/pipeline"
 )
 
 func newValidateCmd(app *App) *cobra.Command {
@@ -16,7 +18,7 @@ func newValidateCmd(app *App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate pipeline YAML and agent definitions",
-		Long:  "Checks pipeline configuration for errors without executing.",
+		Long:  "Checks pipeline configuration and agent definitions for errors without executing.",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runValidate(app, pipelineName)
 		},
@@ -47,8 +49,18 @@ func validateSingle(app *App, name string) error {
 		os.Exit(2)
 	}
 
+	agentErrors := validateAgents(app, pipelineDef.Steps)
+
 	detail := fmt.Sprintf("valid (%d steps)", len(pipelineDef.Steps))
 	app.Printer.ValidationResult(name+".yaml", true, detail)
+
+	if len(agentErrors) > 0 {
+		for _, errMsg := range agentErrors {
+			app.Printer.ValidationResult("  agent", false, errMsg)
+		}
+		os.Exit(2)
+	}
+
 	return nil
 }
 
@@ -72,9 +84,18 @@ func validateAll(app *App) error {
 				app.Printer.ValidationResult(fileName, false, errMsg)
 			}
 			hasErrors = true
-		} else if result.Pipeline != nil {
+			continue
+		}
+
+		if result.Pipeline != nil {
 			detail := fmt.Sprintf("valid (%d steps)", len(result.Pipeline.Steps))
 			app.Printer.ValidationResult(fileName, true, detail)
+
+			agentErrors := validateAgents(app, result.Pipeline.Steps)
+			for _, errMsg := range agentErrors {
+				app.Printer.ValidationResult("  agent", false, errMsg)
+				hasErrors = true
+			}
 		}
 
 		for _, warning := range result.Warnings {
@@ -86,4 +107,31 @@ func validateAll(app *App) error {
 		os.Exit(2)
 	}
 	return nil
+}
+
+// validateAgents loads and validates each agent referenced by pipeline steps.
+func validateAgents(app *App, steps []pipeline.Step) []string {
+	if app.AgentLoader == nil {
+		return nil
+	}
+
+	var errs []string
+	seen := map[string]bool{}
+
+	for _, step := range steps {
+		if step.Agent == "" {
+			continue
+		}
+		if seen[step.Agent] {
+			continue
+		}
+		seen[step.Agent] = true
+
+		_, loadErr := app.AgentLoader.Load(step.Agent)
+		if loadErr != nil {
+			errs = append(errs, fmt.Sprintf("step %q: %s", step.Name, loadErr))
+		}
+	}
+
+	return errs
 }

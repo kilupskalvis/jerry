@@ -17,7 +17,6 @@ import (
 	"github.com/kilupskalvis/motif/internal/state"
 )
 
-// Retry backoff constants.
 const (
 	DefaultRetryBaseDelay = 2 * time.Second
 	MaxRetryDelay         = 60 * time.Second
@@ -32,8 +31,6 @@ type Engine struct {
 }
 
 // NewEngine creates a pipeline engine with the given executors and state store.
-// Executors are tried in order — the first executor where CanExecute returns
-// true handles the step.
 func NewEngine(executors []StepExecutor, stateStore state.StateStore, printer *output.Printer, defaultTimeout time.Duration) *Engine {
 	return &Engine{
 		executors:      executors,
@@ -66,7 +63,6 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 			"failed to initialize run state", initErr)
 	}
 
-	// Create structured log writer for this run.
 	logWriter, logErr := state.NewLogWriter(e.stateStore.RunDir(runID))
 	if logErr != nil {
 		e.printer.Warning("failed to create log writer: %s", logErr)
@@ -84,105 +80,145 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		Steps:         stepNames,
 	})
 
-	// Inject log writer into context for executors to use.
 	runCtx = state.WithLogWriter(runCtx, logWriter)
 
 	e.printer.Info("Running pipeline: %s (%d steps)", pipelineDef.Name, len(pipelineDef.Steps))
 
-	// Execute each step
-	for i, step := range pipelineDef.Steps {
+	execErr := e.runSteps(runCtx, pipelineDef.Steps, 0, ctxStore, &runState, logWriter)
+
+	if runState.Status == state.StatusRunning {
+		runState.Status = state.StatusCompleted
+		now := time.Now()
+		runState.CompletedAt = &now
+		runState.Context = ctxStore.Snapshot()
+		_ = e.stateStore.SaveFinal(runState)
+		e.printer.PipelineComplete(time.Since(startTime), runID)
+	}
+
+	e.logPipelineEnd(logWriter, &runState, startTime)
+
+	return &runState, execErr
+}
+
+// RunFrom resumes a pipeline from a specific step index, using an existing
+// context store and run state.
+func (e *Engine) RunFrom(
+	runCtx context.Context,
+	pipelineDef Pipeline,
+	fromStep int,
+	existingStore *contextstore.Store,
+	existingState *state.RunState,
+) (*state.RunState, error) {
+	existingState.Status = state.StatusRunning
+
+	logWriter, logErr := state.NewLogWriter(e.stateStore.RunDir(existingState.RunID))
+	if logErr != nil {
+		e.printer.Warning("failed to create log writer for resume: %s", logErr)
+	}
+	defer func() { _ = logWriter.Close() }()
+
+	runCtx = state.WithLogWriter(runCtx, logWriter)
+
+	e.printer.Info("Resuming pipeline: %s from step %q (run: %s)",
+		pipelineDef.Name, pipelineDef.Steps[fromStep].Name, existingState.RunID)
+
+	execErr := e.runSteps(runCtx, pipelineDef.Steps, fromStep, existingStore, existingState, logWriter)
+
+	if existingState.Status == state.StatusRunning {
+		existingState.Status = state.StatusCompleted
+		now := time.Now()
+		existingState.CompletedAt = &now
+		existingState.Context = existingStore.Snapshot()
+		_ = e.stateStore.SaveFinal(*existingState)
+		e.printer.PipelineComplete(time.Since(existingState.StartedAt), existingState.RunID)
+	}
+
+	e.logPipelineEnd(logWriter, existingState, existingState.StartedAt)
+
+	return existingState, execErr
+}
+
+// runSteps executes pipeline steps from the given index. Shared by Run and RunFrom.
+func (e *Engine) runSteps(
+	runCtx context.Context,
+	steps []Step,
+	fromStep int,
+	ctxStore *contextstore.Store,
+	runState *state.RunState,
+	logWriter *state.LogWriter,
+) error {
+	for i := fromStep; i < len(steps); i++ {
+		step := steps[i]
 		runState.CurrentStep = i
 		stepStartTime := time.Now()
 
-		// Find executor
 		executor := e.findExecutor(step)
 		if executor == nil {
-			// No executor found — skip the step
 			result := state.StepResult{
-				Name:        step.Name,
-				Type:        stepType(step),
-				Status:      state.StepSkipped,
-				StartedAt:   stepStartTime,
-				CompletedAt: time.Now(),
-				DurationMs:  0,
-				Error:       &state.ErrorDetail{Code: "NO_EXECUTOR", Message: "no executor found for this step"},
+				Name: step.Name, Type: stepType(step), Status: state.StepSkipped,
+				StartedAt: stepStartTime, CompletedAt: time.Now(),
+				Error: &state.ErrorDetail{Code: "NO_EXECUTOR", Message: "no executor found for this step"},
 			}
 			runState.StepResults = append(runState.StepResults, result)
 			e.printer.StepSkipped(step.Name, "no executor found")
-			_ = e.stateStore.SaveCheckpoint(runState)
+			_ = e.stateStore.SaveCheckpoint(*runState)
 			continue
 		}
 
 		e.printer.StepStart(step.Name)
 		logWriter.Log(state.LogStepStart, step.Name, state.StepStartData{
-			Type:      stepType(step),
-			AgentFile: step.Agent,
+			Type: stepType(step), AgentFile: step.Agent,
 		})
 
-		// Create step context with timeout
 		stepTimeout := e.resolveTimeout(step)
 		stepCtx, stepCancel := context.WithTimeout(runCtx, stepTimeout)
-
-		// Execute with retries
 		stepOutput, retriesUsed, execErr := e.executeWithRetries(stepCtx, step, executor, ctxStore)
 		stepCancel()
 
 		stepDuration := time.Since(stepStartTime)
 
-		// Handle ErrSkipStep
 		var skipErr ErrSkipStep
 		if errors.As(execErr, &skipErr) {
 			result := state.StepResult{
-				Name:        step.Name,
-				Type:        stepType(step),
-				Status:      state.StepSkipped,
-				StartedAt:   stepStartTime,
-				CompletedAt: time.Now(),
-				DurationMs:  stepDuration.Milliseconds(),
+				Name: step.Name, Type: stepType(step), Status: state.StepSkipped,
+				StartedAt: stepStartTime, CompletedAt: time.Now(), DurationMs: stepDuration.Milliseconds(),
 			}
 			runState.StepResults = append(runState.StepResults, result)
 			e.printer.StepSkipped(step.Name, skipErr.Reason)
 			runState.Context = ctxStore.Snapshot()
-			_ = e.stateStore.SaveCheckpoint(runState)
+			_ = e.stateStore.SaveCheckpoint(*runState)
 			continue
 		}
 
-		// Handle failure
 		if execErr != nil {
-			// Try fallback if configured
 			if step.Fallback != nil {
 				e.executeFallback(runCtx, step, ctxStore)
 			}
 
 			result := state.StepResult{
-				Name:        step.Name,
-				Type:        stepType(step),
-				Status:      state.StepFailed,
-				StartedAt:   stepStartTime,
-				CompletedAt: time.Now(),
-				DurationMs:  stepDuration.Milliseconds(),
-				RetriesUsed: retriesUsed,
-				Error:       &state.ErrorDetail{Code: "STEP_FAILED", Message: execErr.Error()},
+				Name: step.Name, Type: stepType(step), Status: state.StepFailed,
+				StartedAt: stepStartTime, CompletedAt: time.Now(),
+				DurationMs: stepDuration.Milliseconds(), RetriesUsed: retriesUsed,
+				Error: &state.ErrorDetail{Code: "STEP_FAILED", Message: execErr.Error()},
 			}
 			runState.StepResults = append(runState.StepResults, result)
 			runState.Status = state.StatusFailed
 			runState.Context = ctxStore.Snapshot()
 			now := time.Now()
 			runState.CompletedAt = &now
-			_ = e.stateStore.SaveCheckpoint(runState)
-			_ = e.stateStore.SaveFinal(runState)
+			_ = e.stateStore.SaveCheckpoint(*runState)
+			_ = e.stateStore.SaveFinal(*runState)
 
 			e.printer.StepFailed(step.Name, execErr.Error())
 			logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
 				Status: "failed", DurationMs: stepDuration.Milliseconds(),
 			})
-			e.printer.PipelineFailed(step.Name, execErr.Error(), runID)
-			e.logPipelineEnd(logWriter, &runState, startTime)
+			e.printer.PipelineFailed(step.Name, execErr.Error(), runState.RunID)
 
-			return &runState, execErr
+			return execErr
 		}
 
-		// Success — merge output into context
+		// Success — merge output into context.
 		if stepOutput != nil && stepOutput.Data != nil {
 			outputKey := resolveOutputKey(step, stepOutput)
 			if outputKey != "" {
@@ -191,13 +227,9 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		}
 
 		result := state.StepResult{
-			Name:        step.Name,
-			Type:        stepType(step),
-			Status:      state.StepSuccess,
-			StartedAt:   stepStartTime,
-			CompletedAt: time.Now(),
-			DurationMs:  stepDuration.Milliseconds(),
-			RetriesUsed: retriesUsed,
+			Name: step.Name, Type: stepType(step), Status: state.StepSuccess,
+			StartedAt: stepStartTime, CompletedAt: time.Now(),
+			DurationMs: stepDuration.Milliseconds(), RetriesUsed: retriesUsed,
 		}
 		if stepOutput != nil {
 			result.Stdout = stepOutput.Stdout
@@ -205,7 +237,7 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		}
 		runState.StepResults = append(runState.StepResults, result)
 		runState.Context = ctxStore.Snapshot()
-		_ = e.stateStore.SaveCheckpoint(runState)
+		_ = e.stateStore.SaveCheckpoint(*runState)
 
 		e.printer.StepSuccess(step.Name, stepDuration)
 		logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
@@ -213,20 +245,9 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		})
 	}
 
-	// Pipeline completed successfully
-	runState.Status = state.StatusCompleted
-	now := time.Now()
-	runState.CompletedAt = &now
-	runState.Context = ctxStore.Snapshot()
-	_ = e.stateStore.SaveFinal(runState)
-
-	e.printer.PipelineComplete(time.Since(startTime), runID)
-	e.logPipelineEnd(logWriter, &runState, startTime)
-
-	return &runState, nil
+	return nil
 }
 
-// logPipelineEnd writes the pipeline_end event to the log.
 func (e *Engine) logPipelineEnd(lw *state.LogWriter, runState *state.RunState, startTime time.Time) {
 	var completed, failed, skipped int
 	for _, r := range runState.StepResults {
@@ -248,10 +269,8 @@ func (e *Engine) logPipelineEnd(lw *state.LogWriter, runState *state.RunState, s
 	})
 }
 
-// executeWithRetries runs a step, retrying on failure according to the step's retry config.
-// Returns the output, number of retries used, and error.
 func (e *Engine) executeWithRetries(stepCtx context.Context, step Step, exec StepExecutor, store ContextReader) (*StepOutput, int, error) {
-	maxAttempts := step.Retries + 1 // retries=0 means 1 attempt
+	maxAttempts := step.Retries + 1
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -261,7 +280,6 @@ func (e *Engine) executeWithRetries(stepCtx context.Context, step Step, exec Ste
 		}
 		lastErr = execErr
 
-		// Don't retry ErrSkipStep
 		var skipErr ErrSkipStep
 		if errors.As(execErr, &skipErr) {
 			return nil, 0, execErr
@@ -284,7 +302,6 @@ func (e *Engine) executeWithRetries(stepCtx context.Context, step Step, exec Ste
 	return nil, maxAttempts - 1, lastErr
 }
 
-// executeFallback runs a step's fallback configuration.
 func (e *Engine) executeFallback(runCtx context.Context, step Step, store ContextReader) {
 	if step.Fallback == nil {
 		return
@@ -311,7 +328,6 @@ func (e *Engine) executeFallback(runCtx context.Context, step Step, store Contex
 	}
 }
 
-// findExecutor returns the first executor that can handle the given step.
 func (e *Engine) findExecutor(step Step) StepExecutor {
 	for _, exec := range e.executors {
 		if exec.CanExecute(step) {
@@ -321,7 +337,6 @@ func (e *Engine) findExecutor(step Step) StepExecutor {
 	return nil
 }
 
-// resolveTimeout determines the timeout for a step.
 func (e *Engine) resolveTimeout(step Step) time.Duration {
 	if step.Timeout.Duration > 0 {
 		return step.Timeout.Duration
@@ -329,8 +344,6 @@ func (e *Engine) resolveTimeout(step Step) time.Duration {
 	return e.defaultTimeout
 }
 
-// resolveOutputKey determines which context key to write the output to.
-// Agent steps can override via OutputKeyOverride.
 func resolveOutputKey(step Step, stepOutput *StepOutput) string {
 	if stepOutput.OutputKeyOverride != "" {
 		return stepOutput.OutputKeyOverride
@@ -338,7 +351,6 @@ func resolveOutputKey(step Step, stepOutput *StepOutput) string {
 	return step.OutputKey
 }
 
-// backoffDuration calculates the wait time between retries.
 func backoffDuration(attempt int, strategy string) time.Duration {
 	switch strategy {
 	case "exponential":
@@ -347,12 +359,11 @@ func backoffDuration(attempt int, strategy string) time.Duration {
 			return MaxRetryDelay
 		}
 		return delay
-	default: // "fixed" or unspecified
+	default:
 		return DefaultRetryBaseDelay
 	}
 }
 
-// stepType returns a string identifying the type of step ("script" or "agent").
 func stepType(step Step) string {
 	if step.Agent != "" {
 		return "agent"
@@ -360,131 +371,10 @@ func stepType(step Step) string {
 	return "script"
 }
 
-// RunFrom resumes a pipeline from a specific step index, using an existing
-// context store and run state. Used by `motif resume`.
-func (e *Engine) RunFrom(
-	runCtx context.Context,
-	pipelineDef Pipeline,
-	fromStep int,
-	existingStore *contextstore.Store,
-	existingState *state.RunState,
-) (*state.RunState, error) {
-	existingState.Status = state.StatusRunning
-
-	logWriter, logErr := state.NewLogWriter(e.stateStore.RunDir(existingState.RunID))
-	if logErr != nil {
-		e.printer.Warning("failed to create log writer for resume: %s", logErr)
-	}
-	defer func() { _ = logWriter.Close() }()
-
-	runCtx = state.WithLogWriter(runCtx, logWriter)
-
-	e.printer.Info("Resuming pipeline: %s from step %q (run: %s)",
-		pipelineDef.Name, pipelineDef.Steps[fromStep].Name, existingState.RunID)
-
-	for i := fromStep; i < len(pipelineDef.Steps); i++ {
-		step := pipelineDef.Steps[i]
-		existingState.CurrentStep = i
-		stepStartTime := time.Now()
-
-		executor := e.findExecutor(step)
-		if executor == nil {
-			result := state.StepResult{
-				Name: step.Name, Type: stepType(step), Status: state.StepSkipped,
-				StartedAt: stepStartTime, CompletedAt: time.Now(),
-				Error: &state.ErrorDetail{Code: "NO_EXECUTOR", Message: "no executor found"},
-			}
-			existingState.StepResults = append(existingState.StepResults, result)
-			e.printer.StepSkipped(step.Name, "no executor found")
-			_ = e.stateStore.SaveCheckpoint(*existingState)
-			continue
-		}
-
-		e.printer.StepStart(step.Name)
-
-		stepTimeout := e.resolveTimeout(step)
-		stepCtx, stepCancel := context.WithTimeout(runCtx, stepTimeout)
-		stepOutput, retriesUsed, execErr := e.executeWithRetries(stepCtx, step, executor, existingStore)
-		stepCancel()
-
-		stepDuration := time.Since(stepStartTime)
-
-		var skipErr ErrSkipStep
-		if errors.As(execErr, &skipErr) {
-			result := state.StepResult{
-				Name: step.Name, Type: stepType(step), Status: state.StepSkipped,
-				StartedAt: stepStartTime, CompletedAt: time.Now(), DurationMs: stepDuration.Milliseconds(),
-			}
-			existingState.StepResults = append(existingState.StepResults, result)
-			e.printer.StepSkipped(step.Name, skipErr.Reason)
-			existingState.Context = existingStore.Snapshot()
-			_ = e.stateStore.SaveCheckpoint(*existingState)
-			continue
-		}
-
-		if execErr != nil {
-			if step.Fallback != nil {
-				e.executeFallback(runCtx, step, existingStore)
-			}
-
-			result := state.StepResult{
-				Name: step.Name, Type: stepType(step), Status: state.StepFailed,
-				StartedAt: stepStartTime, CompletedAt: time.Now(),
-				DurationMs: stepDuration.Milliseconds(), RetriesUsed: retriesUsed,
-				Error: &state.ErrorDetail{Code: "STEP_FAILED", Message: execErr.Error()},
-			}
-			existingState.StepResults = append(existingState.StepResults, result)
-			existingState.Status = state.StatusFailed
-			existingState.Context = existingStore.Snapshot()
-			now := time.Now()
-			existingState.CompletedAt = &now
-			_ = e.stateStore.SaveCheckpoint(*existingState)
-			_ = e.stateStore.SaveFinal(*existingState)
-
-			e.printer.StepFailed(step.Name, execErr.Error())
-			e.printer.PipelineFailed(step.Name, execErr.Error(), existingState.RunID)
-			return existingState, execErr
-		}
-
-		if stepOutput != nil && stepOutput.Data != nil {
-			outputKey := resolveOutputKey(step, stepOutput)
-			if outputKey != "" {
-				_ = existingStore.Set(outputKey, stepOutput.Data)
-			}
-		}
-
-		result := state.StepResult{
-			Name: step.Name, Type: stepType(step), Status: state.StepSuccess,
-			StartedAt: stepStartTime, CompletedAt: time.Now(),
-			DurationMs: stepDuration.Milliseconds(), RetriesUsed: retriesUsed,
-		}
-		if stepOutput != nil {
-			result.Stdout = stepOutput.Stdout
-			result.Stderr = stepOutput.Stderr
-		}
-		existingState.StepResults = append(existingState.StepResults, result)
-		existingState.Context = existingStore.Snapshot()
-		_ = e.stateStore.SaveCheckpoint(*existingState)
-		e.printer.StepSuccess(step.Name, stepDuration)
-	}
-
-	existingState.Status = state.StatusCompleted
-	now := time.Now()
-	existingState.CompletedAt = &now
-	existingState.Context = existingStore.Snapshot()
-	_ = e.stateStore.SaveFinal(*existingState)
-	e.printer.PipelineComplete(time.Since(existingState.StartedAt), existingState.RunID)
-
-	return existingState, nil
-}
-
-// generateRunID produces a unique run identifier.
-// Format: "run_" + 16 hex characters (8 random bytes).
 func generateRunID() string {
 	b := make([]byte, 8)
 	_, readErr := rand.Read(b)
 	if readErr != nil {
-		// Extremely unlikely fallback
 		return fmt.Sprintf("run_%d", time.Now().UnixNano())
 	}
 	return fmt.Sprintf("run_%s", hex.EncodeToString(b))

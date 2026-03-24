@@ -134,6 +134,7 @@ func buildApp(printer *output.Printer) *cli.App {
 
 	app.Engine = engine
 	app.Loader = loader
+	app.AgentLoader = agentLoader
 	app.StateStore = stateStore
 
 	return app
