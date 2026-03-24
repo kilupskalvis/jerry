@@ -14,6 +14,12 @@ import (
 	"github.com/kilupskalvis/motif/internal/tools"
 )
 
+func newTestExecutor(loader *agent.Loader, reg *tools.Registry, mockClient llm.Client, printer *output.Printer) *agent.Executor {
+	exec := agent.NewExecutor(loader, reg, "", "", printer)
+	exec.ClientOverride = mockClient
+	return exec
+}
+
 // mockLLMClient returns predefined responses in sequence.
 type mockLLMClient struct {
 	responses []*llm.Response
@@ -57,7 +63,7 @@ You are a test agent. Return a JSON summary.
 }
 
 func TestAgentExecutor_CanExecute_True(t *testing.T) {
-	exec := agent.NewExecutor(nil, nil, nil, nil, nil)
+	exec := agent.NewExecutor(nil, nil, "", "", nil)
 	step := pipeline.Step{Name: "gen", Agent: "./agents/generate.md"}
 	if !exec.CanExecute(step) {
 		t.Error("should return true for steps with Agent set")
@@ -65,7 +71,7 @@ func TestAgentExecutor_CanExecute_True(t *testing.T) {
 }
 
 func TestAgentExecutor_CanExecute_False(t *testing.T) {
-	exec := agent.NewExecutor(nil, nil, nil, nil, nil)
+	exec := agent.NewExecutor(nil, nil, "", "", nil)
 	step := pipeline.Step{Name: "test", Script: "echo hi"}
 	if exec.CanExecute(step) {
 		t.Error("should return false for steps with Script set")
@@ -73,7 +79,7 @@ func TestAgentExecutor_CanExecute_False(t *testing.T) {
 }
 
 func TestAgentExecutor_CanExecute_Empty(t *testing.T) {
-	exec := agent.NewExecutor(nil, nil, nil, nil, nil)
+	exec := agent.NewExecutor(nil, nil, "", "", nil)
 	step := pipeline.Step{Name: "empty"}
 	if exec.CanExecute(step) {
 		t.Error("should return false for empty steps")
@@ -81,7 +87,7 @@ func TestAgentExecutor_CanExecute_Empty(t *testing.T) {
 }
 
 func TestAgentExecutor_Execute_NilClient(t *testing.T) {
-	exec := agent.NewExecutor(nil, nil, nil, nil, nil)
+	exec := agent.NewExecutor(nil, nil, "", "", nil)
 	step := pipeline.Step{Name: "gen", Agent: "./agents/test.md"}
 
 	_, err := exec.Execute(context.Background(), step, nil)
@@ -111,7 +117,7 @@ func TestAgentExecutor_Execute_Success(t *testing.T) {
 		},
 	}
 
-	exec := agent.NewExecutor(loader, reg, mockClient, nil, printer)
+	exec := newTestExecutor(loader, reg, mockClient, printer)
 	store := contextstore.NewStore("test-run", contextstore.TriggerData{
 		Type:   "manual",
 		Source: "cli",
@@ -177,7 +183,7 @@ Return a summary.
 		capturedSystem: &capturedSystem,
 	}
 
-	exec := agent.NewExecutor(loader, reg, mockClient, nil, printer)
+	exec := newTestExecutor(loader, reg, mockClient, printer)
 	store := contextstore.NewStore("test-run", contextstore.TriggerData{
 		Type:   "manual",
 		Source: "cli",

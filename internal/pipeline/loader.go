@@ -83,7 +83,24 @@ func (l *Loader) LoadFile(path string) (*Pipeline, error) {
 	absPath, _ := filepath.Abs(path)
 	p.SourceFile = absPath
 
+	// Pre-resolve agent paths relative to .motif/ so execution doesn't
+	// depend on the working directory.
+	l.resolveAgentPaths(&p)
+
 	return &p, nil
+}
+
+// resolveAgentPaths rewrites relative agent paths on all steps to absolute
+// paths resolved against the .motif/ directory.
+func (l *Loader) resolveAgentPaths(p *Pipeline) {
+	for i := range p.Steps {
+		if p.Steps[i].Agent != "" {
+			p.Steps[i].Agent = l.resolveAgentPath(p.Steps[i].Agent)
+		}
+		if p.Steps[i].Fallback != nil && p.Steps[i].Fallback.Agent != "" {
+			p.Steps[i].Fallback.Agent = l.resolveAgentPath(p.Steps[i].Fallback.Agent)
+		}
+	}
 }
 
 // MotifDir returns the .motif/ directory path this loader reads from.

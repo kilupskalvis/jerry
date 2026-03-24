@@ -15,7 +15,6 @@ import (
 	"github.com/kilupskalvis/motif/internal/cli"
 	"github.com/kilupskalvis/motif/internal/config"
 	"github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/llm"
 	"github.com/kilupskalvis/motif/internal/output"
 	"github.com/kilupskalvis/motif/internal/pipeline"
 	"github.com/kilupskalvis/motif/internal/script"
@@ -124,20 +123,7 @@ func buildApp(printer *output.Printer) *cli.App {
 	anthropicKey := resolveKey("ANTHROPIC_API_KEY", secretEnv)
 	openaiKey := resolveKey("OPENAI_API_KEY", secretEnv)
 
-	// Build default LLM client from first available API key.
-	var defaultClient llm.Client
-	if anthropicKey != "" {
-		defaultClient = llm.NewAnthropicClient(anthropicKey, cfg.DefaultModel)
-	} else if openaiKey != "" {
-		defaultClient = llm.NewOpenAIClient(openaiKey, cfg.DefaultModel)
-	}
-
-	var compactor *llm.Compactor
-	if defaultClient != nil {
-		compactor = llm.NewCompactor(defaultClient)
-	}
-
-	agentExec := agent.NewExecutor(agentLoader, toolRegistry, defaultClient, compactor, printer)
+	agentExec := agent.NewExecutor(agentLoader, toolRegistry, anthropicKey, openaiKey, printer)
 
 	engine := pipeline.NewEngine(
 		[]pipeline.StepExecutor{agentExec, scriptExec},

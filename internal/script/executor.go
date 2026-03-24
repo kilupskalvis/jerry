@@ -68,7 +68,8 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// Build clean environment
-	cmd.Env = e.buildEnvironment(step.Name, contextFilePath)
+	fullCtx := store.Get()
+	cmd.Env = e.buildEnvironment(fullCtx.RunID, step.Name, contextFilePath)
 
 	// Capture stdout and stderr separately
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -148,11 +149,11 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 
 // buildEnvironment constructs a clean environment for the script.
 // Only includes PATH, HOME, MOTIF_* variables, and MOTIF_SECRET_* from config.
-func (e *Executor) buildEnvironment(stepName, contextFilePath string) []string {
+func (e *Executor) buildEnvironment(runID, stepName, contextFilePath string) []string {
 	envVars := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
-		"MOTIF_RUN_ID=" + "", // Set by engine via store context — extracted below
+		"MOTIF_RUN_ID=" + runID,
 		"MOTIF_STEP_NAME=" + stepName,
 		"MOTIF_CONTEXT_FILE=" + contextFilePath,
 	}

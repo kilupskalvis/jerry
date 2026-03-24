@@ -371,6 +371,14 @@ func (e *Engine) RunFrom(
 ) (*state.RunState, error) {
 	existingState.Status = state.StatusRunning
 
+	logWriter, logErr := state.NewLogWriter(e.stateStore.RunDir(existingState.RunID))
+	if logErr != nil {
+		e.printer.Warning("failed to create log writer for resume: %s", logErr)
+	}
+	defer func() { _ = logWriter.Close() }()
+
+	runCtx = state.WithLogWriter(runCtx, logWriter)
+
 	e.printer.Info("Resuming pipeline: %s from step %q (run: %s)",
 		pipelineDef.Name, pipelineDef.Steps[fromStep].Name, existingState.RunID)
 

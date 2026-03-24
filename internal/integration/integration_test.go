@@ -42,7 +42,7 @@ func buildEngine(t *testing.T, repoRoot string) (*pipeline.Engine, *state.FileSt
 
 	toolRegistry := tools.NewRegistry(repoRoot, nil)
 	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), "", nil)
-	agentExec := agent.NewExecutor(agentLoader, toolRegistry, nil, nil, printer)
+	agentExec := agent.NewExecutor(agentLoader, toolRegistry, "", "", printer)
 
 	engine := pipeline.NewEngine(
 		[]pipeline.StepExecutor{agentExec, scriptExec},
@@ -455,7 +455,20 @@ func TestFullPipeline_AgentStepFailsWithoutAPIKey(t *testing.T) {
 	agentsDir := filepath.Join(motifDir, "agents")
 	os.MkdirAll(agentsDir, 0o755)
 	agentPath := filepath.Join(agentsDir, "dummy.md")
-	os.WriteFile(agentPath, []byte("# dummy agent"), 0o644)
+	os.WriteFile(agentPath, []byte(`---
+name: dummy
+model: claude-sonnet-4-6
+context_access:
+  - trigger
+output_key: result
+output_schema:
+  status: string
+---
+
+# Dummy Agent
+
+This is a test agent.
+`), 0o644)
 
 	testutil.WritePipeline(t, motifDir, "mixed", `name: mixed
 steps:
@@ -475,8 +488,8 @@ steps:
 	if runErr == nil {
 		t.Fatal("expected pipeline to fail when agent step runs without API key")
 	}
-	if !strings.Contains(runErr.Error(), "ANTHROPIC_API_KEY") {
-		t.Errorf("error should mention ANTHROPIC_API_KEY, got: %v", runErr)
+	if !strings.Contains(runErr.Error(), "API_KEY") {
+		t.Errorf("error should mention API key requirement, got: %v", runErr)
 	}
 }
 

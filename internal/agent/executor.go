@@ -19,25 +19,29 @@ import (
 var _ pipeline.StepExecutor = (*Executor)(nil)
 
 // Executor runs agent steps in the pipeline. It loads the agent definition,
-// resolves tools, runs the agentic loop, and parses the output.
+// resolves the LLM client per-agent (based on model/provider), runs the
+// agentic loop, and parses the output.
 type Executor struct {
-	loader    *Loader
-	registry  *tools.Registry
-	client    llm.Client
-	compactor *llm.Compactor
-	printer   *output.Printer
+	loader       *Loader
+	registry     *tools.Registry
+	anthropicKey string
+	openaiKey    string
+	printer      *output.Printer
+
+	// ClientOverride, if set, is used instead of resolving a client per-agent.
+	// Used in tests to inject a mock LLM client.
+	ClientOverride llm.Client
 }
 
-// NewExecutor creates an agent executor.
-// client and compactor may be nil — Execute returns a clear error for agent steps
-// if no client is available.
-func NewExecutor(loader *Loader, registry *tools.Registry, client llm.Client, compactor *llm.Compactor, printer *output.Printer) *Executor {
+// NewExecutor creates an agent executor with the given API keys.
+// The LLM client is resolved per-execution based on each agent's model field.
+func NewExecutor(loader *Loader, registry *tools.Registry, anthropicKey, openaiKey string, printer *output.Printer) *Executor {
 	return &Executor{
-		loader:    loader,
-		registry:  registry,
-		client:    client,
-		compactor: compactor,
-		printer:   printer,
+		loader:       loader,
+		registry:     registry,
+		anthropicKey: anthropicKey,
+		openaiKey:    openaiKey,
+		printer:      printer,
 	}
 }
 
@@ -46,20 +50,25 @@ func (e *Executor) CanExecute(step pipeline.Step) bool {
 	return step.Agent != ""
 }
 
-// Execute loads the agent definition, resolves tools, runs the agentic loop,
-// parses the output, and returns a StepOutput with OutputKeyOverride set to
-// the agent's output_key.
+// Execute loads the agent definition, resolves the LLM client and tools,
+// runs the agentic loop, parses the output, and returns a StepOutput.
 func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
-	if e.client == nil {
-		return nil, motifErrors.New(motifErrors.CodeLLMAuthFailed,
-			"agent step requires an LLM API key (ANTHROPIC_API_KEY or OPENAI_API_KEY)")
-	}
-
 	start := time.Now()
 
 	agentCfg, loadErr := e.loader.Load(step.Agent)
 	if loadErr != nil {
 		return nil, loadErr
+	}
+
+	// Resolve LLM client for this agent's model.
+	client := e.ClientOverride
+	if client == nil {
+		var clientErr error
+		client, clientErr = llm.NewClientForModel(agentCfg.Model, agentCfg.Provider, e.anthropicKey, e.openaiKey)
+		if clientErr != nil {
+			return nil, motifErrors.Wrap(motifErrors.CodeLLMAuthFailed,
+				fmt.Sprintf("agent %q", agentCfg.Name), clientErr)
+		}
 	}
 
 	// Resolve tools: convert agent.ToolAccess → tools.ToolAccess.
@@ -84,7 +93,8 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 	fullContext := store.Get()
 	contextData["trigger"] = fullContext.Trigger
 
-	agentLoop := NewLoop(e.client, e.compactor, e.printer)
+	compactor := llm.NewCompactor(client)
+	agentLoop := NewLoop(client, compactor, e.printer)
 	loopResult, loopErr := agentLoop.Run(stepCtx, *agentCfg, toolDefs, dispatch, contextData)
 	if loopErr != nil {
 		return nil, loopErr

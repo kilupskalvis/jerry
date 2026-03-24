@@ -48,13 +48,12 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 				return "Error: missing required parameter 'command'", nil
 			}
 
-			// Build clean environment.
 			cmdEnv := buildToolEnv(env)
 
 			timeoutCtx, cancel := context.WithTimeout(toolCtx, ToolCommandTimeout)
 			defer cancel()
 
-			cmd := exec.CommandContext(timeoutCtx, "/bin/sh", "-c", command)
+			cmd := exec.Command("/bin/sh", "-c", command)
 			cmd.Dir = repoRoot
 			cmd.Env = cmdEnv
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -63,18 +62,26 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
 
-			err := cmd.Run()
+			if startErr := cmd.Start(); startErr != nil {
+				return fmt.Sprintf("Error starting command: %s", startErr), nil
+			}
 
-			if timeoutCtx.Err() == context.DeadlineExceeded {
-				// Timeout: kill the entire process group.
+			waitDone := make(chan error, 1)
+			go func() { waitDone <- cmd.Wait() }()
+
+			var runErr error
+			select {
+			case runErr = <-waitDone:
+			case <-timeoutCtx.Done():
 				killProcessGroup(cmd)
+				<-waitDone
 				return fmt.Sprintf("Command timed out after %s", ToolCommandTimeout), nil
 			}
 
-			if err != nil {
+			if runErr != nil {
 				exitCode := -1
 				exitErr := &exec.ExitError{}
-				if errors.As(err, &exitErr) {
+				if errors.As(runErr, &exitErr) {
 					exitCode = exitErr.ExitCode()
 				}
 				return fmt.Sprintf("Command failed (exit code %d):\nstdout: %s\nstderr: %s",
@@ -82,6 +89,9 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 			}
 
 			out := stdout.String()
+			if stderr.Len() > 0 {
+				out += stderr.String()
+			}
 			if out == "" {
 				return "(no output)", nil
 			}
