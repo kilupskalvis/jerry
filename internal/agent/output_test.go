@@ -117,3 +117,58 @@ func TestParseOutput_ArrayNotObject(t *testing.T) {
 		t.Errorf("expected code %q, got %q", motifErrors.CodeInvalidOutputJSON, motifErr.Code)
 	}
 }
+
+func TestParseOutput_FullSchemaValidation_WrongType(t *testing.T) {
+	schema := map[string]any{
+		"count": "number",
+	}
+	_, err := agent.ParseOutput(`{"count": "not a number"}`, schema)
+	if err == nil {
+		t.Fatal("expected schema violation error for wrong type")
+	}
+
+	var motifErr *motifErrors.Error
+	if !errors.As(err, &motifErr) {
+		t.Fatalf("expected motif Error, got %T", err)
+	}
+	if motifErr.Code != motifErrors.CodeOutputSchemaViolation {
+		t.Errorf("code = %q, want %q", motifErr.Code, motifErrors.CodeOutputSchemaViolation)
+	}
+}
+
+func TestParseOutput_FullSchemaValidation_NestedObject(t *testing.T) {
+	schema := map[string]any{
+		"artifacts": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"path":    "string",
+				"content": "string",
+			},
+		},
+	}
+	result, err := agent.ParseOutput(`{"artifacts": [{"path": "a.go", "content": "package a"}]}`, schema)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	artifacts := result["artifacts"].([]any)
+	if len(artifacts) != 1 {
+		t.Errorf("artifacts length = %d, want 1", len(artifacts))
+	}
+}
+
+func TestParseOutput_FullSchemaValidation_NestedWrongType(t *testing.T) {
+	schema := map[string]any{
+		"artifacts": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"path":    "string",
+				"content": "string",
+			},
+		},
+	}
+	// content should be string, not number
+	_, err := agent.ParseOutput(`{"artifacts": [{"path": "a.go", "content": 42}]}`, schema)
+	if err == nil {
+		t.Fatal("expected schema violation for nested wrong type")
+	}
+}

@@ -7,17 +7,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/santhosh-tekuri/jsonschema/v6"
+
 	motifErrors "github.com/kilupskalvis/motif/internal/errors"
 )
 
 // ParseOutput attempts to extract structured data from the agent's final response.
-//
-// Phase 2 validation is minimal: checks that the output is a JSON object with the
-// expected top-level keys from the schema. Phase 3 adds full JSON Schema validation.
-//
-// Returns map[string]any (not any) — agent outputs must be JSON objects. Arrays
-// and scalars are rejected. This is stricter than the spec's interface{} return
-// type but matches the real-world contract: context keys always map to objects.
+// If a schema is provided, it is translated from simplified notation and the output
+// is validated against it using full JSON Schema validation.
 func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error) {
 	parsed, err := extractJSON(rawOutput)
 	if err != nil {
@@ -32,7 +29,7 @@ func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error
 	}
 
 	if schema != nil {
-		if validErr := validateTopLevelKeys(result, schema); validErr != nil {
+		if validErr := validateAgainstSchema(result, schema); validErr != nil {
 			return nil, validErr
 		}
 	}
@@ -40,60 +37,45 @@ func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error
 	return result, nil
 }
 
-// extractJSON tries multiple strategies to extract JSON from the agent's raw output:
-// 1. Direct unmarshal
-// 2. Extract from markdown code fences (```json ... ```)
-// 3. Extract between first { and last }
-func extractJSON(raw string) (any, error) {
-	// Strategy 1: direct unmarshal.
-	var direct any
-	if err := json.Unmarshal([]byte(raw), &direct); err == nil {
-		return direct, nil
+// validateAgainstSchema translates the simplified schema, compiles it, and
+// validates the parsed output. Falls back to top-level key checking if
+// schema translation or compilation fails.
+func validateAgainstSchema(value, simplifiedSchema map[string]any) error {
+	jsonSchema, translateErr := TranslateSchema(simplifiedSchema)
+	if translateErr != nil {
+		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
-	// Strategy 2: extract from markdown code fences.
-	if idx := strings.Index(raw, "```json"); idx != -1 {
-		start := idx + len("```json")
-		end := strings.Index(raw[start:], "```")
-		if end != -1 {
-			jsonStr := strings.TrimSpace(raw[start : start+end])
-			var fenced any
-			if err := json.Unmarshal([]byte(jsonStr), &fenced); err == nil {
-				return fenced, nil
-			}
-		}
+	schemaJSON, marshalErr := json.Marshal(jsonSchema)
+	if marshalErr != nil {
+		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
-	// Also try plain ``` fences.
-	if idx := strings.Index(raw, "```\n"); idx != -1 {
-		start := idx + len("```\n")
-		end := strings.Index(raw[start:], "```")
-		if end != -1 {
-			jsonStr := strings.TrimSpace(raw[start : start+end])
-			var fenced any
-			if err := json.Unmarshal([]byte(jsonStr), &fenced); err == nil {
-				return fenced, nil
-			}
-		}
+	compiled, compileErr := jsonschema.UnmarshalJSON(strings.NewReader(string(schemaJSON)))
+	if compileErr != nil {
+		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
-	// Strategy 3: extract between first { and last }.
-	firstBrace := strings.Index(raw, "{")
-	lastBrace := strings.LastIndex(raw, "}")
-	if firstBrace != -1 && lastBrace > firstBrace {
-		jsonStr := raw[firstBrace : lastBrace+1]
-		var extracted any
-		if err := json.Unmarshal([]byte(jsonStr), &extracted); err == nil {
-			return extracted, nil
-		}
+	compiler := jsonschema.NewCompiler()
+	if addErr := compiler.AddResource("schema.json", compiled); addErr != nil {
+		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
-	return nil, fmt.Errorf("no valid JSON found in output")
+	schema, schemaErr := compiler.Compile("schema.json")
+	if schemaErr != nil {
+		return validateTopLevelKeys(value, simplifiedSchema)
+	}
+
+	if validErr := schema.Validate(value); validErr != nil {
+		return motifErrors.New(motifErrors.CodeOutputSchemaViolation,
+			fmt.Sprintf("agent output does not match schema: %s", validErr))
+	}
+
+	return nil
 }
 
-// validateTopLevelKeys checks that all top-level keys defined in the schema
-// exist in the parsed output. This is Phase 2's minimal validation — Phase 3
-// adds full JSON Schema validation.
+// validateTopLevelKeys is the fallback: checks that all top-level keys
+// defined in the schema exist in the parsed output.
 func validateTopLevelKeys(result, schema map[string]any) error {
 	var missing []string
 	for key := range schema {
@@ -108,4 +90,51 @@ func validateTopLevelKeys(result, schema map[string]any) error {
 	}
 
 	return nil
+}
+
+// extractJSON tries multiple strategies to extract JSON from the agent's raw output:
+// 1. Direct unmarshal
+// 2. Extract from markdown code fences (```json ... ```)
+// 3. Extract between first { and last }
+func extractJSON(raw string) (any, error) {
+	var direct any
+	if err := json.Unmarshal([]byte(raw), &direct); err == nil {
+		return direct, nil
+	}
+
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		start := idx + len("```json")
+		end := strings.Index(raw[start:], "```")
+		if end != -1 {
+			jsonStr := strings.TrimSpace(raw[start : start+end])
+			var fenced any
+			if err := json.Unmarshal([]byte(jsonStr), &fenced); err == nil {
+				return fenced, nil
+			}
+		}
+	}
+
+	if idx := strings.Index(raw, "```\n"); idx != -1 {
+		start := idx + len("```\n")
+		end := strings.Index(raw[start:], "```")
+		if end != -1 {
+			jsonStr := strings.TrimSpace(raw[start : start+end])
+			var fenced any
+			if err := json.Unmarshal([]byte(jsonStr), &fenced); err == nil {
+				return fenced, nil
+			}
+		}
+	}
+
+	firstBrace := strings.Index(raw, "{")
+	lastBrace := strings.LastIndex(raw, "}")
+	if firstBrace != -1 && lastBrace > firstBrace {
+		jsonStr := raw[firstBrace : lastBrace+1]
+		var extracted any
+		if err := json.Unmarshal([]byte(jsonStr), &extracted); err == nil {
+			return extracted, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no valid JSON found in output")
 }
