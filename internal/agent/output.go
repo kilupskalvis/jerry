@@ -5,6 +5,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -43,26 +44,31 @@ func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error
 func validateAgainstSchema(value, simplifiedSchema map[string]any) error {
 	jsonSchema, translateErr := TranslateSchema(simplifiedSchema)
 	if translateErr != nil {
+		fmt.Fprintf(os.Stderr, "motif: warning: schema translation failed (%s), falling back to key checking\n", translateErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	schemaJSON, marshalErr := json.Marshal(jsonSchema)
 	if marshalErr != nil {
+		fmt.Fprintf(os.Stderr, "motif: warning: schema marshal failed (%s), falling back to key checking\n", marshalErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	compiled, compileErr := jsonschema.UnmarshalJSON(strings.NewReader(string(schemaJSON)))
 	if compileErr != nil {
+		fmt.Fprintf(os.Stderr, "motif: warning: schema compilation failed (%s), falling back to key checking\n", compileErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	compiler := jsonschema.NewCompiler()
 	if addErr := compiler.AddResource("schema.json", compiled); addErr != nil {
+		fmt.Fprintf(os.Stderr, "motif: warning: schema resource failed (%s), falling back to key checking\n", addErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	schema, schemaErr := compiler.Compile("schema.json")
 	if schemaErr != nil {
+		fmt.Fprintf(os.Stderr, "motif: warning: schema compile failed (%s), falling back to key checking\n", schemaErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 

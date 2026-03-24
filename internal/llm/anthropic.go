@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -202,7 +203,9 @@ func translateResponse(sdkResp *anthropic.Message) *Response {
 		case anthropic.ToolUseBlock:
 			var args map[string]any
 			if len(variant.Input) > 0 {
-				_ = json.Unmarshal(variant.Input, &args)
+				if unmarshalErr := json.Unmarshal(variant.Input, &args); unmarshalErr != nil {
+					fmt.Fprintf(os.Stderr, "motif: warning: failed to parse tool input for %s: %s\n", variant.Name, unmarshalErr)
+				}
 			}
 			resp.ToolCalls = append(resp.ToolCalls, ToolCall{
 				ID:        variant.ID,

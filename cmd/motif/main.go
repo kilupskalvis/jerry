@@ -38,10 +38,11 @@ func run() int {
 	if execErr := rootCmd.ExecuteContext(signalCtx); execErr != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "motif: error: %s\n", execErr.Error())
 
-		// Exit code 4 for resume-specific errors.
 		var motifErr *errors.Error
 		if stderrors.As(execErr, &motifErr) {
 			switch motifErr.Code {
+			case errors.CodeMotifDirNotFound, errors.CodeValidationFailed:
+				return 2
 			case errors.CodeRunNotFound, errors.CodeRunNotResumable, errors.CodePipelineChanged:
 				return 4
 			}

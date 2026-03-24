@@ -42,25 +42,25 @@ You are a test agent.
 `)
 
 	loader := agent.NewLoader(testKnownTools, "", nil)
-	config, err := loader.Load(path)
+	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if config.Name != "test-agent" {
-		t.Errorf("expected name 'test-agent', got %q", config.Name)
+	if agentCfg.Name != "test-agent" {
+		t.Errorf("expected name 'test-agent', got %q", agentCfg.Name)
 	}
-	if config.Model != "claude-sonnet-4-6" {
-		t.Errorf("expected model 'claude-sonnet-4-6', got %q", config.Model)
+	if agentCfg.Model != "claude-sonnet-4-6" {
+		t.Errorf("expected model 'claude-sonnet-4-6', got %q", agentCfg.Model)
 	}
-	if len(config.Tools) != 2 {
-		t.Errorf("expected 2 tools, got %d", len(config.Tools))
+	if len(agentCfg.Tools) != 2 {
+		t.Errorf("expected 2 tools, got %d", len(agentCfg.Tools))
 	}
-	if config.OutputKey != "result" {
-		t.Errorf("expected output_key 'result', got %q", config.OutputKey)
+	if agentCfg.OutputKey != "result" {
+		t.Errorf("expected output_key 'result', got %q", agentCfg.OutputKey)
 	}
-	if !strings.Contains(config.Instructions, "You are a test agent") {
-		t.Errorf("instructions should contain agent body, got %q", config.Instructions)
+	if !strings.Contains(agentCfg.Instructions, "You are a test agent") {
+		t.Errorf("instructions should contain agent body, got %q", agentCfg.Instructions)
 	}
 }
 
@@ -82,12 +82,12 @@ Pure reasoning, no tools.
 `)
 
 	loader := agent.NewLoader(testKnownTools, "", nil)
-	config, err := loader.Load(path)
+	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(config.Tools) != 0 {
-		t.Errorf("expected 0 tools, got %d", len(config.Tools))
+	if len(agentCfg.Tools) != 0 {
+		t.Errorf("expected 0 tools, got %d", len(agentCfg.Tools))
 	}
 }
 
@@ -115,20 +115,20 @@ Write only to src/ and tests/.
 `)
 
 	loader := agent.NewLoader(testKnownTools, "", nil)
-	config, err := loader.Load(path)
+	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(config.Tools) != 2 {
-		t.Fatalf("expected 2 tools, got %d", len(config.Tools))
+	if len(agentCfg.Tools) != 2 {
+		t.Fatalf("expected 2 tools, got %d", len(agentCfg.Tools))
 	}
-	if config.Tools[0].Name != "read_file" {
-		t.Errorf("first tool should be read_file, got %q", config.Tools[0].Name)
+	if agentCfg.Tools[0].Name != "read_file" {
+		t.Errorf("first tool should be read_file, got %q", agentCfg.Tools[0].Name)
 	}
-	if config.Tools[1].Name != "write_file" {
-		t.Errorf("second tool should be write_file, got %q", config.Tools[1].Name)
+	if agentCfg.Tools[1].Name != "write_file" {
+		t.Errorf("second tool should be write_file, got %q", agentCfg.Tools[1].Name)
 	}
-	if config.Tools[1].Constraints == nil {
+	if agentCfg.Tools[1].Constraints == nil {
 		t.Fatal("write_file should have constraints")
 	}
 }
@@ -151,15 +151,15 @@ Test default values.
 `)
 
 	loader := agent.NewLoader(testKnownTools, "", nil)
-	config, err := loader.Load(path)
+	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if config.MaxIterations != agent.DefaultMaxIterations {
-		t.Errorf("expected max_iterations %d, got %d", agent.DefaultMaxIterations, config.MaxIterations)
+	if agentCfg.MaxIterations != agent.DefaultMaxIterations {
+		t.Errorf("expected max_iterations %d, got %d", agent.DefaultMaxIterations, agentCfg.MaxIterations)
 	}
-	if config.Temperature == nil || *config.Temperature != agent.DefaultTemperature {
-		t.Errorf("expected temperature %f, got %v", agent.DefaultTemperature, config.Temperature)
+	if agentCfg.Temperature == nil || *agentCfg.Temperature != agent.DefaultTemperature {
+		t.Errorf("expected temperature %f, got %v", agent.DefaultTemperature, agentCfg.Temperature)
 	}
 }
 
@@ -180,12 +180,12 @@ Agent without model in frontmatter.
 `)
 
 	loader := agent.NewLoader(testKnownTools, "claude-haiku-4-5", nil)
-	config, err := loader.Load(path)
+	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if config.Model != "claude-haiku-4-5" {
-		t.Errorf("expected model from default 'claude-haiku-4-5', got %q", config.Model)
+	if agentCfg.Model != "claude-haiku-4-5" {
+		t.Errorf("expected model from default 'claude-haiku-4-5', got %q", agentCfg.Model)
 	}
 }
 

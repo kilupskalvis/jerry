@@ -21,7 +21,6 @@ const (
 	CodeScriptTimeout = "SCRIPT_TIMEOUT"
 
 	// Agent execution errors.
-	CodeAgentNotSupported  = "AGENT_NOT_SUPPORTED"
 	CodeAgentLoadFailed    = "AGENT_LOAD_FAILED"
 	CodeAgentMaxIterations = "AGENT_MAX_ITERATIONS"
 
@@ -50,6 +49,9 @@ const (
 
 	// Git tool errors.
 	CodeGitNotAvailable = "GIT_NOT_AVAILABLE"
+
+	// Validation errors.
+	CodeValidationFailed = "VALIDATION_FAILED"
 
 	// Configuration errors.
 	CodeConfigInvalid = "CONFIG_INVALID"

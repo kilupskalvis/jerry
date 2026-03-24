@@ -4,11 +4,11 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	motifErrors "github.com/kilupskalvis/motif/internal/errors"
 	"github.com/kilupskalvis/motif/internal/pipeline"
 )
 
@@ -31,9 +31,8 @@ func newValidateCmd(app *App) *cobra.Command {
 
 func runValidate(app *App, pipelineName string) error {
 	if app.Loader == nil {
-		fmt.Fprintln(os.Stderr, "motif: error: not in a Motif project (no .motif/ directory found)")
-		fmt.Fprintln(os.Stderr, "  Run 'motif init' to initialize a new project.")
-		os.Exit(2)
+		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
+			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
 	}
 
 	if pipelineName != "" {
@@ -46,7 +45,7 @@ func validateSingle(app *App, name string) error {
 	pipelineDef, loadErr := app.Loader.Load(name)
 	if loadErr != nil {
 		app.Printer.ValidationResult(name+".yaml", false, loadErr.Error())
-		os.Exit(2)
+		return motifErrors.New(motifErrors.CodeValidationFailed, "pipeline validation failed")
 	}
 
 	agentErrors := validateAgents(app, pipelineDef.Steps)
@@ -58,7 +57,7 @@ func validateSingle(app *App, name string) error {
 		for _, errMsg := range agentErrors {
 			app.Printer.ValidationResult("  agent", false, errMsg)
 		}
-		os.Exit(2)
+		return motifErrors.New(motifErrors.CodeValidationFailed, "agent validation failed")
 	}
 
 	return nil
@@ -104,7 +103,7 @@ func validateAll(app *App) error {
 	}
 
 	if hasErrors {
-		os.Exit(2)
+		return motifErrors.New(motifErrors.CodeValidationFailed, "one or more pipelines have validation errors")
 	}
 	return nil
 }

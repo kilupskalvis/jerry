@@ -322,9 +322,27 @@ func (e *Engine) executeFallback(runCtx context.Context, step Step, store Contex
 	fallbackCtx, fallbackCancel := context.WithTimeout(runCtx, e.defaultTimeout)
 	defer fallbackCancel()
 
+	lw := state.LogWriterFrom(runCtx)
+	fallbackStart := time.Now()
 	_, fallbackErr := executor.Execute(fallbackCtx, fallbackStep, store)
+
+	status := "success"
+	errMsg := ""
 	if fallbackErr != nil {
-		e.printer.Warning("fallback for step %q failed: %s", step.Name, fallbackErr.Error())
+		status = "failed"
+		errMsg = fallbackErr.Error()
+		e.printer.Warning("fallback for step %q failed: %s", step.Name, errMsg)
+	}
+
+	if lw != nil {
+		lw.Log(state.LogStepEnd, step.Name+"_fallback", state.StepEndData{
+			Status:     status,
+			DurationMs: time.Since(fallbackStart).Milliseconds(),
+		})
+	}
+
+	if errMsg == "" {
+		e.printer.Info("  fallback for step %q succeeded", step.Name)
 	}
 }
 

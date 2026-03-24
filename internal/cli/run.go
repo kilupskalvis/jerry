@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kilupskalvis/motif/internal/contextstore"
+	motifErrors "github.com/kilupskalvis/motif/internal/errors"
 	"github.com/kilupskalvis/motif/internal/output"
 	"github.com/kilupskalvis/motif/internal/trigger"
 )
@@ -103,9 +104,8 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 
 func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerData contextstore.TriggerData) error {
 	if app.Loader == nil || app.Engine == nil {
-		fmt.Fprintln(os.Stderr, "motif: error: not in a Motif project (no .motif/ directory found)")
-		fmt.Fprintln(os.Stderr, "  Run 'motif init' to initialize a new project.")
-		os.Exit(1)
+		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
+			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
 	}
 
 	pipelineDef, loadErr := app.Loader.Load(pipelineName)
@@ -131,8 +131,8 @@ func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerD
 
 func dryRunPipeline(app *App, pipelineName, intent string) error {
 	if app.Loader == nil {
-		fmt.Fprintln(os.Stderr, "motif: error: not in a Motif project (no .motif/ directory found)")
-		os.Exit(1)
+		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
+			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
 	}
 
 	pipelineDef, loadErr := app.Loader.Load(pipelineName)

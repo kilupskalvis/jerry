@@ -54,14 +54,14 @@ func (l *Loader) Load(path string) (*AgentConfig, error) {
 			fmt.Sprintf("cannot read agent file %q", path), err)
 	}
 
-	config, parseErr := l.parse(string(data))
+	agentCfg, parseErr := l.parse(string(data))
 	if parseErr != nil {
 		return nil, motifErrors.Wrap(motifErrors.CodeAgentLoadFailed,
 			fmt.Sprintf("agent %q", path), parseErr)
 	}
 
-	config.SourcePath = absPath
-	return config, nil
+	agentCfg.SourcePath = absPath
+	return agentCfg, nil
 }
 
 // parse splits the markdown file into frontmatter and body, parses the
@@ -72,20 +72,20 @@ func (l *Loader) parse(content string) (*AgentConfig, error) {
 		return nil, err
 	}
 
-	var config AgentConfig
-	if yamlErr := yaml.Unmarshal([]byte(frontmatter), &config); yamlErr != nil {
+	var agentCfg AgentConfig
+	if yamlErr := yaml.Unmarshal([]byte(frontmatter), &agentCfg); yamlErr != nil {
 		return nil, fmt.Errorf("invalid frontmatter YAML: %w", yamlErr)
 	}
 
-	config.Instructions = strings.TrimSpace(body)
+	agentCfg.Instructions = strings.TrimSpace(body)
 
-	l.applyDefaults(&config)
+	l.applyDefaults(&agentCfg)
 
-	if validErr := l.validate(&config); validErr != nil {
+	if validErr := l.validate(&agentCfg); validErr != nil {
 		return nil, validErr
 	}
 
-	return &config, nil
+	return &agentCfg, nil
 }
 
 // splitFrontmatter separates YAML frontmatter from the markdown body.
@@ -158,57 +158,57 @@ func (l *Loader) applyDefaults(agentCfg *AgentConfig) {
 }
 
 // validate checks all required fields and semantic rules.
-func (l *Loader) validate(config *AgentConfig) error {
-	if config.Name == "" {
+func (l *Loader) validate(agentCfg *AgentConfig) error {
+	if agentCfg.Name == "" {
 		return fmt.Errorf("missing required field 'name'")
 	}
 
-	if config.Model == "" {
-		return fmt.Errorf("agent %q: no model specified and no global default configured", config.Name)
+	if agentCfg.Model == "" {
+		return fmt.Errorf("agent %q: no model specified and no global default configured", agentCfg.Name)
 	}
 
-	if len(config.ContextAccess) == 0 {
-		return fmt.Errorf("agent %q: missing required field 'context_access'", config.Name)
+	if len(agentCfg.ContextAccess) == 0 {
+		return fmt.Errorf("agent %q: missing required field 'context_access'", agentCfg.Name)
 	}
 
-	if config.OutputKey == "" {
-		return fmt.Errorf("agent %q: missing required field 'output_key'", config.Name)
+	if agentCfg.OutputKey == "" {
+		return fmt.Errorf("agent %q: missing required field 'output_key'", agentCfg.Name)
 	}
 
-	if config.OutputSchema == nil {
-		return fmt.Errorf("agent %q: missing required field 'output_schema'", config.Name)
+	if agentCfg.OutputSchema == nil {
+		return fmt.Errorf("agent %q: missing required field 'output_schema'", agentCfg.Name)
 	}
 
-	if config.Instructions == "" {
-		return fmt.Errorf("agent %q: agent has no instructions (empty markdown body)", config.Name)
+	if agentCfg.Instructions == "" {
+		return fmt.Errorf("agent %q: agent has no instructions (empty markdown body)", agentCfg.Name)
 	}
 
 	// Validate tool references.
-	for _, ta := range config.Tools {
+	for _, ta := range agentCfg.Tools {
 		if !l.knownTools[ta.Name] {
 			known := make([]string, 0, len(l.knownTools))
 			for name := range l.knownTools {
 				known = append(known, name)
 			}
 			return fmt.Errorf("agent %q: unknown tool %q (available: %s)",
-				config.Name, ta.Name, strings.Join(known, ", "))
+				agentCfg.Name, ta.Name, strings.Join(known, ", "))
 		}
 	}
 
 	// Validate temperature range.
-	if config.Temperature != nil && (*config.Temperature < 0.0 || *config.Temperature > 2.0) {
-		return fmt.Errorf("agent %q: temperature must be between 0.0 and 2.0", config.Name)
+	if agentCfg.Temperature != nil && (*agentCfg.Temperature < 0.0 || *agentCfg.Temperature > 2.0) {
+		return fmt.Errorf("agent %q: temperature must be between 0.0 and 2.0", agentCfg.Name)
 	}
 
 	// Validate max_iterations.
-	if config.MaxIterations < 1 {
-		return fmt.Errorf("agent %q: max_iterations must be > 0", config.Name)
+	if agentCfg.MaxIterations < 1 {
+		return fmt.Errorf("agent %q: max_iterations must be > 0", agentCfg.Name)
 	}
 
 	// Validate secrets are present in environment.
-	for _, secret := range config.Secrets {
+	for _, secret := range agentCfg.Secrets {
 		if os.Getenv(secret) == "" {
-			return fmt.Errorf("agent %q: required secret %q is not set", config.Name, secret)
+			return fmt.Errorf("agent %q: required secret %q is not set", agentCfg.Name, secret)
 		}
 	}
 

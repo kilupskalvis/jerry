@@ -5,7 +5,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -35,9 +34,8 @@ func newResumeCmd(app *App) *cobra.Command {
 
 func resumePipeline(runCtx context.Context, app *App, runID string, force bool) error {
 	if app.Loader == nil || app.Engine == nil || app.StateStore == nil {
-		fmt.Fprintln(os.Stderr, "motif: error: not in a Motif project (no .motif/ directory found)")
-		fmt.Fprintln(os.Stderr, "  Run 'motif init' to initialize a new project.")
-		os.Exit(1)
+		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
+			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
 	}
 
 	runState, loadErr := app.StateStore.LoadRun(runID)

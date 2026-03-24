@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	motifErrors "github.com/kilupskalvis/motif/internal/errors"
 	"github.com/kilupskalvis/motif/internal/state"
 )
 
@@ -30,8 +31,8 @@ func newLogsCmd(app *App) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if app.StateStore == nil {
-				fmt.Fprintln(os.Stderr, "motif: error: not in a Motif project (no .motif/ directory found)")
-				os.Exit(1)
+				return motifErrors.New(motifErrors.CodeMotifDirNotFound,
+					"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
 			}
 
 			if showLast {
