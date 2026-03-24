@@ -85,7 +85,7 @@ func buildApp(printer *output.Printer) *cli.App {
 
 	// Build agent executor with real LLM client if API key is available.
 	toolRegistry := tools.NewRegistry(cfg.RepoRoot, cfg.Env)
-	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), cfg.DefaultModel)
+	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), cfg.DefaultModel, nil)
 
 	var llmClient llm.Client
 	if anthropicKey := os.Getenv("ANTHROPIC_API_KEY"); anthropicKey != "" {

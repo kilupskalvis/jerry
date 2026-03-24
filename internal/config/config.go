@@ -39,6 +39,10 @@ type Config struct {
 	// Empty string means no default — agents must specify their own model.
 	// Set from MOTIF_DEFAULT_MODEL environment variable.
 	DefaultModel string
+
+	// FileConfig holds values loaded from .motif/config.yaml.
+	// nil if no config file was found.
+	FileConfig *FileConfig
 }
 
 // FindMotifDir walks up from startDir looking for a .motif/ directory.

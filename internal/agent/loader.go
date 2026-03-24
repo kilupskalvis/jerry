@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/kilupskalvis/motif/internal/config"
 	motifErrors "github.com/kilupskalvis/motif/internal/errors"
 )
 
@@ -17,19 +18,25 @@ import (
 type Loader struct {
 	knownTools   map[string]bool
 	defaultModel string
+	fileConfig   *config.FileConfig
 }
 
 // NewLoader creates an agent loader.
 // knownTools is the list of tool names the runtime supports (from Registry.KnownToolNames).
 // defaultModel is the fallback model when an agent doesn't specify one (may be empty).
-func NewLoader(knownTools []string, defaultModel string) *Loader {
+// fileConfig provides defaults from .motif/config.yaml (may be nil).
+func NewLoader(knownTools []string, defaultModel string, fileConfig *config.FileConfig) *Loader {
 	known := make(map[string]bool, len(knownTools))
 	for _, name := range knownTools {
 		known[name] = true
 	}
+	if fileConfig == nil {
+		fileConfig = &config.FileConfig{}
+	}
 	return &Loader{
 		knownTools:   known,
 		defaultModel: defaultModel,
+		fileConfig:   fileConfig,
 	}
 }
 
@@ -114,19 +121,39 @@ func splitFrontmatter(content string) (frontmatter, body string, err error) {
 	return frontmatter, body, nil
 }
 
-// applyDefaults fills in missing optional fields with their defaults.
-func (l *Loader) applyDefaults(config *AgentConfig) {
-	if config.Model == "" {
-		config.Model = l.defaultModel
+// applyDefaults fills in missing optional fields using three-tier resolution:
+// agent frontmatter → .motif/config.yaml → hardcoded fallback.
+func (l *Loader) applyDefaults(agentCfg *AgentConfig) {
+	// Model: frontmatter → config.yaml → defaultModel (env var).
+	if agentCfg.Model == "" {
+		agentCfg.Model = l.fileConfig.Defaults.Model
+	}
+	if agentCfg.Model == "" {
+		agentCfg.Model = l.defaultModel
 	}
 
-	if config.Temperature == nil {
+	// MaxIterations: frontmatter → config.yaml → 50.
+	if agentCfg.MaxIterations == 0 {
+		agentCfg.MaxIterations = l.fileConfig.Defaults.MaxIterations
+	}
+	if agentCfg.MaxIterations == 0 {
+		agentCfg.MaxIterations = DefaultMaxIterations
+	}
+
+	// Temperature: frontmatter → 0.0.
+	if agentCfg.Temperature == nil {
 		temp := DefaultTemperature
-		config.Temperature = &temp
+		agentCfg.Temperature = &temp
 	}
 
-	if config.MaxIterations == 0 {
-		config.MaxIterations = DefaultMaxIterations
+	// ContextWindow: frontmatter → config.yaml → 0 (disabled).
+	if agentCfg.ContextWindow == 0 {
+		agentCfg.ContextWindow = l.fileConfig.Defaults.ContextWindow
+	}
+
+	// Timeout: frontmatter → config.yaml → 0 (engine applies its default).
+	if agentCfg.Timeout.Duration == 0 {
+		agentCfg.Timeout = l.fileConfig.Defaults.Timeout
 	}
 }
 

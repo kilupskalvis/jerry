@@ -41,7 +41,7 @@ func buildEngine(t *testing.T, repoRoot string) (*pipeline.Engine, *state.FileSt
 	scriptExec := script.NewExecutor(repoRoot, map[string]string{})
 
 	toolRegistry := tools.NewRegistry(repoRoot, nil)
-	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), "")
+	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), "", nil)
 	agentExec := agent.NewExecutor(agentLoader, toolRegistry, nil, printer)
 
 	engine := pipeline.NewEngine(

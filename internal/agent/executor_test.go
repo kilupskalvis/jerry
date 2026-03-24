@@ -98,7 +98,7 @@ func TestAgentExecutor_Execute_Success(t *testing.T) {
 	agentPath := setupTestAgent(t, dir)
 
 	reg := tools.NewRegistry(dir, nil)
-	loader := agent.NewLoader(reg.KnownToolNames(), "")
+	loader := agent.NewLoader(reg.KnownToolNames(), "", nil)
 	printer := output.NewPrinter(os.Stdout, os.Stderr)
 
 	mockClient := &mockLLMClient{
@@ -163,7 +163,7 @@ Return a summary.
 	os.WriteFile(agentPath, []byte(content), 0o644)
 
 	reg := tools.NewRegistry(dir, nil)
-	loader := agent.NewLoader(reg.KnownToolNames(), "")
+	loader := agent.NewLoader(reg.KnownToolNames(), "", nil)
 	printer := output.NewPrinter(os.Stdout, os.Stderr)
 
 	// The mock client verifies it receives the trigger in the system message.
