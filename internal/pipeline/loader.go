@@ -80,6 +80,9 @@ func (l *Loader) LoadFile(path string) (*Pipeline, error) {
 			strings.Join(validationErrs, "; "))
 	}
 
+	absPath, _ := filepath.Abs(path)
+	p.SourceFile = absPath
+
 	return &p, nil
 }
 

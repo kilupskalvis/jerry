@@ -98,6 +98,14 @@ func (s *Store) Set(key string, value any) error {
 	return nil
 }
 
+// RestoreFromSnapshot creates a Store from a previously saved Context snapshot.
+// Used by pipeline resume to restore context state from a checkpoint.
+func RestoreFromSnapshot(snapshot Context) *Store {
+	return &Store{
+		pipelineContext: snapshot,
+	}
+}
+
 // Snapshot returns a full deep copy of the context for persistence.
 func (s *Store) Snapshot() Context {
 	s.mu.RLock()

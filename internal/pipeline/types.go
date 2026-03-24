@@ -16,6 +16,10 @@ type Pipeline struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description,omitempty"`
 	Steps       []Step `yaml:"steps"`
+
+	// SourceFile is the absolute path to the YAML file this pipeline was loaded
+	// from. Set by the Loader, used by resume to reload the same pipeline.
+	SourceFile string `yaml:"-"`
 }
 
 // Step represents a single step in the pipeline.
