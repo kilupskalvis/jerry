@@ -5,18 +5,39 @@ package errors
 
 import "fmt"
 
-// Error code constants. Each code maps to a category of failure.
+// Machine-readable error codes. Use these with [New] and [Wrap] to create
+// errors that callers can match programmatically via the Code field.
 const (
-	CodeScriptFailed       = "SCRIPT_FAILED"
-	CodeScriptTimeout      = "SCRIPT_TIMEOUT"
-	CodeAgentNotSupported  = "AGENT_NOT_SUPPORTED"
+	// Pipeline and configuration errors.
 	CodeInvalidPipeline    = "INVALID_PIPELINE"
 	CodePipelineNotFound   = "PIPELINE_NOT_FOUND"
 	CodeMotifDirNotFound   = "MOTIF_DIR_NOT_FOUND"
 	CodeMotifDirExists     = "MOTIF_DIR_EXISTS"
 	CodeContextWriteDenied = "CONTEXT_WRITE_DENIED"
-	CodeInvalidOutputJSON  = "INVALID_OUTPUT_JSON"
 	CodeStateWriteFailed   = "STATE_WRITE_FAILED"
+
+	// Script execution errors.
+	CodeScriptFailed  = "SCRIPT_FAILED"
+	CodeScriptTimeout = "SCRIPT_TIMEOUT"
+
+	// Agent execution errors.
+	CodeAgentNotSupported  = "AGENT_NOT_SUPPORTED"
+	CodeAgentLoadFailed    = "AGENT_LOAD_FAILED"
+	CodeAgentMaxIterations = "AGENT_MAX_ITERATIONS"
+
+	// LLM provider errors.
+	CodeLLMAuthFailed  = "LLM_AUTH_FAILED"
+	CodeLLMRateLimited = "LLM_RATE_LIMITED"
+	CodeLLMServerError = "LLM_SERVER_ERROR"
+	CodeLLMCallFailed  = "LLM_CALL_FAILED"
+
+	// Tool errors.
+	CodeToolNotFound            = "TOOL_NOT_FOUND"
+	CodeToolConstraintViolation = "TOOL_CONSTRAINT_VIOLATION"
+
+	// Output parsing errors.
+	CodeInvalidOutputJSON     = "INVALID_OUTPUT_JSON"
+	CodeOutputSchemaViolation = "OUTPUT_SCHEMA_VIOLATION"
 )
 
 // Error is the standard error type returned by all Motif components.
@@ -63,7 +84,7 @@ func (e *Error) Unwrap() error {
 
 // New creates a new Error with the given code and message.
 // The Step and Cause fields are left empty.
-func New(code string, message string) *Error {
+func New(code, message string) *Error {
 	return &Error{
 		Code:    code,
 		Message: message,
@@ -72,7 +93,7 @@ func New(code string, message string) *Error {
 
 // Wrap creates a new Error wrapping an existing error with additional context.
 // The wrapped error is accessible via Unwrap().
-func Wrap(code string, message string, cause error) *Error {
+func Wrap(code, message string, cause error) *Error {
 	return &Error{
 		Code:    code,
 		Message: message,

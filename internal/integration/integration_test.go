@@ -23,6 +23,7 @@ import (
 	"github.com/kilupskalvis/motif/internal/script"
 	"github.com/kilupskalvis/motif/internal/state"
 	"github.com/kilupskalvis/motif/internal/testutil"
+	"github.com/kilupskalvis/motif/internal/tools"
 )
 
 // buildEngine constructs a full engine with real executors for integration testing.
@@ -31,14 +32,17 @@ func buildEngine(t *testing.T, repoRoot string) (*pipeline.Engine, *state.FileSt
 
 	motifDir := filepath.Join(repoRoot, ".motif")
 	runsDir := filepath.Join(motifDir, "runs")
-	if mkErr := os.MkdirAll(runsDir, 0755); mkErr != nil {
+	if mkErr := os.MkdirAll(runsDir, 0o755); mkErr != nil {
 		t.Fatalf("failed to create runs dir: %v", mkErr)
 	}
 
 	stateStore := state.NewFileStateStore(runsDir)
 	printer := output.NewPrinter(devNull{}, devNull{})
 	scriptExec := script.NewExecutor(repoRoot, map[string]string{})
-	agentExec := agent.NewExecutor()
+
+	toolRegistry := tools.NewRegistry(repoRoot, nil)
+	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), "")
+	agentExec := agent.NewExecutor(agentLoader, toolRegistry, nil, printer)
 
 	engine := pipeline.NewEngine(
 		[]pipeline.StepExecutor{agentExec, scriptExec},
@@ -443,13 +447,15 @@ func TestFullPipeline_ValidateDetectsErrors(t *testing.T) {
 	}
 }
 
-func TestFullPipeline_AgentStepSkipped(t *testing.T) {
+func TestFullPipeline_AgentStepFailsWithoutAPIKey(t *testing.T) {
 	repoRoot := testutil.SetupTestMotifDir(t, nil)
 
 	// Create a dummy agent file so validation passes
 	motifDir := filepath.Join(repoRoot, ".motif")
-	agentPath := filepath.Join(motifDir, "agents", "dummy.md")
-	os.WriteFile(agentPath, []byte("# dummy agent"), 0644)
+	agentsDir := filepath.Join(motifDir, "agents")
+	os.MkdirAll(agentsDir, 0o755)
+	agentPath := filepath.Join(agentsDir, "dummy.md")
+	os.WriteFile(agentPath, []byte("# dummy agent"), 0o644)
 
 	testutil.WritePipeline(t, motifDir, "mixed", `name: mixed
 steps:
@@ -464,24 +470,13 @@ steps:
 	loader := pipeline.NewLoader(motifDir)
 	p, _ := loader.Load("mixed")
 
-	runState, runErr := engine.Run(context.Background(), *p, trigger)
-	if runErr != nil {
-		t.Fatalf("pipeline should succeed with skipped agent step, got: %v", runErr)
+	// Without an API key, agent steps should fail (not skip).
+	_, runErr := engine.Run(context.Background(), *p, trigger)
+	if runErr == nil {
+		t.Fatal("expected pipeline to fail when agent step runs without API key")
 	}
-
-	if runState.Status != state.StatusCompleted {
-		t.Errorf("Status = %q, want completed", runState.Status)
-	}
-
-	// Agent step should be skipped
-	if len(runState.StepResults) != 2 {
-		t.Fatalf("expected 2 step results, got %d", len(runState.StepResults))
-	}
-	if runState.StepResults[0].Status != state.StepSkipped {
-		t.Errorf("agent step status = %q, want skipped", runState.StepResults[0].Status)
-	}
-	if runState.StepResults[1].Status != state.StepSuccess {
-		t.Errorf("script step status = %q, want success", runState.StepResults[1].Status)
+	if !strings.Contains(runErr.Error(), "ANTHROPIC_API_KEY") {
+		t.Errorf("error should mention ANTHROPIC_API_KEY, got: %v", runErr)
 	}
 }
 

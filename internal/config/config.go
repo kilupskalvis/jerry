@@ -34,12 +34,17 @@ type Config struct {
 	// DefaultStepTimeout is the fallback timeout for steps that
 	// don't specify their own.
 	DefaultStepTimeout time.Duration
+
+	// DefaultModel is the fallback model when an agent doesn't specify one.
+	// Empty string means no default — agents must specify their own model.
+	// Set from MOTIF_DEFAULT_MODEL environment variable.
+	DefaultModel string
 }
 
 // FindMotifDir walks up from startDir looking for a .motif/ directory.
 // Returns the absolute path to .motif/ and the repo root (its parent),
 // or an error if not found before reaching the filesystem root.
-func FindMotifDir(startDir string) (motifDir string, repoRoot string, err error) {
+func FindMotifDir(startDir string) (motifDir, repoRoot string, err error) {
 	current, err := filepath.Abs(startDir)
 	if err != nil {
 		return "", "", errors.Wrap(errors.CodeMotifDirNotFound,
