@@ -11,14 +11,17 @@ import (
 
 	"github.com/kilupskalvis/motif/internal/contextstore"
 	"github.com/kilupskalvis/motif/internal/output"
+	"github.com/kilupskalvis/motif/internal/trigger"
 )
 
 func newRunCmd(app *App) *cobra.Command {
 	var (
-		intent  string
-		dryRun  bool
-		verbose bool
-		quiet   bool
+		intent       string
+		dryRun       bool
+		verbose      bool
+		quiet        bool
+		triggerFile  string
+		triggerStdin bool
 	)
 
 	cmd := &cobra.Command{
@@ -36,7 +39,13 @@ func newRunCmd(app *App) *cobra.Command {
 			if dryRun {
 				return dryRunPipeline(app, args[0], intent)
 			}
-			return runPipeline(cmd.Context(), app, args[0], intent)
+
+			triggerData, resolveErr := resolveTrigger(intent, triggerFile, triggerStdin)
+			if resolveErr != nil {
+				return resolveErr
+			}
+
+			return runPipeline(cmd.Context(), app, args[0], triggerData)
 		},
 	}
 
@@ -44,11 +53,55 @@ func newRunCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview pipeline without executing")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show detailed output including tool arguments")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Show only errors and final result")
+	cmd.Flags().StringVar(&triggerFile, "trigger-file", "", "Path to trigger JSON file")
+	cmd.Flags().BoolVar(&triggerStdin, "trigger-stdin", false, "Read trigger JSON from stdin")
 
 	return cmd
 }
 
-func runPipeline(runCtx context.Context, app *App, pipelineName, intent string) error {
+// resolveTrigger builds TriggerData from the provided flags.
+func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore.TriggerData, error) {
+	sourcesSet := 0
+	if triggerFile != "" {
+		sourcesSet++
+	}
+	if triggerStdin {
+		sourcesSet++
+	}
+	if sourcesSet > 1 {
+		return contextstore.TriggerData{}, fmt.Errorf("specify only one trigger source (got multiple of --trigger-file, --trigger-stdin)")
+	}
+
+	if triggerFile != "" {
+		t, err := trigger.FromFile(triggerFile)
+		if err != nil {
+			return contextstore.TriggerData{}, err
+		}
+		if intent != "" {
+			t.Intent = intent // --intent overrides
+		}
+		return *t, nil
+	}
+
+	if triggerStdin {
+		t, err := trigger.FromReader(os.Stdin)
+		if err != nil {
+			return contextstore.TriggerData{}, err
+		}
+		if intent != "" {
+			t.Intent = intent
+		}
+		return *t, nil
+	}
+
+	return contextstore.TriggerData{
+		Type:   "manual",
+		Source: "cli",
+		Intent: intent,
+	}, nil
+}
+
+func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerData contextstore.TriggerData) error {
 	if app.Loader == nil || app.Engine == nil {
 		fmt.Fprintln(os.Stderr, "motif: error: not in a Motif project (no .motif/ directory found)")
 		fmt.Fprintln(os.Stderr, "  Run 'motif init' to initialize a new project.")
@@ -60,13 +113,7 @@ func runPipeline(runCtx context.Context, app *App, pipelineName, intent string) 
 		return loadErr
 	}
 
-	trigger := contextstore.TriggerData{
-		Type:   "manual",
-		Source: "cli",
-		Intent: intent,
-	}
-
-	_, runErr := app.Engine.Run(runCtx, *pipelineDef, trigger)
+	_, runErr := app.Engine.Run(runCtx, *pipelineDef, triggerData)
 	return runErr
 }
 
@@ -99,7 +146,7 @@ func dryRunPipeline(app *App, pipelineName, intent string) error {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "\nValidation: ✓ pipeline is valid")
+	fmt.Fprintln(os.Stderr, "\nValidation: pipeline is valid")
 	fmt.Fprintf(os.Stderr, "\nTo execute: motif run %s", pipelineName)
 	if intent != "" {
 		fmt.Fprintf(os.Stderr, " --intent %q", intent)
