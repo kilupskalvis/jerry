@@ -7,7 +7,10 @@
 // directly without knowing which provider is behind them.
 package llm
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // Role constants for messages.
 // RoleSystem is unused in Phase 2 (Anthropic passes system separately)
@@ -86,4 +89,25 @@ type Client interface {
 	// tools defines which tools are available for this call; pass nil
 	// for no tool access.
 	Send(requestCtx context.Context, system string, messages []Message, tools []ToolDef) (*Response, error)
+}
+
+// ContextTooLongError indicates the conversation exceeded the model's context window.
+// Each provider client wraps provider-specific detection behind this type so the
+// agentic loop can trigger compaction.
+type ContextTooLongError struct {
+	Message string
+}
+
+func (e *ContextTooLongError) Error() string {
+	return e.Message
+}
+
+// IsContextTooLong returns true if the error indicates the conversation
+// exceeded the model's context window.
+func IsContextTooLong(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ctxErr *ContextTooLongError
+	return errors.As(err, &ctxErr)
 }

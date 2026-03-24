@@ -20,15 +20,18 @@ const MaxRetryIterations = 5
 // send messages to the LLM, execute tool calls, feed results back, repeat
 // until the LLM produces a final text response with no tool calls.
 type Loop struct {
-	client  llm.Client
-	printer *output.Printer
+	client    llm.Client
+	compactor *llm.Compactor
+	printer   *output.Printer
 }
 
 // NewLoop creates a new agentic loop with the given LLM client.
-func NewLoop(client llm.Client, printer *output.Printer) *Loop {
+// compactor may be nil — compaction is skipped if not provided.
+func NewLoop(client llm.Client, compactor *llm.Compactor, printer *output.Printer) *Loop {
 	return &Loop{
-		client:  client,
-		printer: printer,
+		client:    client,
+		compactor: compactor,
+		printer:   printer,
 	}
 }
 
@@ -57,18 +60,14 @@ type LoopResult struct {
 }
 
 // Run executes the agentic loop until the agent completes or a limit is reached.
-//
-// The system message is constructed from the agent's instructions, pipeline context,
-// and output schema instructions. The loop starts with a minimal "Begin your task."
-// user message (required by the Anthropic API).
 func (l *Loop) Run(
 	loopCtx context.Context,
-	config AgentConfig,
+	agentCfg AgentConfig,
 	toolDefs []llm.ToolDef,
 	dispatch func(context.Context, llm.ToolCall) (string, error),
 	pipelineContext map[string]any,
 ) (*LoopResult, error) {
-	systemMessage := buildSystemMessage(config, pipelineContext)
+	systemMessage := buildSystemMessage(agentCfg, pipelineContext)
 
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: "Begin your task."},
@@ -78,62 +77,50 @@ func (l *Loop) Run(
 		SystemMessage: systemMessage,
 	}
 
-	for result.Iterations < config.MaxIterations {
-		// Check for cancellation (timeout, Ctrl+C).
+	compactionAttempts := 0
+
+	for result.Iterations < agentCfg.MaxIterations {
 		if loopCtx.Err() != nil {
 			return nil, loopCtx.Err()
 		}
 
-		response, err := l.client.Send(loopCtx, systemMessage, messages, toolDefs)
-		if err != nil {
-			return nil, err
+		response, sendErr := l.client.Send(loopCtx, systemMessage, messages, toolDefs)
+
+		// Reactive compaction: context too long.
+		if sendErr != nil && llm.IsContextTooLong(sendErr) && l.compactor != nil {
+			compacted, compErr := l.reactiveCompact(loopCtx, systemMessage, messages, &compactionAttempts, result)
+			if compErr != nil {
+				return nil, compErr
+			}
+			messages = compacted
+			continue
 		}
 
-		// Accumulate token usage.
+		if sendErr != nil {
+			return nil, sendErr
+		}
+
 		result.TotalUsage.InputTokens += response.Usage.InputTokens
 		result.TotalUsage.OutputTokens += response.Usage.OutputTokens
 		result.Iterations++
 
-		// If the model made tool calls, execute them and continue.
+		// Proactive compaction: approaching context window limit.
+		messages = l.proactiveCompact(loopCtx, agentCfg, systemMessage, messages, response, result)
+
 		if len(response.ToolCalls) > 0 {
-			// Append assistant message (with tool calls) to history.
-			messages = append(messages, llm.Message{
-				Role:      llm.RoleAssistant,
-				Content:   response.Content,
-				ToolCalls: response.ToolCalls,
-			})
-
-			// Execute each tool call sequentially.
-			for _, call := range response.ToolCalls {
-				result.ToolCalls++
-				l.printer.Info(fmt.Sprintf("      tool: %s", call.Name))
-
-				toolResult, toolErr := dispatch(loopCtx, call)
-				if toolErr != nil {
-					// Tool execution error — feed error back to agent.
-					toolResult = fmt.Sprintf("Error executing %s: %s", call.Name, toolErr.Error())
-				}
-
-				messages = append(messages, llm.Message{
-					Role:    llm.RoleTool,
-					ToolID:  call.ID,
-					Content: toolResult,
-				})
-			}
-
+			messages = l.executeToolCalls(loopCtx, messages, response, dispatch, result)
 			continue
 		}
 
-		// No tool calls — agent is done. response.Content is the final output.
+		// No tool calls — agent is done.
 		result.RawOutput = response.Content
 		result.Messages = messages
 		return result, nil
 	}
 
-	// Max iterations reached.
 	result.Messages = messages
 	return result, motifErrors.New(motifErrors.CodeAgentMaxIterations,
-		fmt.Sprintf("agent %q reached max iterations (%d)", config.Name, config.MaxIterations))
+		fmt.Sprintf("agent %q reached max iterations (%d)", agentCfg.Name, agentCfg.MaxIterations))
 }
 
 // RunRetry sends a correction message and runs additional iterations.
@@ -145,17 +132,13 @@ func (l *Loop) RunRetry(
 	dispatch func(context.Context, llm.ToolCall) (string, error),
 	correctionMessage string,
 ) (*LoopResult, error) {
-	// Continue from the previous conversation.
 	messages := make([]llm.Message, len(previous.Messages))
 	copy(messages, previous.Messages)
 
-	// Append the agent's raw output as an assistant message.
 	messages = append(messages, llm.Message{
 		Role:    llm.RoleAssistant,
 		Content: previous.RawOutput,
 	})
-
-	// Append the correction prompt.
 	messages = append(messages, llm.Message{
 		Role:    llm.RoleUser,
 		Content: correctionMessage,
@@ -167,14 +150,27 @@ func (l *Loop) RunRetry(
 		ToolCalls:     previous.ToolCalls,
 	}
 
+	compactionAttempts := 0
+
 	for result.Iterations < MaxRetryIterations {
 		if loopCtx.Err() != nil {
 			return nil, loopCtx.Err()
 		}
 
-		response, err := l.client.Send(loopCtx, previous.SystemMessage, messages, toolDefs)
-		if err != nil {
-			return nil, err
+		response, sendErr := l.client.Send(loopCtx, previous.SystemMessage, messages, toolDefs)
+
+		// Reactive compaction during retry.
+		if sendErr != nil && llm.IsContextTooLong(sendErr) && l.compactor != nil {
+			compacted, compErr := l.reactiveCompact(loopCtx, previous.SystemMessage, messages, &compactionAttempts, result)
+			if compErr != nil {
+				return nil, compErr
+			}
+			messages = compacted
+			continue
+		}
+
+		if sendErr != nil {
+			return nil, sendErr
 		}
 
 		result.TotalUsage.InputTokens += response.Usage.InputTokens
@@ -182,27 +178,7 @@ func (l *Loop) RunRetry(
 		result.Iterations++
 
 		if len(response.ToolCalls) > 0 {
-			messages = append(messages, llm.Message{
-				Role:      llm.RoleAssistant,
-				Content:   response.Content,
-				ToolCalls: response.ToolCalls,
-			})
-
-			for _, call := range response.ToolCalls {
-				result.ToolCalls++
-
-				toolResult, toolErr := dispatch(loopCtx, call)
-				if toolErr != nil {
-					toolResult = fmt.Sprintf("Error executing %s: %s", call.Name, toolErr.Error())
-				}
-
-				messages = append(messages, llm.Message{
-					Role:    llm.RoleTool,
-					ToolID:  call.ID,
-					Content: toolResult,
-				})
-			}
-
+			messages = l.executeToolCalls(loopCtx, messages, response, dispatch, result)
 			continue
 		}
 
@@ -215,10 +191,104 @@ func (l *Loop) RunRetry(
 	return result, fmt.Errorf("agent did not produce valid output after %d retry iterations", MaxRetryIterations)
 }
 
+// reactiveCompact handles compaction when the context window is exceeded.
+func (l *Loop) reactiveCompact(
+	loopCtx context.Context,
+	systemMessage string,
+	messages []llm.Message,
+	attempts *int,
+	result *LoopResult,
+) ([]llm.Message, error) {
+	*attempts++
+	if *attempts > llm.MaxCompactionAttempts {
+		return nil, fmt.Errorf("context too long after %d compaction attempts", llm.MaxCompactionAttempts)
+	}
+
+	keepRecent := llm.DefaultKeepRecent - (*attempts - 1)
+	if keepRecent < 1 {
+		keepRecent = 1
+	}
+
+	compactionResult, compErr := l.compactor.Compact(loopCtx, systemMessage, messages, keepRecent)
+	if compErr != nil {
+		return nil, fmt.Errorf("context too long and compaction failed: %w", compErr)
+	}
+
+	result.TotalUsage.InputTokens += compactionResult.Usage.InputTokens
+	result.TotalUsage.OutputTokens += compactionResult.Usage.OutputTokens
+	l.printer.Info("  [compacted conversation after context overflow, attempt %d]", *attempts)
+
+	return compactionResult.CompactedMessages, nil
+}
+
+// proactiveCompact compacts if we're approaching the context window limit.
+func (l *Loop) proactiveCompact(
+	loopCtx context.Context,
+	agentCfg AgentConfig,
+	systemMessage string,
+	messages []llm.Message,
+	response *llm.Response,
+	result *LoopResult,
+) []llm.Message {
+	if agentCfg.ContextWindow <= 0 || l.compactor == nil {
+		return messages
+	}
+
+	threshold := int(float64(agentCfg.ContextWindow) * llm.ProactiveCompactionThreshold)
+	if response.Usage.InputTokens <= threshold {
+		return messages
+	}
+
+	compactionResult, compErr := l.compactor.Compact(loopCtx, systemMessage, messages, llm.DefaultKeepRecent)
+	if compErr != nil {
+		l.printer.Warning("proactive compaction failed: %s", compErr)
+		return messages
+	}
+
+	result.TotalUsage.InputTokens += compactionResult.Usage.InputTokens
+	result.TotalUsage.OutputTokens += compactionResult.Usage.OutputTokens
+	l.printer.Info("  [compacted conversation — evicted %d messages]", compactionResult.EvictedCount)
+
+	return compactionResult.CompactedMessages
+}
+
+// executeToolCalls runs all tool calls from a response and appends results to history.
+func (l *Loop) executeToolCalls(
+	loopCtx context.Context,
+	messages []llm.Message,
+	response *llm.Response,
+	dispatch func(context.Context, llm.ToolCall) (string, error),
+	result *LoopResult,
+) []llm.Message {
+	messages = append(messages, llm.Message{
+		Role:      llm.RoleAssistant,
+		Content:   response.Content,
+		ToolCalls: response.ToolCalls,
+	})
+
+	for _, call := range response.ToolCalls {
+		result.ToolCalls++
+		l.printer.Info("      tool: %s", call.Name)
+
+		toolResult, toolErr := dispatch(loopCtx, call)
+		if toolErr != nil {
+			toolResult = fmt.Sprintf("Error executing %s: %s", call.Name, toolErr.Error())
+		}
+
+		messages = append(messages, llm.Message{
+			Role:    llm.RoleTool,
+			ToolID:  call.ID,
+			Content: toolResult,
+		})
+	}
+
+	return messages
+}
+
 // buildSystemMessage constructs the system prompt from the agent's instructions,
 // pipeline context, and output schema.
-func buildSystemMessage(config AgentConfig, pipelineContext map[string]any) string {
-	result := config.Instructions
+func buildSystemMessage(agentCfg AgentConfig, pipelineContext map[string]any) string {
+	result := agentCfg.Instructions
 
 	if len(pipelineContext) > 0 {
 		contextJSON, err := json.MarshalIndent(pipelineContext, "", "  ")
@@ -227,8 +297,8 @@ func buildSystemMessage(config AgentConfig, pipelineContext map[string]any) stri
 		}
 	}
 
-	if config.OutputSchema != nil {
-		schemaJSON, err := json.MarshalIndent(config.OutputSchema, "", "  ")
+	if agentCfg.OutputSchema != nil {
+		schemaJSON, err := json.MarshalIndent(agentCfg.OutputSchema, "", "  ")
 		if err == nil {
 			result += "\n\n## Output Format\n\n" +
 				"When you have completed your task, respond with a JSON object " +

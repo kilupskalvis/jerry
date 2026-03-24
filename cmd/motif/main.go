@@ -92,7 +92,7 @@ func buildApp(printer *output.Printer) *cli.App {
 		llmClient = llm.NewAnthropicClient(anthropicKey, cfg.DefaultModel)
 	}
 
-	agentExec := agent.NewExecutor(agentLoader, toolRegistry, llmClient, printer)
+	agentExec := agent.NewExecutor(agentLoader, toolRegistry, llmClient, nil, printer)
 
 	engine := pipeline.NewEngine(
 		[]pipeline.StepExecutor{agentExec, scriptExec},

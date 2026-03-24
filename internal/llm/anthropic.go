@@ -234,6 +234,17 @@ func (c *AnthropicClient) translateError(err error) error {
 	var apiErr *anthropic.Error
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
+		case http.StatusBadRequest:
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "too many tokens") ||
+				strings.Contains(errMsg, "prompt is too long") ||
+				strings.Contains(errMsg, "context length") {
+				return &ContextTooLongError{
+					Message: fmt.Sprintf("Anthropic: context too long: %s", errMsg),
+				}
+			}
+			return motifErrors.New(motifErrors.CodeLLMCallFailed,
+				fmt.Sprintf("Anthropic API error (HTTP 400): %s", errMsg))
 		case http.StatusUnauthorized:
 			return motifErrors.New(motifErrors.CodeLLMAuthFailed,
 				"Anthropic API authentication failed — check ANTHROPIC_API_KEY")

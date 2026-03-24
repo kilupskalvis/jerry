@@ -15,7 +15,7 @@ import (
 func newTestLoop(responses []*llm.Response) (*agent.Loop, *mockLLMClient) {
 	client := &mockLLMClient{responses: responses}
 	printer := output.NewPrinter(devNull{}, devNull{})
-	return agent.NewLoop(client, printer), client
+	return agent.NewLoop(client, nil, printer), client
 }
 
 type devNull struct{}
@@ -242,7 +242,7 @@ func TestLoop_SystemMessageContainsContext(t *testing.T) {
 	}
 
 	printer := output.NewPrinter(devNull{}, devNull{})
-	loop := agent.NewLoop(client, printer)
+	loop := agent.NewLoop(client, nil, printer)
 
 	config := testConfig()
 	config.Instructions = "# Test Agent\n\nDo the thing."
@@ -278,7 +278,7 @@ func TestLoop_SystemMessageContainsSchema(t *testing.T) {
 	}
 
 	printer := output.NewPrinter(devNull{}, devNull{})
-	loop := agent.NewLoop(client, printer)
+	loop := agent.NewLoop(client, nil, printer)
 
 	config := testConfig()
 	config.Instructions = "# Agent"
