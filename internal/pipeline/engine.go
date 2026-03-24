@@ -172,6 +172,7 @@ func (e *Engine) runSteps(
 
 		stepTimeout := e.resolveTimeout(step)
 		stepCtx, stepCancel := context.WithTimeout(runCtx, stepTimeout)
+		stepCtx = state.WithStepName(stepCtx, step.Name)
 		stepOutput, retriesUsed, execErr := e.executeWithRetries(stepCtx, step, executor, ctxStore)
 		stepCancel()
 

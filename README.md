@@ -65,10 +65,10 @@ go build -o motif ./cmd/motif
 ## Quick Start
 
 ```bash
-motif init                                              # Scaffold project
-export ANTHROPIC_API_KEY=sk-ant-...                     # Set API key
-motif run feature --intent "Add a GET /health endpoint" # Generate code
-motif logs --last                                       # See what happened
+motif init                                          # Scaffold project
+export ANTHROPIC_API_KEY=sk-ant-...                 # Set API key
+motif run feature "Add a GET /health endpoint"      # Generate code
+motif logs                                          # See what happened
 ```
 
 ## How It Works
@@ -133,45 +133,21 @@ These are starting points. Add your team's conventions to the Markdown body, spl
 
 ## Commands
 
-### Pipeline Execution
-
-| Command | Description |
-|---------|-------------|
-| `motif run <pipeline> --intent "..."` | Execute a pipeline |
-| `motif run <pipeline> --dry-run` | Preview without executing |
-| `motif run <pipeline> --verbose` | Show tool call details |
-| `motif run <pipeline> --quiet` | Errors and final result only |
-| `motif run <pipeline> --trigger-file event.json` | Trigger from JSON file |
-| `motif run <pipeline> --trigger-stdin` | Read trigger from stdin |
-
-### Project Management
-
 | Command | Description |
 |---------|-------------|
 | `motif init` | Scaffold `.motif/` with agents, pipelines, and config |
 | `motif init --ci github` | Also generate GitHub Actions workflow |
-| `motif init --ci gitlab` | Also generate GitLab CI config |
-| `motif validate` | Validate all pipelines and agent definitions |
-| `motif status` | Show project overview |
-
-### Observability
-
-| Command | Description |
-|---------|-------------|
-| `motif logs` | List recent runs |
+| `motif run <pipeline> [intent]` | Execute a pipeline |
+| `motif run <pipeline> --dry-run` | Preview without executing |
+| `motif run --resume <run-id>` | Resume a failed run from the last checkpoint |
+| `motif logs` | Show project overview and recent runs |
 | `motif logs <run-id>` | Run details with step breakdown |
 | `motif logs <run-id> --step <name>` | Tool calls for a specific step |
 | `motif logs <run-id> --tools` | All tool calls across steps |
 | `motif logs <run-id> --llm` | All LLM calls with token counts |
-| `motif logs <run-id> --json` | Raw JSONL for programmatic use |
 | `motif logs --last` | Most recent run |
 
-### Recovery
-
-| Command | Description |
-|---------|-------------|
-| `motif resume <run-id>` | Resume from the last successful step |
-| `motif resume <run-id> --force` | Resume a crashed run |
+Global flags: `--verbose`, `--quiet`.
 
 ## Agent Tools
 
@@ -245,18 +221,17 @@ model: ft:gpt-4o:my-org:custom-model
 motif init --ci github
 ```
 
-Generates `.github/workflows/motif.yml` — a workflow triggered by issues with the `motif` label that runs the feature pipeline and opens a PR.
-
-Or use the reusable action directly:
+Generates a workflow that runs the feature pipeline when issues are labeled `motif`. Or use the action directly in any workflow:
 
 ```yaml
 - uses: motif-protocol/runner@v1
   with:
     pipeline: feature
-    intent: ${{ github.event.issue.title }}
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+
+The action handles checkout, install, pipeline execution, and PR creation — one step, no boilerplate.
 
 ### GitLab CI
 
@@ -266,22 +241,14 @@ motif init --ci gitlab
 
 Generates a GitLab CI job triggered via the pipeline API or web UI.
 
-### External Triggers
-
-GitHub and GitLab webhook payloads are auto-detected and normalized:
-
-```bash
-motif run feature --trigger-file github-event.json
-cat event.json | motif run feature --trigger-stdin
-```
-
 ## Runtime Features
 
 - **Context window management**: automatic compaction when conversations exceed the model's context limit — reactive (on API error) and proactive (at 80% of configured limit)
-- **Resumable pipelines**: state checkpointed after every step, resume from the failure point with `motif resume`
+- **Resumable pipelines**: state checkpointed after every step, resume from the failure point with `motif run --resume <run-id>`
 - **Structured logging**: every LLM call, tool call, and decision logged to JSONL with timestamps and token counts
 - **Output validation**: agent output validated against JSON Schema translated from the simplified frontmatter notation
 - **Retry and fallback**: configurable per-step retry with fixed or exponential backoff, optional fallback steps
+- **Sensitive file protection**: agents are blocked from reading `.env` and other secret-bearing files
 
 ## Project Structure
 

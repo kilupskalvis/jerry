@@ -43,7 +43,18 @@ if command -v golangci-lint >/dev/null 2>&1; then
     fi
 fi
 
-# 4. Run tests.
+# 4. Run deadcode if available.
+if command -v deadcode >/dev/null 2>&1; then
+    echo "pre-commit: deadcode..."
+    DEAD=$(deadcode -test ./... 2>/dev/null || true)
+    if [ -n "$DEAD" ]; then
+        echo "pre-commit: dead code detected:"
+        echo "$DEAD"
+        exit 1
+    fi
+fi
+
+# 5. Run tests.
 echo "pre-commit: go test..."
 go test ./... -timeout 120s
 if [ $? -ne 0 ]; then

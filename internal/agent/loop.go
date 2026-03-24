@@ -113,7 +113,7 @@ func (l *Loop) Run(
 			for i, tc := range response.ToolCalls {
 				toolNames[i] = tc.Name
 			}
-			lw.Log(state.LogLLMCall, agentCfg.Name, state.LLMCallData{
+			lw.Log(state.LogLLMCall, state.StepNameFrom(loopCtx), state.LLMCallData{
 				Iteration:          result.Iterations,
 				Model:              agentCfg.Model,
 				TokensInput:        response.Usage.InputTokens,
@@ -299,12 +299,14 @@ func (l *Loop) executeToolCalls(
 			toolResult = fmt.Sprintf("Error executing %s: %s", call.Name, toolErr.Error())
 		}
 
-		l.printer.ToolProgress(result.Iterations, call.Name, summarizeToolCall(call, toolResult))
+		summary := summarizeToolCall(call, toolResult)
+		l.printer.ToolProgress(result.Iterations, call.Name, summary)
 
 		if lw != nil {
-			lw.Log(state.LogToolCall, "", state.ToolCallData{
+			lw.Log(state.LogToolCall, state.StepNameFrom(loopCtx), state.ToolCallData{
 				Iteration:       result.Iterations,
 				Tool:            call.Name,
+				Summary:         summary,
 				Arguments:       call.Arguments,
 				DurationMs:      toolDuration.Milliseconds(),
 				ResultSizeBytes: len(toolResult),

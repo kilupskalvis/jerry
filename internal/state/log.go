@@ -85,6 +85,7 @@ type LLMCallData struct {
 type ToolCallData struct {
 	Iteration       int            `json:"iteration"`
 	Tool            string         `json:"tool"`
+	Summary         string         `json:"summary,omitempty"`
 	Arguments       map[string]any `json:"arguments,omitempty"`
 	DurationMs      int64          `json:"duration_ms"`
 	ResultSizeBytes int            `json:"result_size_bytes"`

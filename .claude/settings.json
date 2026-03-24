@@ -12,6 +12,10 @@
       "Bash(git log*)",
       "Bash(git diff*)",
       "Bash(git add*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)"
     ]
   }
 }
