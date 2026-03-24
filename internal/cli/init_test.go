@@ -87,16 +87,41 @@ func TestInitCmd_CreatesGitignore(t *testing.T) {
 	}
 }
 
-func TestInitCmd_CreatesAgentsDir(t *testing.T) {
+func TestInitCmd_CreatesAgents(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rootCmd := cli.NewRootCmd(&cli.App{})
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	gitkeepPath := filepath.Join(tmpDir, ".motif", "agents", ".gitkeep")
-	if _, statErr := os.Stat(gitkeepPath); statErr != nil {
-		t.Fatalf("agents/.gitkeep not created: %v", statErr)
+	agentsDir := filepath.Join(tmpDir, ".motif", "agents")
+	for _, name := range []string{"context.md", "plan.md", "generate.md"} {
+		path := filepath.Join(agentsDir, name)
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			t.Errorf("agents/%s not created: %v", name, statErr)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("agents/%s should not be empty", name)
+		}
+	}
+}
+
+func TestInitCmd_CreatesFeaturePipeline(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rootCmd := cli.NewRootCmd(&cli.App{})
+	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
+	_ = rootCmd.Execute()
+
+	featurePath := filepath.Join(tmpDir, ".motif", "pipelines", "feature.yaml")
+	content, readErr := os.ReadFile(featurePath)
+	if readErr != nil {
+		t.Fatalf("feature.yaml not created: %v", readErr)
+	}
+	if !contains(string(content), "context") || !contains(string(content), "generate") {
+		t.Error("feature.yaml should reference context and generate agents")
 	}
 }
 

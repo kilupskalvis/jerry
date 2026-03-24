@@ -1,0 +1,27 @@
+name: feature
+description: "Generate a feature implementation from a description"
+
+steps:
+  - name: context
+    agent: ./agents/context.md
+
+  - name: plan
+    agent: ./agents/plan.md
+
+  - name: generate
+    agent: ./agents/generate.md
+
+  - name: validate
+    script: |
+      if command -v go >/dev/null 2>&1 && [ -f go.mod ]; then
+        go test ./...
+      elif command -v npm >/dev/null 2>&1 && [ -f package.json ]; then
+        npm test
+      elif command -v pytest >/dev/null 2>&1; then
+        pytest
+      else
+        echo '{"status": "no test runner detected"}'
+      fi
+    output_key: validation
+    timeout: 300s
+    retries: 1

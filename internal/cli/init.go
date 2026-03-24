@@ -1,8 +1,9 @@
-// motif init: scaffolds a .motif/ directory with example pipeline and scripts.
+// motif init: scaffolds a .motif/ directory with example pipeline, core agents, and scripts.
 
 package cli
 
 import (
+	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,13 +13,16 @@ import (
 	"github.com/kilupskalvis/motif/internal/errors"
 )
 
+//go:embed agents/context.md agents/plan.md agents/generate.md agents/feature.yaml
+var embeddedAgents embed.FS
+
 func newInitCmd() *cobra.Command {
 	var targetPath string
 
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize a new .motif/ directory",
-		Long:  "Scaffolds a .motif/ directory with an example pipeline, scripts, and configuration.",
+		Long:  "Scaffolds a .motif/ directory with an example pipeline, core agents, scripts, and configuration.",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runInit(targetPath)
 		},
@@ -40,13 +44,12 @@ func runInit(targetPath string) error {
 
 	motifDir := filepath.Join(targetPath, ".motif")
 
-	// Check if already initialized
 	if info, statErr := os.Stat(motifDir); statErr == nil && info.IsDir() {
 		return errors.New(errors.CodeMotifDirExists,
 			fmt.Sprintf("Motif is already initialized in %s", targetPath))
 	}
 
-	// Create directory structure
+	// Create directory structure.
 	dirs := []string{
 		filepath.Join(motifDir, "pipelines"),
 		filepath.Join(motifDir, "agents"),
@@ -54,7 +57,6 @@ func runInit(targetPath string) error {
 		filepath.Join(motifDir, "runs"),
 		filepath.Join(motifDir, "cache"),
 	}
-
 	for _, dir := range dirs {
 		if mkdirErr := os.MkdirAll(dir, 0o755); mkdirErr != nil {
 			return errors.Wrap(errors.CodeStateWriteFailed,
@@ -62,16 +64,14 @@ func runInit(targetPath string) error {
 		}
 	}
 
-	// Write template files
-	files := map[string]string{
+	// Write static template files.
+	staticFiles := map[string]string{
 		filepath.Join(motifDir, "pipelines", "example.yaml"):  examplePipelineYAML,
 		filepath.Join(motifDir, "scripts", "echo-context.sh"): echoContextScript,
 		filepath.Join(motifDir, ".gitignore"):                 motifGitignore,
-		filepath.Join(motifDir, "agents", ".gitkeep"):         "",
 		filepath.Join(motifDir, "config.yaml"):                defaultConfigYAML,
 	}
-
-	for path, content := range files {
+	for path, content := range staticFiles {
 		perm := os.FileMode(0o644)
 		if filepath.Ext(path) == ".sh" {
 			perm = 0o755
@@ -82,8 +82,31 @@ func runInit(targetPath string) error {
 		}
 	}
 
+	// Write embedded agent definitions and feature pipeline.
+	embeddedFiles := map[string]string{
+		filepath.Join(motifDir, "agents", "context.md"):      "agents/context.md",
+		filepath.Join(motifDir, "agents", "plan.md"):         "agents/plan.md",
+		filepath.Join(motifDir, "agents", "generate.md"):     "agents/generate.md",
+		filepath.Join(motifDir, "pipelines", "feature.yaml"): "agents/feature.yaml",
+	}
+	for destPath, embedPath := range embeddedFiles {
+		content, readErr := embeddedAgents.ReadFile(embedPath)
+		if readErr != nil {
+			return errors.Wrap(errors.CodeStateWriteFailed,
+				fmt.Sprintf("failed to read embedded file %q", embedPath), readErr)
+		}
+		if writeErr := os.WriteFile(destPath, content, 0o644); writeErr != nil {
+			return errors.Wrap(errors.CodeStateWriteFailed,
+				fmt.Sprintf("failed to write %q", destPath), writeErr)
+		}
+	}
+
 	fmt.Printf("Motif initialized in %s\n", targetPath)
+	fmt.Println("  Core agents: context.md, plan.md, generate.md")
+	fmt.Println("  Pipelines:   example.yaml, feature.yaml")
+	fmt.Println("")
 	fmt.Println("Run 'motif run example' to try the example pipeline.")
+	fmt.Println("Run 'motif run feature --intent \"...\"' to generate code with AI agents.")
 	return nil
 }
 
