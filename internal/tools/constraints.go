@@ -110,27 +110,39 @@ func validateRunCommandConstraints(args, constraints map[string]any) string {
 }
 
 // splitShellCommands splits a command string on unquoted shell operators
-// (&&, ||, ;, |) while respecting single and double quotes.
-// Phase 2: best-effort implementation. Phase 3 hardens this with subshell tracking.
+// (&&, ||, ;, |) while respecting single and double quotes, escape characters,
+// $() subshells, and backtick subshells.
 func splitShellCommands(command string) []string {
 	var commands []string
 	var current strings.Builder
 	inSingleQuote := false
 	inDoubleQuote := false
+	inBacktick := false
+	subshellDepth := 0
 
 	runes := []rune(command)
 	i := 0
 	for i < len(runes) {
 		ch := runes[i]
 
+		prevCh := rune(0)
+		if i > 0 {
+			prevCh = runes[i-1]
+		}
+
+		nextCh := rune(0)
+		if i+1 < len(runes) {
+			nextCh = runes[i+1]
+		}
+
 		// Handle quoting.
-		if ch == '\'' && !inDoubleQuote {
+		if ch == '\'' && !inDoubleQuote && !inBacktick && prevCh != '\\' {
 			inSingleQuote = !inSingleQuote
 			current.WriteRune(ch)
 			i++
 			continue
 		}
-		if ch == '"' && !inSingleQuote {
+		if ch == '"' && !inSingleQuote && !inBacktick && prevCh != '\\' {
 			inDoubleQuote = !inDoubleQuote
 			current.WriteRune(ch)
 			i++
@@ -144,19 +156,55 @@ func splitShellCommands(command string) []string {
 			continue
 		}
 
+		// Backtick tracking.
+		if ch == '`' {
+			inBacktick = !inBacktick
+			current.WriteRune(ch)
+			i++
+			continue
+		}
+		if inBacktick {
+			current.WriteRune(ch)
+			i++
+			continue
+		}
+
+		// Subshell tracking: $( ... )
+		if ch == '$' && nextCh == '(' {
+			subshellDepth++
+			current.WriteRune(ch)
+			current.WriteRune(nextCh)
+			i += 2
+			continue
+		}
+		if ch == '(' && subshellDepth > 0 {
+			subshellDepth++
+			current.WriteRune(ch)
+			i++
+			continue
+		}
+		if ch == ')' && subshellDepth > 0 {
+			subshellDepth--
+			current.WriteRune(ch)
+			i++
+			continue
+		}
+		if subshellDepth > 0 {
+			current.WriteRune(ch)
+			i++
+			continue
+		}
+
 		// Two-char operators: && and ||
-		if i+1 < len(runes) {
-			next := runes[i+1]
-			if ch == '&' && next == '&' {
-				flushCommand(&commands, &current)
-				i += 2
-				continue
-			}
-			if ch == '|' && next == '|' {
-				flushCommand(&commands, &current)
-				i += 2
-				continue
-			}
+		if ch == '&' && nextCh == '&' {
+			flushCommand(&commands, &current)
+			i += 2
+			continue
+		}
+		if ch == '|' && nextCh == '|' {
+			flushCommand(&commands, &current)
+			i += 2
+			continue
 		}
 
 		// Single-char operators: ; and |
