@@ -53,15 +53,8 @@ func (p *Printer) StepStart(name string) {
 	}
 }
 
-// StepSuccess prints the step completion indicator.
-func (p *Printer) StepSuccess(name string, duration time.Duration) {
-	if p.verbosity >= VerbosityDefault {
-		fmt.Fprintf(p.stderr, "  ✓ %s (%s)\n", name, formatDuration(duration))
-	}
-}
-
-// StepSuccessWithMetrics prints step completion with iteration/tool/token counts.
-func (p *Printer) StepSuccessWithMetrics(name string, duration time.Duration, iterations, toolCalls, tokensInput, tokensOutput int) {
+// StepSuccess prints the step completion indicator with optional agent metrics.
+func (p *Printer) StepSuccess(name string, duration time.Duration, iterations, toolCalls, tokensInput, tokensOutput int) {
 	if p.verbosity >= VerbosityDefault {
 		if iterations > 0 {
 			fmt.Fprintf(p.stderr, "  ✓ %s (%s, %d iter, %d tools, %dk tokens)\n",

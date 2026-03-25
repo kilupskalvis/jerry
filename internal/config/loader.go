@@ -1,5 +1,3 @@
-// Config file loading: parses .jerry/config.yaml and .env files.
-
 package config
 
 import (
@@ -21,12 +19,10 @@ type FileConfig struct {
 }
 
 // DefaultsConfig holds default values for agent and pipeline configuration.
-// Agent frontmatter values take precedence over these defaults.
 type DefaultsConfig struct {
 	Model         string            `yaml:"model,omitempty"`
 	Timeout       pipeline.Duration `yaml:"timeout,omitempty"`
 	MaxIterations int               `yaml:"max_iterations,omitempty"`
-	ContextWindow int               `yaml:"context_window,omitempty"`
 }
 
 // LoadFileConfig reads and parses a config YAML file from the given directory.
@@ -54,15 +50,6 @@ func LoadFileConfig(dir, filename string) (*FileConfig, error) {
 
 // LoadDotEnv reads a dotenv file and returns the key-value pairs.
 // Returns an empty map (not an error) if the file doesn't exist.
-//
-// Supported syntax:
-//   - KEY=value
-//   - KEY="double quoted"       (quotes stripped)
-//   - KEY='single quoted'       (quotes stripped)
-//   - export KEY=value          (export prefix stripped)
-//   - # comment                 (ignored)
-//   - empty lines               (ignored)
-//   - KEY=val=ue                (only first = is the delimiter)
 func LoadDotEnv(dir, filename string) (map[string]string, error) {
 	envPath := filepath.Join(dir, filename)
 

@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,7 +14,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/cli"
 	"github.com/kilupskalvis/jerry/internal/config"
-	"github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/pipeline"
 	"github.com/kilupskalvis/jerry/internal/script"
@@ -27,23 +27,23 @@ func main() {
 }
 
 func run() int {
-	signalCtx, signalCancel := signal.NotifyContext(context.Background(),
+	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)
-	defer signalCancel()
+	defer cancel()
 
 	printer := output.NewPrinter(os.Stdout, os.Stderr)
 	app := buildApp(printer)
 	rootCmd := cli.NewRootCmd(app)
 
-	if execErr := rootCmd.ExecuteContext(signalCtx); execErr != nil {
+	if execErr := rootCmd.ExecuteContext(ctx); execErr != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "jerry: error: %s\n", execErr.Error())
 
-		var jerryErr *errors.Error
-		if stderrors.As(execErr, &jerryErr) {
+		var jerryErr *jerrerr.Error
+		if errors.As(execErr, &jerryErr) {
 			switch jerryErr.Code {
-			case errors.CodeJerryDirNotFound:
+			case jerrerr.CodeJerryDirNotFound:
 				return 2
-			case errors.CodeRunNotFound, errors.CodeRunNotResumable, errors.CodePipelineChanged:
+			case jerrerr.CodeRunNotFound, jerrerr.CodeRunNotResumable, jerrerr.CodePipelineChanged:
 				return 4
 			}
 		}
@@ -83,7 +83,13 @@ func buildApp(printer *output.Printer) *cli.App {
 	}
 
 	// Merge environments: process env takes precedence over .env values.
-	secretEnv := collectSecretEnv()
+	secretEnv := make(map[string]string)
+	for _, entry := range os.Environ() {
+		key, val, found := strings.Cut(entry, "=")
+		if found && strings.HasPrefix(key, "JERRY_SECRET_") {
+			secretEnv[key] = val
+		}
+	}
 	for key, val := range dotEnv {
 		if _, exists := secretEnv[key]; !exists {
 			secretEnv[key] = val
@@ -120,9 +126,15 @@ func buildApp(printer *output.Printer) *cli.App {
 	toolRegistry := tools.NewRegistry(cfg.RepoRoot, cfg.Env)
 	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), cfg.DefaultModel, fileConfig)
 
-	// Resolve API keys from environment and .env.
-	anthropicKey := resolveKey("ANTHROPIC_API_KEY", secretEnv)
-	openaiKey := resolveKey("OPENAI_API_KEY", secretEnv)
+	// Resolve API keys: process env takes precedence over .env.
+	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
+	if anthropicKey == "" {
+		anthropicKey = secretEnv["ANTHROPIC_API_KEY"]
+	}
+	openaiKey := os.Getenv("OPENAI_API_KEY")
+	if openaiKey == "" {
+		openaiKey = secretEnv["OPENAI_API_KEY"]
+	}
 
 	agentExec := agent.NewExecutor(agentLoader, toolRegistry, anthropicKey, openaiKey, printer)
 
@@ -139,25 +151,4 @@ func buildApp(printer *output.Printer) *cli.App {
 	app.StateStore = stateStore
 
 	return app
-}
-
-// resolveKey returns the value of an env var, checking the process environment
-// first, then the provided dotenv map.
-func resolveKey(envVar string, dotEnv map[string]string) string {
-	if val := os.Getenv(envVar); val != "" {
-		return val
-	}
-	return dotEnv[envVar]
-}
-
-// collectSecretEnv collects environment variables with the JERRY_SECRET_ prefix.
-func collectSecretEnv() map[string]string {
-	env := make(map[string]string)
-	for _, entry := range os.Environ() {
-		key, val, found := strings.Cut(entry, "=")
-		if found && strings.HasPrefix(key, "JERRY_SECRET_") {
-			env[key] = val
-		}
-	}
-	return env
 }

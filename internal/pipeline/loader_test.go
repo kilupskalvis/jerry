@@ -62,8 +62,8 @@ steps:
 	if p.Steps[0].Retries != 2 {
 		t.Errorf("Retries = %d, want 2", p.Steps[0].Retries)
 	}
-	if p.Steps[0].RetryBackoff != "exponential" {
-		t.Errorf("RetryBackoff = %q, want %q", p.Steps[0].RetryBackoff, "exponential")
+	if p.Steps[0].RetryBackoffStrategy != "exponential" {
+		t.Errorf("RetryBackoffStrategy = %q, want %q", p.Steps[0].RetryBackoffStrategy, "exponential")
 	}
 }
 
@@ -206,7 +206,7 @@ steps:
 `, "conflicting output_key")
 }
 
-func TestLoad_InvalidRetryBackoff(t *testing.T) {
+func TestLoad_InvalidRetryBackoffStrategy(t *testing.T) {
 	assertValidationError(t, `
 name: test
 steps:

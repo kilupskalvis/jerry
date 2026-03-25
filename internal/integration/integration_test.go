@@ -1,7 +1,3 @@
-// Package integration contains end-to-end tests that exercise the full
-// Jerry pipeline: loading, validation, execution, state persistence,
-// context flow, retries, fallbacks, and timeouts.
-//
 // These tests construct real pipeline YAMLs, run the engine with real
 // script executors, and verify the results — no mocks.
 package integration
@@ -115,12 +111,12 @@ steps:
 		Intent: "integration test",
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	jerryDir := filepath.Join(repoRoot, ".jerry")
 	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("example")
 
-	runState, runErr := engine.Run(runCtx, *p, trigger)
+	runState, runErr := engine.Run(ctx, *p, trigger)
 	if runErr != nil {
 		t.Fatalf("pipeline run failed: %v", runErr)
 	}

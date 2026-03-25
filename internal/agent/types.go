@@ -33,11 +33,6 @@ type AgentConfig struct {
 	OutputSchema  map[string]any    `yaml:"output_schema"`
 	Secrets       []string          `yaml:"secrets,omitempty"`
 
-	// ContextWindow is the model's context window size in tokens.
-	// If set, enables proactive compaction at 80% usage.
-	// If 0, compaction is purely reactive (triggered by API errors).
-	ContextWindow int `yaml:"context_window,omitempty"`
-
 	// Provider overrides prefix-based provider detection for the model.
 	// Valid values: "anthropic", "openai". Used for custom or fine-tuned
 	// models whose names don't start with a recognized prefix.

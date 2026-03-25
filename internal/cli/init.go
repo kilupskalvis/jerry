@@ -161,7 +161,6 @@ const defaultConfigYAML = `# Jerry configuration — defaults for all agents and
 #   model: claude-sonnet-4-6
 #   timeout: 600s
 #   max_iterations: 50
-#   context_window: 200000
 `
 
 func generateCIConfig(targetPath, platform string) error {

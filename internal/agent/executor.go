@@ -1,6 +1,4 @@
 // Package agent implements the StepExecutor for AI agent steps.
-// It loads agent definitions from markdown files, runs the agentic loop
-// (think → tool call → observe → repeat), and returns structured output.
 package agent
 
 import (
@@ -8,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/pipeline"
@@ -52,7 +50,7 @@ func (e *Executor) CanExecute(step pipeline.Step) bool {
 
 // Execute loads the agent definition, resolves the LLM client and tools,
 // runs the agentic loop, parses the output, and returns a StepOutput.
-func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
+func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
 	start := time.Now()
 
 	agentCfg, loadErr := e.loader.Load(step.Agent)
@@ -66,7 +64,7 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 		var clientErr error
 		client, clientErr = llm.NewClientForModel(agentCfg.Model, agentCfg.Provider, e.anthropicKey, e.openaiKey)
 		if clientErr != nil {
-			return nil, jerryErrors.Wrap(jerryErrors.CodeLLMAuthFailed,
+			return nil, jerrerr.Wrap(jerrerr.CodeLLMAuthFailed,
 				fmt.Sprintf("agent %q", agentCfg.Name), clientErr)
 		}
 	}
@@ -82,7 +80,7 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 
 	toolDefs, dispatch, resolveErr := e.registry.Resolve(toolAccess)
 	if resolveErr != nil {
-		return nil, jerryErrors.Wrap(jerryErrors.CodeToolNotFound,
+		return nil, jerrerr.Wrap(jerrerr.CodeToolNotFound,
 			fmt.Sprintf("agent %q: tool resolution failed", agentCfg.Name), resolveErr)
 	}
 
@@ -95,18 +93,22 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 
 	compactor := llm.NewCompactor(client)
 	agentLoop := NewLoop(client, compactor, e.printer)
-	loopResult, loopErr := agentLoop.Run(stepCtx, *agentCfg, toolDefs, dispatch, contextData)
+	loopResult, loopErr := agentLoop.Run(ctx, *agentCfg, toolDefs, dispatch, contextData)
 	if loopErr != nil {
 		return nil, loopErr
 	}
 
-	parsedOutput := parseAgentOutput(stepCtx, agentLoop, loopResult, agentCfg, toolDefs, dispatch, e.printer)
+	parsedOutput := parseAgentOutput(ctx, agentLoop, loopResult, agentCfg, toolDefs, dispatch, e.printer)
 
 	return &pipeline.StepOutput{
 		Data:              parsedOutput,
 		Stdout:            loopResult.RawOutput,
 		Duration:          time.Since(start),
 		OutputKeyOverride: agentCfg.OutputKey,
+		Iterations:        loopResult.Iterations,
+		ToolCalls:         loopResult.ToolCalls,
+		TokensInput:       loopResult.TotalUsage.InputTokens,
+		TokensOutput:      loopResult.TotalUsage.OutputTokens,
 	}, nil
 }
 
@@ -114,7 +116,7 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 // correction prompt if the initial parse fails. Returns nil (not an error) if
 // both attempts fail — the pipeline continues with raw text in Stdout.
 func parseAgentOutput(
-	stepCtx context.Context,
+	ctx context.Context,
 	agentLoop *Loop,
 	loopResult *LoopResult,
 	agentCfg *AgentConfig,
@@ -132,7 +134,7 @@ func parseAgentOutput(
 			"Error: %s\n\nPlease respond with ONLY a JSON object matching the schema. "+
 			"No markdown fences, no explanation — raw JSON only.", parseErr)
 
-	retryResult, retryErr := agentLoop.RunRetry(stepCtx, loopResult, toolDefs, dispatch, correctionPrompt)
+	retryResult, retryErr := agentLoop.RunRetry(ctx, loopResult, toolDefs, dispatch, correctionPrompt)
 	if retryErr != nil {
 		printer.Warning("agent %q: output retry failed: %s", agentCfg.Name, retryErr)
 		return nil

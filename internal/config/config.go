@@ -1,7 +1,4 @@
 // Package config provides runtime configuration for Jerry.
-// Config is loaded once at CLI startup and passed down via dependency injection.
-// No package reads environment variables or files directly — all external
-// input flows through the Config struct.
 package config
 
 import (
@@ -12,8 +9,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/errors"
 )
 
-// DefaultStepTimeoutValue is the fallback timeout for steps that don't
-// specify their own. Prevents runaway scripts from hanging forever.
+// DefaultStepTimeoutValue is the fallback timeout for steps without an explicit timeout.
 const DefaultStepTimeoutValue = 10 * time.Minute
 
 // Config holds all runtime configuration for a Jerry execution.
@@ -36,8 +32,6 @@ type Config struct {
 	DefaultStepTimeout time.Duration
 
 	// DefaultModel is the fallback model when an agent doesn't specify one.
-	// Empty string means no default — agents must specify their own model.
-	// Set from JERRY_DEFAULT_MODEL environment variable.
 	DefaultModel string
 
 	// FileConfig holds values loaded from .jerry/config.yaml.
@@ -46,8 +40,6 @@ type Config struct {
 }
 
 // FindJerryDir walks up from startDir looking for a .jerry/ directory.
-// Returns the absolute path to .jerry/ and the repo root (its parent),
-// or an error if not found before reaching the filesystem root.
 func FindJerryDir(startDir string) (jerryDir, repoRoot string, err error) {
 	current, err := filepath.Abs(startDir)
 	if err != nil {

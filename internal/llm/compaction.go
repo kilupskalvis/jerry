@@ -1,5 +1,3 @@
-// Context compaction: summarizes older messages to keep conversations within context limits.
-
 package llm
 
 import (
@@ -13,13 +11,12 @@ const (
 	// during compaction. A turn = one assistant message + its tool results.
 	DefaultKeepRecent = 5
 
-	// ProactiveCompactionThreshold is the fraction of context_window that
-	// triggers proactive compaction when exceeded.
-	ProactiveCompactionThreshold = 0.80
-
-	// MaxCompactionAttempts limits how many compaction-then-retry cycles
-	// are attempted before giving up.
+	// MaxCompactionAttempts limits compaction-then-retry cycles before giving up.
 	MaxCompactionAttempts = 3
+
+	// maxToolResultPreview is the max characters of tool result content
+	// included when formatting messages for summarization.
+	maxToolResultPreview = 500
 )
 
 // CompactionResult holds the output of a compaction operation.
@@ -45,7 +42,7 @@ func NewCompactor(client Client) *Compactor {
 // It preserves the most recent keepRecent assistant turns and summarizes
 // everything before that split point.
 func (c *Compactor) Compact(
-	requestCtx context.Context,
+	ctx context.Context,
 	systemPrompt string,
 	messages []Message,
 	keepRecent int,
@@ -65,7 +62,7 @@ func (c *Compactor) Compact(
 		"the agent will need to continue its task. Be concise but complete.\n\n" +
 		formatMessagesForSummary(oldMessages)
 
-	response, sendErr := c.client.Send(requestCtx,
+	response, sendErr := c.client.Send(ctx,
 		"You are a conversation summarizer. Output only the summary.",
 		[]Message{{Role: RoleUser, Content: summaryRequest}},
 		nil)
@@ -120,8 +117,8 @@ func formatMessagesForSummary(messages []Message) string {
 		case RoleTool:
 			fmt.Fprintf(&sb, "TOOL RESULT (%s): ", msg.ToolID)
 			content := msg.Content
-			if len(content) > 500 {
-				content = content[:500] + "... [truncated]"
+			if len(content) > maxToolResultPreview {
+				content = content[:maxToolResultPreview] + "... [truncated]"
 			}
 			sb.WriteString(content)
 		case RoleUser:

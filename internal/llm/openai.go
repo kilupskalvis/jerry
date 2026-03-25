@@ -14,7 +14,7 @@ import (
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/shared"
 
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // Compile-time assertion that OpenAIClient implements Client.
@@ -42,14 +42,14 @@ func NewOpenAIClient(apiKey, model string, opts ...option.RequestOption) *OpenAI
 // Send translates our Message types to OpenAI SDK types, calls the API,
 // and translates the response back.
 func (c *OpenAIClient) Send(
-	requestCtx context.Context,
+	ctx context.Context,
 	system string,
 	messages []Message,
 	tools []ToolDef,
 ) (*Response, error) {
 	params := c.buildParams(system, messages, tools)
 
-	completion, sendErr := c.sdk.Chat.Completions.New(requestCtx, params)
+	completion, sendErr := c.sdk.Chat.Completions.New(ctx, params)
 	if sendErr != nil {
 		return nil, c.translateError(sendErr)
 	}
@@ -183,24 +183,24 @@ func (c *OpenAIClient) translateError(err error) error {
 					Message: fmt.Sprintf("OpenAI: context too long: %s", apiErr.Message),
 				}
 			}
-			return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
+			return jerrerr.New(jerrerr.CodeLLMCallFailed,
 				fmt.Sprintf("OpenAI API error (HTTP 400): %s", apiErr.Message))
 		case http.StatusUnauthorized:
-			return jerryErrors.New(jerryErrors.CodeLLMAuthFailed,
+			return jerrerr.New(jerrerr.CodeLLMAuthFailed,
 				"OpenAI API authentication failed — check OPENAI_API_KEY")
 		case http.StatusTooManyRequests:
-			return jerryErrors.New(jerryErrors.CodeLLMRateLimited,
+			return jerrerr.New(jerrerr.CodeLLMRateLimited,
 				"OpenAI API rate limited after SDK retries exhausted")
 		default:
 			if apiErr.StatusCode >= 500 {
-				return jerryErrors.New(jerryErrors.CodeLLMServerError,
+				return jerrerr.New(jerrerr.CodeLLMServerError,
 					fmt.Sprintf("OpenAI API server error (HTTP %d)", apiErr.StatusCode))
 			}
-			return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
+			return jerrerr.New(jerrerr.CodeLLMCallFailed,
 				fmt.Sprintf("OpenAI API error (HTTP %d): %s", apiErr.StatusCode, apiErr.Message))
 		}
 	}
 
-	return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
+	return jerrerr.New(jerrerr.CodeLLMCallFailed,
 		fmt.Sprintf("OpenAI call failed: %s", err.Error()))
 }

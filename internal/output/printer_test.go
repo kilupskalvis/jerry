@@ -48,12 +48,23 @@ func TestStepStart(t *testing.T) {
 
 func TestStepSuccess(t *testing.T) {
 	printer, _, stderr := newTestPrinter()
-	printer.StepSuccess("context", 1200*time.Millisecond)
+	printer.StepSuccess("context", 1200*time.Millisecond, 0, 0, 0, 0)
 
 	got := stderr.String()
 	expected := "  ✓ context (1.2s)\n"
 	if got != expected {
 		t.Errorf("StepSuccess output = %q, want %q", got, expected)
+	}
+}
+
+func TestStepSuccessWithMetrics(t *testing.T) {
+	printer, _, stderr := newTestPrinter()
+	printer.StepSuccess("generate", 82*time.Second, 11, 8, 40000, 5000)
+
+	got := stderr.String()
+	expected := "  ✓ generate (1m 22s, 11 iter, 8 tools, 45k tokens)\n"
+	if got != expected {
+		t.Errorf("StepSuccess with metrics output = %q, want %q", got, expected)
 	}
 }
 
@@ -152,7 +163,7 @@ func TestAllOutputGoesToStderr(t *testing.T) {
 
 	printer.Info("info")
 	printer.StepStart("step")
-	printer.StepSuccess("step", time.Second)
+	printer.StepSuccess("step", time.Second, 0, 0, 0, 0)
 	printer.StepFailed("step", "err")
 	printer.StepSkipped("step", "reason")
 	printer.StepOutput("output")

@@ -1,5 +1,3 @@
-// Context keys for passing LogWriter and step name through execution contexts.
-
 package state
 
 import "context"
@@ -13,8 +11,8 @@ func WithLogWriter(parent context.Context, lw *LogWriter) context.Context {
 }
 
 // LogWriterFrom extracts the LogWriter from a context, or nil if not present.
-func LogWriterFrom(requestCtx context.Context) *LogWriter {
-	lw, _ := requestCtx.Value(logWriterKey{}).(*LogWriter)
+func LogWriterFrom(ctx context.Context) *LogWriter {
+	lw, _ := ctx.Value(logWriterKey{}).(*LogWriter)
 	return lw
 }
 
@@ -26,7 +24,7 @@ func WithStepName(parent context.Context, name string) context.Context {
 }
 
 // StepNameFrom extracts the pipeline step name from a context, or "" if not set.
-func StepNameFrom(requestCtx context.Context) string {
-	name, _ := requestCtx.Value(stepNameKey{}).(string)
+func StepNameFrom(ctx context.Context) string {
+	name, _ := ctx.Value(stepNameKey{}).(string)
 	return name
 }

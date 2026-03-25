@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
@@ -201,7 +202,7 @@ Return a summary.
 	if capturedSystem == "" {
 		t.Fatal("system message not captured")
 	}
-	if !contains(capturedSystem, "build something") {
+	if !strings.Contains(capturedSystem, "build something") {
 		t.Errorf("system message should contain trigger intent, got %q", capturedSystem[:min(200, len(capturedSystem))])
 	}
 }
@@ -214,17 +215,4 @@ type capturingMockClient struct {
 func (m *capturingMockClient) Send(_ context.Context, system string, _ []llm.Message, _ []llm.ToolDef) (*llm.Response, error) {
 	*m.capturedSystem = system
 	return m.response, nil
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || s != "" && containsSubstring(s, substr))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kilupskalvis/jerry/internal/contextstore"
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/pipeline"
 	"github.com/kilupskalvis/jerry/internal/state"
 	"github.com/kilupskalvis/jerry/internal/trigger"
@@ -81,19 +81,15 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 		return contextstore.TriggerData{}, fmt.Errorf("specify only one trigger source (got multiple of --trigger-file, --trigger-stdin)")
 	}
 
-	if triggerFile != "" {
-		t, err := trigger.FromFile(triggerFile)
-		if err != nil {
-			return contextstore.TriggerData{}, err
-		}
-		if intent != "" {
-			t.Intent = intent
-		}
-		return *t, nil
+	var t *contextstore.TriggerData
+	var err error
+	switch {
+	case triggerFile != "":
+		t, err = trigger.FromFile(triggerFile)
+	case triggerStdin:
+		t, err = trigger.FromReader(os.Stdin)
 	}
-
-	if triggerStdin {
-		t, err := trigger.FromReader(os.Stdin)
+	if t != nil {
 		if err != nil {
 			return contextstore.TriggerData{}, err
 		}
@@ -110,9 +106,9 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 	}, nil
 }
 
-func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerData contextstore.TriggerData) error {
+func runPipeline(ctx context.Context, app *App, pipelineName string, triggerData contextstore.TriggerData) error {
 	if app.Loader == nil || app.Engine == nil {
-		return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+		return jerrerr.New(jerrerr.CodeJerryDirNotFound,
 			"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 	}
 
@@ -132,13 +128,13 @@ func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerD
 		}
 	}
 
-	_, runErr := app.Engine.Run(runCtx, *pipelineDef, triggerData)
+	_, runErr := app.Engine.Run(ctx, *pipelineDef, triggerData)
 	return runErr
 }
 
 func dryRunPipeline(app *App, pipelineName, intent string) error {
 	if app.Loader == nil {
-		return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+		return jerrerr.New(jerrerr.CodeJerryDirNotFound,
 			"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 	}
 
@@ -175,25 +171,25 @@ func dryRunPipeline(app *App, pipelineName, intent string) error {
 	return nil
 }
 
-func resumePipeline(runCtx context.Context, app *App, runID string, force bool) error {
+func resumePipeline(ctx context.Context, app *App, runID string, force bool) error {
 	if app.Loader == nil || app.Engine == nil || app.StateStore == nil {
-		return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+		return jerrerr.New(jerrerr.CodeJerryDirNotFound,
 			"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 	}
 
 	runState, loadErr := app.StateStore.LoadRun(runID)
 	if loadErr != nil {
-		return jerryErrors.New(jerryErrors.CodeRunNotFound,
+		return jerrerr.New(jerrerr.CodeRunNotFound,
 			fmt.Sprintf("run %q not found", runID))
 	}
 
 	switch runState.Status {
 	case state.StatusCompleted:
-		return jerryErrors.New(jerryErrors.CodeRunNotResumable,
+		return jerrerr.New(jerrerr.CodeRunNotResumable,
 			fmt.Sprintf("run %q is already completed — nothing to resume", runID))
 	case state.StatusRunning:
 		if !force {
-			return jerryErrors.New(jerryErrors.CodeRunNotResumable,
+			return jerrerr.New(jerrerr.CodeRunNotResumable,
 				fmt.Sprintf("run %q has status 'running' — if the process crashed, use --force to resume", runID))
 		}
 	case state.StatusFailed:
@@ -216,13 +212,13 @@ func resumePipeline(runCtx context.Context, app *App, runID string, force bool) 
 		fromStep--
 	}
 	if fromStep >= len(pipelineDef.Steps) {
-		return jerryErrors.New(jerryErrors.CodeRunNotResumable,
+		return jerrerr.New(jerrerr.CodeRunNotResumable,
 			"all steps already completed in saved state")
 	}
 
 	for i, saved := range runState.StepResults {
 		if i < len(pipelineDef.Steps) && saved.Name != pipelineDef.Steps[i].Name {
-			return jerryErrors.New(jerryErrors.CodePipelineChanged,
+			return jerrerr.New(jerrerr.CodePipelineChanged,
 				fmt.Sprintf("pipeline structure has changed — step %q at position %d "+
 					"does not match saved state (expected %q). Cannot safely resume.",
 					pipelineDef.Steps[i].Name, i, saved.Name))
@@ -234,6 +230,6 @@ func resumePipeline(runCtx context.Context, app *App, runID string, force bool) 
 	}
 
 	existingStore := contextstore.RestoreFromSnapshot(runState.Context)
-	_, runErr := app.Engine.RunFrom(runCtx, *pipelineDef, fromStep, existingStore, runState)
+	_, runErr := app.Engine.RunFrom(ctx, *pipelineDef, fromStep, existingStore, runState)
 	return runErr
 }

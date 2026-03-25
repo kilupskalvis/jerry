@@ -3,6 +3,7 @@ package cli_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/cli"
@@ -79,10 +80,10 @@ func TestInitCmd_CreatesGitignore(t *testing.T) {
 	}
 
 	contentStr := string(content)
-	if !contains(contentStr, "runs/") {
+	if !strings.Contains(contentStr, "runs/") {
 		t.Error(".gitignore should contain 'runs/'")
 	}
-	if !contains(contentStr, "cache/") {
+	if !strings.Contains(contentStr, "cache/") {
 		t.Error(".gitignore should contain 'cache/'")
 	}
 }
@@ -120,7 +121,7 @@ func TestInitCmd_CreatesFeaturePipeline(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf("feature.yaml not created: %v", readErr)
 	}
-	if !contains(string(content), "generate") {
+	if !strings.Contains(string(content), "generate") {
 		t.Error("feature.yaml should reference generate agent")
 	}
 }
@@ -160,17 +161,4 @@ func TestInitCmd_WithPathFlag(t *testing.T) {
 	if _, statErr := os.Stat(jerryDir); statErr != nil {
 		t.Fatalf(".jerry/ not created in target dir: %v", statErr)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || s != "" && containsSubstring(s, substr))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

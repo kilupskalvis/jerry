@@ -391,14 +391,3 @@ Instructions here.
 		t.Errorf("model = %q, want %q (frontmatter takes precedence)", cfg.Model, "claude-opus-4-6")
 	}
 }
-
-func TestLoad_ValidWithContextWindow(t *testing.T) {
-	loader := agent.NewLoader([]string{"read_file"}, "", nil)
-	cfg, err := loader.Load("../../testdata/agents/valid-with-context-window.md")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.ContextWindow != 200000 {
-		t.Errorf("context_window = %d, want %d", cfg.ContextWindow, 200000)
-	}
-}

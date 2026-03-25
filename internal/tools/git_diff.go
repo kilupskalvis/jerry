@@ -1,5 +1,3 @@
-// git_diff tool: view git diff of changes.
-
 package tools
 
 import (
@@ -32,7 +30,7 @@ func NewGitDiffTool(repoRoot string) Tool {
 				},
 			},
 		},
-		Execute: func(toolCtx context.Context, args map[string]any) (string, error) {
+		Execute: func(ctx context.Context, args map[string]any) (string, error) {
 			ref, _ := args["ref"].(string)
 			path, _ := args["path"].(string)
 
@@ -48,7 +46,7 @@ func NewGitDiffTool(repoRoot string) Tool {
 				gitArgs = append(gitArgs, "--", path)
 			}
 
-			result, gitErr := runGit(toolCtx, repoRoot, gitArgs...)
+			result, gitErr := runGit(ctx, repoRoot, gitArgs...)
 			if gitErr != nil {
 				return fmt.Sprintf("Error: %s\n%s", gitErr, result), nil
 			}

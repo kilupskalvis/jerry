@@ -1,5 +1,3 @@
-// Output parsing: extracts and validates JSON from agent responses.
-
 package agent
 
 import (
@@ -10,22 +8,20 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
 
-// ParseOutput attempts to extract structured data from the agent's final response.
-// If a schema is provided, it is translated from simplified notation and the output
-// is validated against it using full JSON Schema validation.
+// ParseOutput extracts and validates JSON from the agent's response.
 func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error) {
 	parsed, err := extractJSON(rawOutput)
 	if err != nil {
-		return nil, jerryErrors.New(jerryErrors.CodeInvalidOutputJSON,
+		return nil, jerrerr.New(jerrerr.CodeInvalidOutputJSON,
 			fmt.Sprintf("agent output is not valid JSON: %s", err))
 	}
 
 	result, ok := parsed.(map[string]any)
 	if !ok {
-		return nil, jerryErrors.New(jerryErrors.CodeInvalidOutputJSON,
+		return nil, jerrerr.New(jerrerr.CodeInvalidOutputJSON,
 			"agent output must be a JSON object, not an array or scalar")
 	}
 
@@ -42,46 +38,44 @@ func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error
 // validates the parsed output. Falls back to top-level key checking if
 // schema translation or compilation fails.
 func validateAgainstSchema(value, simplifiedSchema map[string]any) error {
-	jsonSchema, translateErr := TranslateSchema(simplifiedSchema)
-	if translateErr != nil {
-		fmt.Fprintf(os.Stderr, "jerry: warning: schema translation failed (%s), falling back to key checking\n", translateErr)
-		return validateTopLevelKeys(value, simplifiedSchema)
-	}
-
-	schemaJSON, marshalErr := json.Marshal(jsonSchema)
-	if marshalErr != nil {
-		fmt.Fprintf(os.Stderr, "jerry: warning: schema marshal failed (%s), falling back to key checking\n", marshalErr)
-		return validateTopLevelKeys(value, simplifiedSchema)
-	}
-
-	compiled, compileErr := jsonschema.UnmarshalJSON(strings.NewReader(string(schemaJSON)))
-	if compileErr != nil {
-		fmt.Fprintf(os.Stderr, "jerry: warning: schema compilation failed (%s), falling back to key checking\n", compileErr)
-		return validateTopLevelKeys(value, simplifiedSchema)
-	}
-
-	compiler := jsonschema.NewCompiler()
-	if addErr := compiler.AddResource("schema.json", compiled); addErr != nil {
-		fmt.Fprintf(os.Stderr, "jerry: warning: schema resource failed (%s), falling back to key checking\n", addErr)
-		return validateTopLevelKeys(value, simplifiedSchema)
-	}
-
-	schema, schemaErr := compiler.Compile("schema.json")
-	if schemaErr != nil {
-		fmt.Fprintf(os.Stderr, "jerry: warning: schema compile failed (%s), falling back to key checking\n", schemaErr)
+	schema, err := compileSchema(simplifiedSchema)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "jerry: warning: %s, falling back to key checking\n", err)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	if validErr := schema.Validate(value); validErr != nil {
-		return jerryErrors.New(jerryErrors.CodeOutputSchemaViolation,
+		return jerrerr.New(jerrerr.CodeOutputSchemaViolation,
 			fmt.Sprintf("agent output does not match schema: %s", validErr))
 	}
-
 	return nil
 }
 
-// validateTopLevelKeys is the fallback: checks that all top-level keys
-// defined in the schema exist in the parsed output.
+func compileSchema(simplifiedSchema map[string]any) (*jsonschema.Schema, error) {
+	jsonSchema, err := TranslateSchema(simplifiedSchema)
+	if err != nil {
+		return nil, fmt.Errorf("schema translation failed (%w)", err)
+	}
+
+	schemaJSON, err := json.Marshal(jsonSchema)
+	if err != nil {
+		return nil, fmt.Errorf("schema marshal failed (%w)", err)
+	}
+
+	compiled, err := jsonschema.UnmarshalJSON(strings.NewReader(string(schemaJSON)))
+	if err != nil {
+		return nil, fmt.Errorf("schema compilation failed (%w)", err)
+	}
+
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("schema.json", compiled); err != nil {
+		return nil, fmt.Errorf("schema resource failed (%w)", err)
+	}
+
+	return compiler.Compile("schema.json")
+}
+
+// validateTopLevelKeys checks that all schema keys exist in the output.
 func validateTopLevelKeys(result, schema map[string]any) error {
 	var missing []string
 	for key := range schema {
@@ -91,17 +85,14 @@ func validateTopLevelKeys(result, schema map[string]any) error {
 	}
 
 	if len(missing) > 0 {
-		return jerryErrors.New(jerryErrors.CodeOutputSchemaViolation,
+		return jerrerr.New(jerrerr.CodeOutputSchemaViolation,
 			fmt.Sprintf("agent output missing required keys: %s", strings.Join(missing, ", ")))
 	}
 
 	return nil
 }
 
-// extractJSON tries multiple strategies to extract JSON from the agent's raw output:
-// 1. Direct unmarshal
-// 2. Extract from markdown code fences (```json ... ```)
-// 3. Extract between first { and last }
+// extractJSON tries direct unmarshal, markdown fences, then brace extraction.
 func extractJSON(raw string) (any, error) {
 	var direct any
 	if err := json.Unmarshal([]byte(raw), &direct); err == nil {

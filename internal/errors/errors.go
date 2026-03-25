@@ -1,12 +1,8 @@
-// Package errors defines the standard error types and codes used throughout Jerry.
-// Every component returns errors using these types, enabling programmatic error
-// handling via codes and human-readable messages.
+// Package errors defines error types and codes used throughout Jerry.
 package errors
 
 import "fmt"
 
-// Machine-readable error codes. Use these with [New] and [Wrap] to create
-// errors that callers can match programmatically via the Code field.
 const (
 	// Pipeline and configuration errors.
 	CodeInvalidPipeline    = "INVALID_PIPELINE"
@@ -54,28 +50,15 @@ const (
 	CodeConfigInvalid = "CONFIG_INVALID"
 )
 
-// Error is the standard error type returned by all Jerry components.
-// It implements the error interface and supports unwrapping via errors.Unwrap.
+// Error is the standard error type for Jerry.
 type Error struct {
-	// Code is a machine-readable error code (one of the Code* constants).
-	Code string
-
-	// Message is a human-readable description of what went wrong.
+	Code    string
 	Message string
-
-	// Step is the pipeline step that caused this error, empty if not step-related.
-	Step string
-
-	// Cause is the underlying error, nil if none.
-	Cause error
+	Step    string
+	Cause   error
 }
 
-// Error returns a human-readable string representation of the error.
-// Format varies based on which fields are set:
-//   - "CODE: message"
-//   - "CODE [step: name]: message"
-//   - "CODE: message: cause"
-//   - "CODE [step: name]: message: cause"
+// Error returns a human-readable string representation.
 func (e *Error) Error() string {
 	var prefix string
 	if e.Step != "" {
@@ -90,14 +73,12 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", prefix, e.Message)
 }
 
-// Unwrap returns the underlying cause error, or nil if none.
-// This enables use with errors.Is and errors.As from the standard library.
+// Unwrap returns the underlying cause error.
 func (e *Error) Unwrap() error {
 	return e.Cause
 }
 
 // New creates a new Error with the given code and message.
-// The Step and Cause fields are left empty.
 func New(code, message string) *Error {
 	return &Error{
 		Code:    code,
@@ -105,8 +86,7 @@ func New(code, message string) *Error {
 	}
 }
 
-// Wrap creates a new Error wrapping an existing error with additional context.
-// The wrapped error is accessible via Unwrap().
+// Wrap creates a new Error wrapping an existing error.
 func Wrap(code, message string, cause error) *Error {
 	return &Error{
 		Code:    code,

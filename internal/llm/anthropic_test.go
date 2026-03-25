@@ -12,7 +12,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go/option"
 
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
@@ -286,12 +286,12 @@ func TestAnthropicClient_AuthFailure(t *testing.T) {
 		t.Fatal("expected error for 401 response")
 	}
 
-	var jerryErr *jerryErrors.Error
+	var jerryErr *jerrerr.Error
 	if !errors.As(err, &jerryErr) {
 		t.Fatalf("expected jerry Error, got %T: %v", err, err)
 	}
-	if jerryErr.Code != jerryErrors.CodeLLMAuthFailed {
-		t.Errorf("expected code %q, got %q", jerryErrors.CodeLLMAuthFailed, jerryErr.Code)
+	if jerryErr.Code != jerrerr.CodeLLMAuthFailed {
+		t.Errorf("expected code %q, got %q", jerrerr.CodeLLMAuthFailed, jerryErr.Code)
 	}
 }
 

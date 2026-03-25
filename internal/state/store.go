@@ -1,5 +1,3 @@
-// FileStateStore: persists run state to disk as JSON files.
-
 package state
 
 import (

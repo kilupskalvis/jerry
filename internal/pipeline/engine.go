@@ -1,5 +1,3 @@
-// Pipeline engine: sequential step orchestration with retry, fallback, and checkpointing.
-
 package pipeline
 
 import (
@@ -12,7 +10,7 @@ import (
 	"time"
 
 	"github.com/kilupskalvis/jerry/internal/contextstore"
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/state"
 )
@@ -41,7 +39,7 @@ func NewEngine(executors []StepExecutor, stateStore state.StateStore, printer *o
 }
 
 // Run executes a pipeline from start to finish.
-func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger contextstore.TriggerData) (*state.RunState, error) {
+func (e *Engine) Run(ctx context.Context, pipelineDef Pipeline, trigger contextstore.TriggerData) (*state.RunState, error) {
 	runID := generateRunID()
 	startTime := time.Now()
 
@@ -59,7 +57,7 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 	}
 
 	if initErr := e.stateStore.InitRun(runState); initErr != nil {
-		return &runState, jerryErrors.Wrap(jerryErrors.CodeStateWriteFailed,
+		return &runState, jerrerr.Wrap(jerrerr.CodeStateWriteFailed,
 			"failed to initialize run state", initErr)
 	}
 
@@ -80,11 +78,11 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 		Steps:         stepNames,
 	})
 
-	runCtx = state.WithLogWriter(runCtx, logWriter)
+	ctx = state.WithLogWriter(ctx, logWriter)
 
 	e.printer.Info("Running pipeline: %s (%d steps)", pipelineDef.Name, len(pipelineDef.Steps))
 
-	execErr := e.runSteps(runCtx, pipelineDef.Steps, 0, ctxStore, &runState, logWriter)
+	execErr := e.runSteps(ctx, pipelineDef.Steps, 0, ctxStore, &runState, logWriter)
 
 	if runState.Status == state.StatusRunning {
 		runState.Status = state.StatusCompleted
@@ -103,7 +101,7 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 // RunFrom resumes a pipeline from a specific step index, using an existing
 // context store and run state.
 func (e *Engine) RunFrom(
-	runCtx context.Context,
+	ctx context.Context,
 	pipelineDef Pipeline,
 	fromStep int,
 	existingStore *contextstore.Store,
@@ -117,12 +115,12 @@ func (e *Engine) RunFrom(
 	}
 	defer func() { _ = logWriter.Close() }()
 
-	runCtx = state.WithLogWriter(runCtx, logWriter)
+	ctx = state.WithLogWriter(ctx, logWriter)
 
 	e.printer.Info("Resuming pipeline: %s from step %q (run: %s)",
 		pipelineDef.Name, pipelineDef.Steps[fromStep].Name, existingState.RunID)
 
-	execErr := e.runSteps(runCtx, pipelineDef.Steps, fromStep, existingStore, existingState, logWriter)
+	execErr := e.runSteps(ctx, pipelineDef.Steps, fromStep, existingStore, existingState, logWriter)
 
 	if existingState.Status == state.StatusRunning {
 		existingState.Status = state.StatusCompleted
@@ -140,7 +138,7 @@ func (e *Engine) RunFrom(
 
 // runSteps executes pipeline steps from the given index. Shared by Run and RunFrom.
 func (e *Engine) runSteps(
-	runCtx context.Context,
+	ctx context.Context,
 	steps []Step,
 	fromStep int,
 	ctxStore *contextstore.Store,
@@ -171,7 +169,7 @@ func (e *Engine) runSteps(
 		})
 
 		stepTimeout := e.resolveTimeout(step)
-		stepCtx, stepCancel := context.WithTimeout(runCtx, stepTimeout)
+		stepCtx, stepCancel := context.WithTimeout(ctx, stepTimeout)
 		stepCtx = state.WithStepName(stepCtx, step.Name)
 		stepOutput, retriesUsed, execErr := e.executeWithRetries(stepCtx, step, executor, ctxStore)
 		stepCancel()
@@ -193,7 +191,7 @@ func (e *Engine) runSteps(
 
 		if execErr != nil {
 			if step.Fallback != nil {
-				e.executeFallback(runCtx, step, ctxStore)
+				e.executeFallback(ctx, step, ctxStore)
 			}
 
 			result := state.StepResult{
@@ -221,7 +219,10 @@ func (e *Engine) runSteps(
 
 		// Success — merge output into context.
 		if stepOutput != nil && stepOutput.Data != nil {
-			outputKey := resolveOutputKey(step, stepOutput)
+			outputKey := step.OutputKey
+			if stepOutput.OutputKeyOverride != "" {
+				outputKey = stepOutput.OutputKeyOverride
+			}
 			if outputKey != "" {
 				_ = ctxStore.Set(outputKey, stepOutput.Data)
 			}
@@ -240,7 +241,14 @@ func (e *Engine) runSteps(
 		runState.Context = ctxStore.Snapshot()
 		_ = e.stateStore.SaveCheckpoint(*runState)
 
-		e.printer.StepSuccess(step.Name, stepDuration)
+		var iterations, toolCalls, tokensIn, tokensOut int
+		if stepOutput != nil {
+			iterations = stepOutput.Iterations
+			toolCalls = stepOutput.ToolCalls
+			tokensIn = stepOutput.TokensInput
+			tokensOut = stepOutput.TokensOutput
+		}
+		e.printer.StepSuccess(step.Name, stepDuration, iterations, toolCalls, tokensIn, tokensOut)
 		logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
 			Status: "success", DurationMs: stepDuration.Milliseconds(),
 		})
@@ -270,12 +278,12 @@ func (e *Engine) logPipelineEnd(lw *state.LogWriter, runState *state.RunState, s
 	})
 }
 
-func (e *Engine) executeWithRetries(stepCtx context.Context, step Step, exec StepExecutor, store ContextReader) (*StepOutput, int, error) {
+func (e *Engine) executeWithRetries(ctx context.Context, step Step, exec StepExecutor, store ContextReader) (*StepOutput, int, error) {
 	maxAttempts := step.Retries + 1
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		stepOutput, execErr := exec.Execute(stepCtx, step, store)
+		stepOutput, execErr := exec.Execute(ctx, step, store)
 		if execErr == nil {
 			return stepOutput, attempt - 1, nil
 		}
@@ -287,15 +295,17 @@ func (e *Engine) executeWithRetries(stepCtx context.Context, step Step, exec Ste
 		}
 
 		if attempt < maxAttempts {
-			waitDuration := backoffDuration(attempt, step.RetryBackoff)
+			waitDuration := backoffDuration(attempt, step.RetryBackoffStrategy)
 			e.printer.Warning("step %q failed (attempt %d/%d), retrying in %s...",
 				step.Name, attempt, maxAttempts, waitDuration)
 
+			timer := time.NewTimer(waitDuration)
 			select {
-			case <-time.After(waitDuration):
+			case <-timer.C:
 				continue
-			case <-stepCtx.Done():
-				return nil, attempt - 1, stepCtx.Err()
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, attempt - 1, ctx.Err()
 			}
 		}
 	}
@@ -303,7 +313,7 @@ func (e *Engine) executeWithRetries(stepCtx context.Context, step Step, exec Ste
 	return nil, maxAttempts - 1, lastErr
 }
 
-func (e *Engine) executeFallback(runCtx context.Context, step Step, store ContextReader) {
+func (e *Engine) executeFallback(ctx context.Context, step Step, store ContextReader) {
 	if step.Fallback == nil {
 		return
 	}
@@ -320,10 +330,10 @@ func (e *Engine) executeFallback(runCtx context.Context, step Step, store Contex
 		return
 	}
 
-	fallbackCtx, fallbackCancel := context.WithTimeout(runCtx, e.defaultTimeout)
+	fallbackCtx, fallbackCancel := context.WithTimeout(ctx, e.defaultTimeout)
 	defer fallbackCancel()
 
-	lw := state.LogWriterFrom(runCtx)
+	lw := state.LogWriterFrom(ctx)
 	fallbackStart := time.Now()
 	_, fallbackErr := executor.Execute(fallbackCtx, fallbackStep, store)
 
@@ -361,13 +371,6 @@ func (e *Engine) resolveTimeout(step Step) time.Duration {
 		return step.Timeout.Duration
 	}
 	return e.defaultTimeout
-}
-
-func resolveOutputKey(step Step, stepOutput *StepOutput) string {
-	if stepOutput.OutputKeyOverride != "" {
-		return stepOutput.OutputKeyOverride
-	}
-	return step.OutputKey
 }
 
 func backoffDuration(attempt int, strategy string) time.Duration {

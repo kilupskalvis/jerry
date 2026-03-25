@@ -14,16 +14,15 @@ import (
 )
 
 // reservedOutputKeys are context keys that steps cannot use as output_key.
-var reservedOutputKeys = map[string]bool{
-	"protocol_version": true,
-	"run_id":           true,
-	"trigger":          true,
+var reservedOutputKeys = map[string]struct{}{
+	"protocol_version": {},
+	"run_id":           {},
+	"trigger":          {},
 }
 
-// validBackoffStrategies are the allowed values for retry_backoff.
-var validBackoffStrategies = map[string]bool{
-	"fixed":       true,
-	"exponential": true,
+var validBackoffStrategies = map[string]struct{}{
+	"fixed":       {},
+	"exponential": {},
 }
 
 // Loader reads and validates pipeline YAML files.
@@ -119,7 +118,7 @@ func (l *Loader) validate(p *Pipeline) []string {
 	}
 
 	// Per-step validation
-	stepNames := make(map[string]bool)
+	stepNames := make(map[string]struct{})
 	outputKeys := make(map[string]string) // output_key → step name
 
 	for i := range p.Steps {
@@ -132,10 +131,10 @@ func (l *Loader) validate(p *Pipeline) []string {
 		}
 
 		// Unique step names
-		if stepNames[step.Name] {
+		if _, dup := stepNames[step.Name]; dup {
 			errs = append(errs, fmt.Sprintf("duplicate step name: %q", step.Name))
 		}
-		stepNames[step.Name] = true
+		stepNames[step.Name] = struct{}{}
 
 		// Exactly one executor
 		executorCount := countExecutors(step)
@@ -164,13 +163,13 @@ func (l *Loader) validate(p *Pipeline) []string {
 		}
 
 		// Retry backoff
-		if step.RetryBackoff != "" && !validBackoffStrategies[step.RetryBackoff] {
+		if _, valid := validBackoffStrategies[step.RetryBackoffStrategy]; step.RetryBackoffStrategy != "" && !valid {
 			errs = append(errs, fmt.Sprintf("step %q: retry_backoff must be 'fixed' or 'exponential'", step.Name))
 		}
 
 		// Output key validation
 		if step.OutputKey != "" {
-			if reservedOutputKeys[step.OutputKey] {
+			if _, reserved := reservedOutputKeys[step.OutputKey]; reserved {
 				errs = append(errs, fmt.Sprintf("step %q: output_key %q is reserved (reserved keys: protocol_version, run_id, trigger)", step.Name, step.OutputKey))
 			}
 			if existingStep, ok := outputKeys[step.OutputKey]; ok {

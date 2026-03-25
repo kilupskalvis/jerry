@@ -21,9 +21,6 @@ func TestLoadFileConfig_Valid(t *testing.T) {
 	if cfg.Defaults.MaxIterations != 50 {
 		t.Errorf("max_iterations = %d, want %d", cfg.Defaults.MaxIterations, 50)
 	}
-	if cfg.Defaults.ContextWindow != 200000 {
-		t.Errorf("context_window = %d, want %d", cfg.Defaults.ContextWindow, 200000)
-	}
 }
 
 func TestLoadFileConfig_ValidWithModels(t *testing.T) {

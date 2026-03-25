@@ -24,10 +24,10 @@ const (
 )
 
 // skipDirs lists directories excluded from search.
-var skipDirs = map[string]bool{
-	".git":         true,
-	"node_modules": true,
-	"vendor":       true,
+var skipDirs = map[string]struct{}{
+	".git":         {},
+	"node_modules": {},
+	"vendor":       {},
 }
 
 // skipPaths lists path prefixes excluded from search (checked with HasPrefix).
@@ -82,7 +82,7 @@ func NewSearchTool(repoRoot string) Tool {
 
 				// Skip excluded directories.
 				if d.IsDir() {
-					if skipDirs[d.Name()] {
+					if _, skip := skipDirs[d.Name()]; skip {
 						return filepath.SkipDir
 					}
 					for _, prefix := range skipPaths {

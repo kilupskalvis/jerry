@@ -1,14 +1,11 @@
 // Package script implements the StepExecutor for shell script steps.
-// Scripts run in an isolated environment with only declared variables,
-// process group management for clean timeout handling, and JSON output
-// parsing for context integration.
 package script
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/pipeline"
 )
 
@@ -47,42 +44,34 @@ func (e *Executor) CanExecute(step pipeline.Step) bool {
 }
 
 // Execute runs the script and returns the output.
-func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
+func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
 	startTime := time.Now()
 
 	// Create context file for the script
 	contextFilePath, cleanup, contextErr := store.WriteContextFile()
 	if contextErr != nil {
-		return nil, errors.Wrap(errors.CodeScriptFailed,
+		return nil, jerrerr.Wrap(jerrerr.CodeScriptFailed,
 			fmt.Sprintf("step %q: failed to write context file", step.Name), contextErr)
 	}
 	defer cleanup()
 
-	// Build the command — we do NOT use exec.CommandContext because
-	// it sends SIGKILL directly. We need process group control to
-	// send SIGTERM first, wait for grace period, then SIGKILL.
+	// Use manual process group kill instead of exec.CommandContext (which sends SIGKILL directly).
 	cmd := exec.Command("/bin/sh", "-c", step.Script)
 	cmd.Dir = e.repoRoot
-
-	// Process group for clean kill — ensures child processes are also terminated.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	// Build clean environment
 	fullCtx := store.Get()
 	cmd.Env = e.buildEnvironment(fullCtx.RunID, step.Name, contextFilePath)
 
-	// Capture stdout and stderr separately
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
-	// Start the command
 	if startErr := cmd.Start(); startErr != nil {
-		return nil, errors.Wrap(errors.CodeScriptFailed,
+		return nil, jerrerr.Wrap(jerrerr.CodeScriptFailed,
 			fmt.Sprintf("step %q: failed to start script", step.Name), startErr)
 	}
 
-	// Wait for command completion or context cancellation
 	waitDone := make(chan error, 1)
 	go func() {
 		waitDone <- cmd.Wait()
@@ -92,13 +81,13 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 	select {
 	case runErr = <-waitDone:
 		// Command completed (success or failure)
-	case <-stepCtx.Done():
+	case <-ctx.Done():
 		// Context cancelled (timeout or Ctrl+C) — kill process group
 		e.killProcessGroup(cmd)
 		<-waitDone // Wait for Wait() to return after kill
 
 		duration := time.Since(startTime)
-		return nil, errors.New(errors.CodeScriptTimeout,
+		return nil, jerrerr.New(jerrerr.CodeScriptTimeout,
 			fmt.Sprintf("step %q: script timed out after %s", step.Name, duration.Truncate(time.Millisecond)))
 	}
 
@@ -110,12 +99,12 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 	if runErr != nil {
 		exitCode := -1
 		exitErr := &exec.ExitError{}
-		if stderrors.As(runErr, &exitErr) {
+		if errors.As(runErr, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
 
-		return nil, &errors.Error{
-			Code: errors.CodeScriptFailed,
+		return nil, &jerrerr.Error{
+			Code: jerrerr.CodeScriptFailed,
 			Message: fmt.Sprintf("step %q: script exited with code %d",
 				step.Name, exitCode),
 			Step:  step.Name,

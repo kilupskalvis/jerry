@@ -4,11 +4,11 @@ package agent
 
 import "fmt"
 
-var primitiveTypes = map[string]bool{
-	"string":  true,
-	"number":  true,
-	"boolean": true,
-	"integer": true,
+var primitiveTypes = map[string]struct{}{
+	"string":  {},
+	"number":  {},
+	"boolean": {},
+	"integer": {},
 }
 
 // TranslateSchema converts the simplified frontmatter schema notation into
@@ -29,7 +29,7 @@ func TranslateSchema(simplified map[string]any) (map[string]any, error) {
 func translateField(value any) (map[string]any, error) {
 	switch v := value.(type) {
 	case string:
-		if primitiveTypes[v] {
+		if _, ok := primitiveTypes[v]; ok {
 			return map[string]any{"type": v}, nil
 		}
 		return nil, fmt.Errorf("unknown type %q", v)
@@ -60,7 +60,7 @@ func translateComplexField(field map[string]any) (map[string]any, error) {
 		}
 		return result, nil
 	default:
-		if primitiveTypes[fieldType] {
+		if _, ok := primitiveTypes[fieldType]; ok {
 			return map[string]any{"type": fieldType}, nil
 		}
 		return nil, fmt.Errorf("unknown type %q", fieldType)

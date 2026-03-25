@@ -1,5 +1,3 @@
-// git_blame tool: view git blame for a file.
-
 package tools
 
 import (
@@ -34,7 +32,7 @@ func NewGitBlameTool(repoRoot string) Tool {
 				"required": []any{"path"},
 			},
 		},
-		Execute: func(toolCtx context.Context, args map[string]any) (string, error) {
+		Execute: func(ctx context.Context, args map[string]any) (string, error) {
 			path, _ := args["path"].(string)
 			if path == "" {
 				return "Error: missing required parameter 'path'", nil
@@ -56,7 +54,7 @@ func NewGitBlameTool(repoRoot string) Tool {
 
 			gitArgs = append(gitArgs, path)
 
-			result, gitErr := runGit(toolCtx, repoRoot, gitArgs...)
+			result, gitErr := runGit(ctx, repoRoot, gitArgs...)
 			if gitErr != nil {
 				return fmt.Sprintf("Error: %s\n%s", gitErr, result), nil
 			}

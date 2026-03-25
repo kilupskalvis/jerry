@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
 )
@@ -147,12 +147,12 @@ func TestLoop_MaxIterationsReached(t *testing.T) {
 		t.Fatal("expected error for max iterations")
 	}
 
-	var jerryErr *jerryErrors.Error
+	var jerryErr *jerrerr.Error
 	if !errors.As(err, &jerryErr) {
 		t.Fatalf("expected jerry Error, got %T: %v", err, err)
 	}
-	if jerryErr.Code != jerryErrors.CodeAgentMaxIterations {
-		t.Errorf("expected code %q, got %q", jerryErrors.CodeAgentMaxIterations, jerryErr.Code)
+	if jerryErr.Code != jerrerr.CodeAgentMaxIterations {
+		t.Errorf("expected code %q, got %q", jerrerr.CodeAgentMaxIterations, jerryErr.Code)
 	}
 }
 

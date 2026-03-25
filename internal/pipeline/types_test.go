@@ -73,8 +73,8 @@ output_key: artifacts
 	if step.Retries != 2 {
 		t.Errorf("Retries = %d, want 2", step.Retries)
 	}
-	if step.RetryBackoff != "exponential" {
-		t.Errorf("RetryBackoff = %q, want %q", step.RetryBackoff, "exponential")
+	if step.RetryBackoffStrategy != "exponential" {
+		t.Errorf("RetryBackoffStrategy = %q, want %q", step.RetryBackoffStrategy, "exponential")
 	}
 	if step.Timeout.Duration != 300*time.Second {
 		t.Errorf("Timeout = %v, want 300s", step.Timeout.Duration)

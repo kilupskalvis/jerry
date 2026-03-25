@@ -1,5 +1,3 @@
-// Agentic loop: send messages to an LLM, execute tool calls, repeat until done.
-
 package agent
 
 import (
@@ -8,19 +6,16 @@ import (
 	"fmt"
 	"time"
 
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/state"
 )
 
-// MaxRetryIterations is the maximum additional iterations allowed during
-// output format retry (RunRetry).
+// MaxRetryIterations is the maximum iterations for output format retries.
 const MaxRetryIterations = 5
 
-// Loop runs an autonomous agent to completion using the agentic loop pattern:
-// send messages to the LLM, execute tool calls, feed results back, repeat
-// until the LLM produces a final text response with no tool calls.
+// Loop runs an autonomous agent to completion.
 type Loop struct {
 	client    llm.Client
 	compactor *llm.Compactor
@@ -39,31 +34,17 @@ func NewLoop(client llm.Client, compactor *llm.Compactor, printer *output.Printe
 
 // LoopResult holds the outcome of an agentic loop execution.
 type LoopResult struct {
-	// RawOutput is the agent's final text response (the last response with
-	// no tool calls).
-	RawOutput string
-
-	// Messages is the full conversation history from the loop.
-	// Needed by RunRetry to continue the conversation with a correction prompt.
-	Messages []llm.Message
-
-	// SystemMessage is the system prompt used for this run.
-	// Needed by RunRetry to preserve the same system context.
+	RawOutput     string
+	Messages      []llm.Message
 	SystemMessage string
-
-	// Iterations is how many loop cycles ran.
-	Iterations int
-
-	// TotalUsage is the accumulated token usage across all LLM calls.
-	TotalUsage llm.TokenUsage
-
-	// ToolCalls is the total number of tool calls made.
-	ToolCalls int
+	Iterations    int
+	TotalUsage    llm.TokenUsage
+	ToolCalls     int
 }
 
 // Run executes the agentic loop until the agent completes or a limit is reached.
 func (l *Loop) Run(
-	loopCtx context.Context,
+	ctx context.Context,
 	agentCfg AgentConfig,
 	toolDefs []llm.ToolDef,
 	dispatch func(context.Context, llm.ToolCall) (string, error),
@@ -82,16 +63,16 @@ func (l *Loop) Run(
 	compactionAttempts := 0
 
 	for result.Iterations < agentCfg.MaxIterations {
-		if loopCtx.Err() != nil {
-			return nil, loopCtx.Err()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
 		llmStart := time.Now()
-		response, sendErr := l.client.Send(loopCtx, systemMessage, messages, toolDefs)
+		response, sendErr := l.client.Send(ctx, systemMessage, messages, toolDefs)
 
 		// Reactive compaction: context too long.
 		if sendErr != nil && llm.IsContextTooLong(sendErr) && l.compactor != nil {
-			compacted, compErr := l.reactiveCompact(loopCtx, systemMessage, messages, &compactionAttempts, result)
+			compacted, compErr := l.reactiveCompact(ctx, systemMessage, messages, &compactionAttempts, result)
 			if compErr != nil {
 				return nil, compErr
 			}
@@ -108,12 +89,12 @@ func (l *Loop) Run(
 		result.Iterations++
 
 		// Log LLM call.
-		if lw := state.LogWriterFrom(loopCtx); lw != nil {
+		if lw := state.LogWriterFrom(ctx); lw != nil {
 			toolNames := make([]string, len(response.ToolCalls))
 			for i, tc := range response.ToolCalls {
 				toolNames[i] = tc.Name
 			}
-			lw.Log(state.LogLLMCall, state.StepNameFrom(loopCtx), state.LLMCallData{
+			lw.Log(state.LogLLMCall, state.StepNameFrom(ctx), state.LLMCallData{
 				Iteration:          result.Iterations,
 				Model:              agentCfg.Model,
 				TokensInput:        response.Usage.InputTokens,
@@ -124,11 +105,8 @@ func (l *Loop) Run(
 			})
 		}
 
-		// Proactive compaction: approaching context window limit.
-		messages = l.proactiveCompact(loopCtx, agentCfg, systemMessage, messages, response, result)
-
 		if len(response.ToolCalls) > 0 {
-			messages = l.executeToolCalls(loopCtx, messages, response, dispatch, result)
+			messages = l.executeToolCalls(ctx, messages, response, dispatch, result)
 			continue
 		}
 
@@ -139,14 +117,14 @@ func (l *Loop) Run(
 	}
 
 	result.Messages = messages
-	return result, jerryErrors.New(jerryErrors.CodeAgentMaxIterations,
+	return result, jerrerr.New(jerrerr.CodeAgentMaxIterations,
 		fmt.Sprintf("agent %q reached max iterations (%d)", agentCfg.Name, agentCfg.MaxIterations))
 }
 
 // RunRetry sends a correction message and runs additional iterations.
 // Used when the agent's output doesn't match the expected JSON schema.
 func (l *Loop) RunRetry(
-	loopCtx context.Context,
+	ctx context.Context,
 	previous *LoopResult,
 	toolDefs []llm.ToolDef,
 	dispatch func(context.Context, llm.ToolCall) (string, error),
@@ -173,15 +151,15 @@ func (l *Loop) RunRetry(
 	compactionAttempts := 0
 
 	for result.Iterations < MaxRetryIterations {
-		if loopCtx.Err() != nil {
-			return nil, loopCtx.Err()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
-		response, sendErr := l.client.Send(loopCtx, previous.SystemMessage, messages, toolDefs)
+		response, sendErr := l.client.Send(ctx, previous.SystemMessage, messages, toolDefs)
 
 		// Reactive compaction during retry.
 		if sendErr != nil && llm.IsContextTooLong(sendErr) && l.compactor != nil {
-			compacted, compErr := l.reactiveCompact(loopCtx, previous.SystemMessage, messages, &compactionAttempts, result)
+			compacted, compErr := l.reactiveCompact(ctx, previous.SystemMessage, messages, &compactionAttempts, result)
 			if compErr != nil {
 				return nil, compErr
 			}
@@ -198,7 +176,7 @@ func (l *Loop) RunRetry(
 		result.Iterations++
 
 		if len(response.ToolCalls) > 0 {
-			messages = l.executeToolCalls(loopCtx, messages, response, dispatch, result)
+			messages = l.executeToolCalls(ctx, messages, response, dispatch, result)
 			continue
 		}
 
@@ -213,7 +191,7 @@ func (l *Loop) RunRetry(
 
 // reactiveCompact handles compaction when the context window is exceeded.
 func (l *Loop) reactiveCompact(
-	loopCtx context.Context,
+	ctx context.Context,
 	systemMessage string,
 	messages []llm.Message,
 	attempts *int,
@@ -229,7 +207,7 @@ func (l *Loop) reactiveCompact(
 		keepRecent = 1
 	}
 
-	compactionResult, compErr := l.compactor.Compact(loopCtx, systemMessage, messages, keepRecent)
+	compactionResult, compErr := l.compactor.Compact(ctx, systemMessage, messages, keepRecent)
 	if compErr != nil {
 		return nil, fmt.Errorf("context too long and compaction failed: %w", compErr)
 	}
@@ -241,40 +219,9 @@ func (l *Loop) reactiveCompact(
 	return compactionResult.CompactedMessages, nil
 }
 
-// proactiveCompact compacts if we're approaching the context window limit.
-func (l *Loop) proactiveCompact(
-	loopCtx context.Context,
-	agentCfg AgentConfig,
-	systemMessage string,
-	messages []llm.Message,
-	response *llm.Response,
-	result *LoopResult,
-) []llm.Message {
-	if agentCfg.ContextWindow <= 0 || l.compactor == nil {
-		return messages
-	}
-
-	threshold := int(float64(agentCfg.ContextWindow) * llm.ProactiveCompactionThreshold)
-	if response.Usage.InputTokens <= threshold {
-		return messages
-	}
-
-	compactionResult, compErr := l.compactor.Compact(loopCtx, systemMessage, messages, llm.DefaultKeepRecent)
-	if compErr != nil {
-		l.printer.Warning("proactive compaction failed: %s", compErr)
-		return messages
-	}
-
-	result.TotalUsage.InputTokens += compactionResult.Usage.InputTokens
-	result.TotalUsage.OutputTokens += compactionResult.Usage.OutputTokens
-	l.printer.Info("  [compacted conversation — evicted %d messages]", compactionResult.EvictedCount)
-
-	return compactionResult.CompactedMessages
-}
-
 // executeToolCalls runs all tool calls from a response and appends results to history.
 func (l *Loop) executeToolCalls(
-	loopCtx context.Context,
+	ctx context.Context,
 	messages []llm.Message,
 	response *llm.Response,
 	dispatch func(context.Context, llm.ToolCall) (string, error),
@@ -286,12 +233,12 @@ func (l *Loop) executeToolCalls(
 		ToolCalls: response.ToolCalls,
 	})
 
-	lw := state.LogWriterFrom(loopCtx)
+	lw := state.LogWriterFrom(ctx)
 	for _, call := range response.ToolCalls {
 		result.ToolCalls++
 
 		toolStart := time.Now()
-		toolResult, toolErr := dispatch(loopCtx, call)
+		toolResult, toolErr := dispatch(ctx, call)
 		toolDuration := time.Since(toolStart)
 		success := toolErr == nil
 
@@ -303,7 +250,7 @@ func (l *Loop) executeToolCalls(
 		l.printer.ToolProgress(result.Iterations, call.Name, summary)
 
 		if lw != nil {
-			lw.Log(state.LogToolCall, state.StepNameFrom(loopCtx), state.ToolCallData{
+			lw.Log(state.LogToolCall, state.StepNameFrom(ctx), state.ToolCallData{
 				Iteration:       result.Iterations,
 				Tool:            call.Name,
 				Summary:         summary,

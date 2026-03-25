@@ -1,5 +1,3 @@
-// Shared helpers for git tools.
-
 package tools
 
 import (
@@ -15,8 +13,8 @@ import (
 const GitCommandTimeout = 30 * time.Second
 
 // runGit executes a git command in the repo root and returns the trimmed output.
-func runGit(toolCtx context.Context, repoRoot string, args ...string) (string, error) {
-	gitCtx, gitCancel := context.WithTimeout(toolCtx, GitCommandTimeout)
+func runGit(ctx context.Context, repoRoot string, args ...string) (string, error) {
+	gitCtx, gitCancel := context.WithTimeout(ctx, GitCommandTimeout)
 	defer gitCancel()
 
 	cmd := exec.CommandContext(gitCtx, "git", args...)

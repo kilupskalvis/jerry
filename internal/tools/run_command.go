@@ -1,5 +1,3 @@
-// run_command tool: executes shell commands in a clean environment with timeout.
-
 package tools
 
 import (
@@ -42,7 +40,7 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 				"required": []any{"command"},
 			},
 		},
-		Execute: func(toolCtx context.Context, args map[string]any) (string, error) {
+		Execute: func(ctx context.Context, args map[string]any) (string, error) {
 			command, _ := args["command"].(string)
 			if command == "" {
 				return "Error: missing required parameter 'command'", nil
@@ -50,7 +48,7 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 
 			cmdEnv := buildToolEnv(env)
 
-			timeoutCtx, cancel := context.WithTimeout(toolCtx, ToolCommandTimeout)
+			timeoutCtx, cancel := context.WithTimeout(ctx, ToolCommandTimeout)
 			defer cancel()
 
 			cmd := exec.Command("/bin/sh", "-c", command)

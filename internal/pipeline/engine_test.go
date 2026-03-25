@@ -2,8 +2,6 @@ package pipeline_test
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kilupskalvis/jerry/internal/contextstore"
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/pipeline"
 	"github.com/kilupskalvis/jerry/internal/state"
@@ -112,9 +110,9 @@ func TestRun_SequentialExecution(t *testing.T) {
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(runCtx, p, trigger)
+	runState, err := engine.Run(ctx, p, trigger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -161,9 +159,9 @@ func TestRun_ContextFlowBetweenSteps(t *testing.T) {
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	_, err := engine.Run(runCtx, p, trigger)
+	_, err := engine.Run(ctx, p, trigger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -194,9 +192,9 @@ func TestRun_AgentStepSkipped(t *testing.T) {
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(runCtx, p, trigger)
+	runState, err := engine.Run(ctx, p, trigger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -227,7 +225,7 @@ func TestRun_RetrySuccess(t *testing.T) {
 		executeFunc: func(_ context.Context, _ pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
 			attempts++
 			if attempts <= 2 {
-				return nil, jerryErrors.New(jerryErrors.CodeScriptFailed, "failed")
+				return nil, jerrerr.New(jerrerr.CodeScriptFailed, "failed")
 			}
 			return &pipeline.StepOutput{Duration: time.Millisecond}, nil
 		},
@@ -238,13 +236,13 @@ func TestRun_RetrySuccess(t *testing.T) {
 	p := pipeline.Pipeline{
 		Name: "test",
 		Steps: []pipeline.Step{
-			{Name: "flaky", Script: "flaky-cmd", Retries: 2, RetryBackoff: "fixed"},
+			{Name: "flaky", Script: "flaky-cmd", Retries: 2, RetryBackoffStrategy: "fixed"},
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(runCtx, p, trigger)
+	runState, err := engine.Run(ctx, p, trigger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -260,7 +258,7 @@ func TestRun_RetrySuccess(t *testing.T) {
 func TestRun_RetryExhausted(t *testing.T) {
 	exec := &mockExecutor{
 		executeFunc: func(_ context.Context, _ pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
-			return nil, jerryErrors.New(jerryErrors.CodeScriptFailed, "always fails")
+			return nil, jerrerr.New(jerrerr.CodeScriptFailed, "always fails")
 		},
 	}
 	store := &mockStateStore{}
@@ -273,9 +271,9 @@ func TestRun_RetryExhausted(t *testing.T) {
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(runCtx, p, trigger)
+	runState, err := engine.Run(ctx, p, trigger)
 	if err == nil {
 		t.Fatal("expected error after retries exhausted")
 	}
@@ -292,7 +290,7 @@ func TestRun_FallbackExecuted(t *testing.T) {
 		executeFunc: func(_ context.Context, step pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
 			callCount++
 			if step.Name == "risky" {
-				return nil, jerryErrors.New(jerryErrors.CodeScriptFailed, "failed")
+				return nil, jerrerr.New(jerrerr.CodeScriptFailed, "failed")
 			}
 			// This is the fallback execution
 			fallbackCalled = true
@@ -309,9 +307,9 @@ func TestRun_FallbackExecuted(t *testing.T) {
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(runCtx, p, trigger)
+	runState, err := engine.Run(ctx, p, trigger)
 
 	// Pipeline still fails even if fallback succeeds
 	if err == nil {
@@ -329,7 +327,7 @@ func TestRun_StepTimeout(t *testing.T) {
 	exec := &mockExecutor{
 		executeFunc: func(stepCtx context.Context, _ pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
 			<-stepCtx.Done()
-			return nil, jerryErrors.New(jerryErrors.CodeScriptTimeout, "timed out")
+			return nil, jerrerr.New(jerrerr.CodeScriptTimeout, "timed out")
 		},
 	}
 	store := &mockStateStore{}
@@ -342,9 +340,9 @@ func TestRun_StepTimeout(t *testing.T) {
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	_, err := engine.Run(runCtx, p, trigger)
+	_, err := engine.Run(ctx, p, trigger)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -364,9 +362,9 @@ func TestRun_StateCheckpoints(t *testing.T) {
 		},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	_, err := engine.Run(runCtx, p, trigger)
+	_, err := engine.Run(ctx, p, trigger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -393,9 +391,9 @@ func TestRun_GenerateRunID(t *testing.T) {
 		Steps: []pipeline.Step{{Name: "s", Script: "echo hi"}},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(runCtx, p, trigger)
+	runState, err := engine.Run(ctx, p, trigger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -421,9 +419,9 @@ func TestRun_NoExecutorFound(t *testing.T) {
 		Steps: []pipeline.Step{{Name: "orphan", Script: "echo hi"}},
 	}
 
-	runCtx := context.Background()
+	ctx := context.Background()
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(runCtx, p, trigger)
+	runState, err := engine.Run(ctx, p, trigger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -436,7 +434,3 @@ func TestRun_NoExecutorFound(t *testing.T) {
 		t.Errorf("Status = %q, want skipped", runState.StepResults[0].Status)
 	}
 }
-
-// Suppress unused import warning
-var _ = fmt.Sprintf
-var _ = errors.New

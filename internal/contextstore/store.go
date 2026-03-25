@@ -1,9 +1,4 @@
-// Package contextstore manages the shared context object that flows
-// through a Jerry pipeline. The context is the single communication
-// channel between steps — steps do not communicate directly.
-//
-// All read operations return deep copies to prevent external mutations
-// of internal state. Thread-safe via read-write mutex.
+// Package contextstore manages the shared context that flows through a pipeline.
 package contextstore
 
 import (
@@ -35,10 +30,10 @@ type TriggerData struct {
 }
 
 // reservedKeys are context keys that cannot be written by steps.
-var reservedKeys = map[string]bool{
-	"protocol_version": true,
-	"run_id":           true,
-	"trigger":          true,
+var reservedKeys = map[string]struct{}{
+	"protocol_version": {},
+	"run_id":           {},
+	"trigger":          {},
 }
 
 // Store manages the context object in memory during pipeline execution.
@@ -82,11 +77,9 @@ func (s *Store) GetKeys(keys []string) map[string]any {
 }
 
 // Set writes a value to the specified data key.
-// Returns an error if the key is reserved (protocol_version, run_id, trigger).
-// Performs full replacement — if the key already exists, the old value is
-// entirely replaced (not merged).
+// Returns an error if the key is reserved.
 func (s *Store) Set(key string, value any) error {
-	if reservedKeys[key] {
+	if _, reserved := reservedKeys[key]; reserved {
 		return errors.New(errors.CodeContextWriteDenied,
 			fmt.Sprintf("cannot write to reserved context key %q", key))
 	}
@@ -147,9 +140,7 @@ func (s *Store) WriteContextFile() (path string, cleanup func(), err error) {
 	return filePath, func() { _ = os.Remove(filePath) }, nil
 }
 
-// deepCopy creates a full deep copy of the internal context via JSON
-// marshal/unmarshal. Simple, correct, adequate performance for
-// context-sized data.
+// deepCopy creates a full deep copy of the internal context via JSON roundtrip.
 func (s *Store) deepCopy() Context {
 	data, _ := json.Marshal(s.pipelineContext)
 	var copied Context

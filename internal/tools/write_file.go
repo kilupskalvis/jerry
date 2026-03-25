@@ -1,5 +1,3 @@
-// write_file tool: writes content to a file with atomic rename.
-
 package tools
 
 import (
@@ -43,6 +41,10 @@ func NewWriteFileTool(repoRoot string) Tool {
 			absPath, pathErr := resolvePath(repoRoot, path)
 			if pathErr != "" {
 				return pathErr, nil
+			}
+
+			if IsSensitivePath(path) {
+				return fmt.Sprintf("Error: access denied — '%s' is a sensitive file (may contain secrets)", path), nil
 			}
 
 			// Create parent directories.

@@ -1,5 +1,4 @@
 // Package state manages persistence of pipeline run state to disk.
-// After each step, state is saved as a checkpoint enabling resumability.
 package state
 
 import (

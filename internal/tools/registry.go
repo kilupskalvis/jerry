@@ -1,9 +1,4 @@
-// Package tools provides the tool layer for agent execution. It registers
-// tools by name, resolves agent tool declarations into executable dispatchers,
-// and enforces tool constraints (path restrictions, command allowlists).
-//
-// Each tool is a function registered with its JSON Schema definition. The
-// registry is created once at startup and shared across agent executions.
+// Package tools provides the tool layer for agent execution.
 package tools
 
 import (
@@ -28,7 +23,7 @@ type Tool struct {
 	//
 	// Unexpected failures (panics, OS-level errors) return a Go error. The
 	// agentic loop wraps these as an error string for the agent.
-	Execute func(toolCtx context.Context, args map[string]any) (string, error)
+	Execute func(ctx context.Context, args map[string]any) (string, error)
 }
 
 // ToolAccess represents a tool declaration from an agent's frontmatter.
@@ -39,7 +34,7 @@ type ToolAccess struct {
 }
 
 // DispatchFunc executes a tool call by name, enforcing any constraints.
-type DispatchFunc func(toolCtx context.Context, call llm.ToolCall) (string, error)
+type DispatchFunc func(ctx context.Context, call llm.ToolCall) (string, error)
 
 // Registry manages available tools and produces constrained dispatchers
 // for individual agent configurations.
@@ -119,7 +114,7 @@ func (r *Registry) Resolve(toolAccess []ToolAccess) ([]llm.ToolDef, DispatchFunc
 		defs = append(defs, t.Definition)
 	}
 
-	dispatch := func(toolCtx context.Context, call llm.ToolCall) (string, error) {
+	dispatch := func(ctx context.Context, call llm.ToolCall) (string, error) {
 		rt, ok := resolved[call.Name]
 		if !ok {
 			return fmt.Sprintf("Error: tool %q is not available to this agent", call.Name), nil
@@ -132,7 +127,7 @@ func (r *Registry) Resolve(toolAccess []ToolAccess) ([]llm.ToolDef, DispatchFunc
 			}
 		}
 
-		return rt.tool.Execute(toolCtx, call.Arguments)
+		return rt.tool.Execute(ctx, call.Arguments)
 	}
 
 	return defs, dispatch, nil

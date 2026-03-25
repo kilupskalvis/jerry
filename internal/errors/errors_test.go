@@ -1,11 +1,11 @@
 package errors_test
 
 import (
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"testing"
 
-	"github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 func TestNew(t *testing.T) {
@@ -16,19 +16,19 @@ func TestNew(t *testing.T) {
 	}{
 		{
 			name:    "script failed error",
-			code:    errors.CodeScriptFailed,
+			code:    jerrerr.CodeScriptFailed,
 			message: "script exited with code 1",
 		},
 		{
 			name:    "pipeline not found",
-			code:    errors.CodePipelineNotFound,
+			code:    jerrerr.CodePipelineNotFound,
 			message: "pipeline 'feature' not found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := errors.New(tt.code, tt.message)
+			err := jerrerr.New(tt.code, tt.message)
 
 			if err.Code != tt.code {
 				t.Errorf("Code = %q, want %q", err.Code, tt.code)
@@ -48,27 +48,27 @@ func TestNew(t *testing.T) {
 
 func TestWrap(t *testing.T) {
 	cause := fmt.Errorf("underlying error")
-	err := errors.Wrap(errors.CodeScriptFailed, "script failed", cause)
+	err := jerrerr.Wrap(jerrerr.CodeScriptFailed, "script failed", cause)
 
-	if err.Code != errors.CodeScriptFailed {
-		t.Errorf("Code = %q, want %q", err.Code, errors.CodeScriptFailed)
+	if err.Code != jerrerr.CodeScriptFailed {
+		t.Errorf("Code = %q, want %q", err.Code, jerrerr.CodeScriptFailed)
 	}
 	if err.Message != "script failed" {
 		t.Errorf("Message = %q, want %q", err.Message, "script failed")
 	}
-	if !stderrors.Is(err.Cause, cause) {
+	if !errors.Is(err.Cause, cause) {
 		t.Error("Cause should be the wrapped error")
 	}
 
 	// Unwrap should return the cause
-	unwrapped := stderrors.Unwrap(err)
-	if !stderrors.Is(unwrapped, cause) {
+	unwrapped := errors.Unwrap(err)
+	if !errors.Is(unwrapped, cause) {
 		t.Errorf("Unwrap() = %v, want %v", unwrapped, cause)
 	}
 }
 
 func TestWithStep(t *testing.T) {
-	original := errors.New(errors.CodeScriptFailed, "failed")
+	original := jerrerr.New(jerrerr.CodeScriptFailed, "failed")
 	withStep := original.WithStep("generate")
 
 	// withStep should have the step set
@@ -93,22 +93,22 @@ func TestWithStep(t *testing.T) {
 func TestError_ErrorString(t *testing.T) {
 	tests := []struct {
 		name     string
-		err      *errors.Error
+		err      *jerrerr.Error
 		expected string
 	}{
 		{
 			name:     "without step",
-			err:      errors.New(errors.CodeScriptFailed, "script exited with code 1"),
+			err:      jerrerr.New(jerrerr.CodeScriptFailed, "script exited with code 1"),
 			expected: "SCRIPT_FAILED: script exited with code 1",
 		},
 		{
 			name:     "with step",
-			err:      errors.New(errors.CodeScriptFailed, "script exited with code 1").WithStep("validate"),
+			err:      jerrerr.New(jerrerr.CodeScriptFailed, "script exited with code 1").WithStep("validate"),
 			expected: "SCRIPT_FAILED [step: validate]: script exited with code 1",
 		},
 		{
 			name:     "with cause",
-			err:      errors.Wrap(errors.CodeScriptTimeout, "timed out", fmt.Errorf("deadline exceeded")),
+			err:      jerrerr.Wrap(jerrerr.CodeScriptTimeout, "timed out", fmt.Errorf("deadline exceeded")),
 			expected: "SCRIPT_TIMEOUT: timed out: deadline exceeded",
 		},
 	}
@@ -124,12 +124,12 @@ func TestError_ErrorString(t *testing.T) {
 }
 
 func TestError_UnwrapNil(t *testing.T) {
-	err := errors.New(errors.CodeScriptFailed, "no cause")
-	if stderrors.Unwrap(err) != nil {
+	err := jerrerr.New(jerrerr.CodeScriptFailed, "no cause")
+	if errors.Unwrap(err) != nil {
 		t.Error("Unwrap() should return nil when there is no cause")
 	}
 }
 
 func TestError_ImplementsErrorInterface(t *testing.T) {
-	var _ error = (*errors.Error)(nil)
+	var _ error = (*jerrerr.Error)(nil)
 }

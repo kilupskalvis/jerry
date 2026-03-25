@@ -26,17 +26,17 @@ type Pipeline struct {
 // Exactly one of Agent, Script, Gate, or Parallel must be set.
 // Gate and Parallel are parsed but not executed until Phase 3+.
 type Step struct {
-	Name         string       `yaml:"name"`
-	Agent        string       `yaml:"agent,omitempty"`
-	Script       string       `yaml:"script,omitempty"`
-	OutputKey    string       `yaml:"output_key,omitempty"`
-	Retries      int          `yaml:"retries,omitempty"`
-	RetryBackoff string       `yaml:"retry_backoff,omitempty"`
-	Timeout      Duration     `yaml:"timeout,omitempty"`
-	Fallback     *FallbackDef `yaml:"fallback,omitempty"`
-	If           string       `yaml:"if,omitempty"`
-	Gate         bool         `yaml:"gate,omitempty"`
-	Parallel     []Step       `yaml:"parallel,omitempty"`
+	Name                 string       `yaml:"name"`
+	Agent                string       `yaml:"agent,omitempty"`
+	Script               string       `yaml:"script,omitempty"`
+	OutputKey            string       `yaml:"output_key,omitempty"`
+	Retries              int          `yaml:"retries,omitempty"`
+	RetryBackoffStrategy string       `yaml:"retry_backoff,omitempty"`
+	Timeout              Duration     `yaml:"timeout,omitempty"`
+	Fallback             *FallbackDef `yaml:"fallback,omitempty"`
+	If                   string       `yaml:"if,omitempty"`
+	Gate                 bool         `yaml:"gate,omitempty"`
+	Parallel             []Step       `yaml:"parallel,omitempty"`
 }
 
 // FallbackDef defines what to run when a step fails after all retries.

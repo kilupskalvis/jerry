@@ -4,6 +4,7 @@ package trigger
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
@@ -16,9 +17,9 @@ func NormalizeGitHubEvent(eventType string, payload map[string]any) (*contextsto
 	}
 
 	switch {
-	case hasPrefix(eventType, "issues"):
+	case strings.HasPrefix(eventType, "issues"):
 		return normalizeGitHubIssue(trigger, payload)
-	case hasPrefix(eventType, "pull_request"):
+	case strings.HasPrefix(eventType, "pull_request"):
 		return normalizeGitHubPR(trigger, payload)
 	case eventType == "push":
 		trigger.Type = "push"
@@ -98,8 +99,4 @@ func extractNestedString(m map[string]any, keys ...string) string {
 		current = next
 	}
 	return ""
-}
-
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }

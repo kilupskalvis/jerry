@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 func TestParseOutput_ValidJSON(t *testing.T) {
@@ -46,12 +46,12 @@ func TestParseOutput_InvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 
-	var jerryErr *jerryErrors.Error
+	var jerryErr *jerrerr.Error
 	if !errors.As(err, &jerryErr) {
 		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if jerryErr.Code != jerryErrors.CodeInvalidOutputJSON {
-		t.Errorf("expected code %q, got %q", jerryErrors.CodeInvalidOutputJSON, jerryErr.Code)
+	if jerryErr.Code != jerrerr.CodeInvalidOutputJSON {
+		t.Errorf("expected code %q, got %q", jerrerr.CodeInvalidOutputJSON, jerryErr.Code)
 	}
 }
 
@@ -81,12 +81,12 @@ func TestParseOutput_SchemaMismatch(t *testing.T) {
 		t.Fatal("expected error for missing schema key")
 	}
 
-	var jerryErr *jerryErrors.Error
+	var jerryErr *jerrerr.Error
 	if !errors.As(err, &jerryErr) {
 		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if jerryErr.Code != jerryErrors.CodeOutputSchemaViolation {
-		t.Errorf("expected code %q, got %q", jerryErrors.CodeOutputSchemaViolation, jerryErr.Code)
+	if jerryErr.Code != jerrerr.CodeOutputSchemaViolation {
+		t.Errorf("expected code %q, got %q", jerrerr.CodeOutputSchemaViolation, jerryErr.Code)
 	}
 	if !strings.Contains(jerryErr.Message, "items") {
 		t.Errorf("error should mention missing key 'items', got: %s", jerryErr.Message)
@@ -109,12 +109,12 @@ func TestParseOutput_ArrayNotObject(t *testing.T) {
 		t.Fatal("expected error for array output")
 	}
 
-	var jerryErr *jerryErrors.Error
+	var jerryErr *jerrerr.Error
 	if !errors.As(err, &jerryErr) {
 		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if jerryErr.Code != jerryErrors.CodeInvalidOutputJSON {
-		t.Errorf("expected code %q, got %q", jerryErrors.CodeInvalidOutputJSON, jerryErr.Code)
+	if jerryErr.Code != jerrerr.CodeInvalidOutputJSON {
+		t.Errorf("expected code %q, got %q", jerrerr.CodeInvalidOutputJSON, jerryErr.Code)
 	}
 }
 
@@ -127,12 +127,12 @@ func TestParseOutput_FullSchemaValidation_WrongType(t *testing.T) {
 		t.Fatal("expected schema violation error for wrong type")
 	}
 
-	var jerryErr *jerryErrors.Error
+	var jerryErr *jerrerr.Error
 	if !errors.As(err, &jerryErr) {
 		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if jerryErr.Code != jerryErrors.CodeOutputSchemaViolation {
-		t.Errorf("code = %q, want %q", jerryErr.Code, jerryErrors.CodeOutputSchemaViolation)
+	if jerryErr.Code != jerrerr.CodeOutputSchemaViolation {
+		t.Errorf("code = %q, want %q", jerryErr.Code, jerrerr.CodeOutputSchemaViolation)
 	}
 }
 

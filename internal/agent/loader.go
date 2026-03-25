@@ -11,12 +11,12 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/kilupskalvis/jerry/internal/config"
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // Loader parses agent markdown definition files into AgentConfig.
 type Loader struct {
-	knownTools   map[string]bool
+	knownTools   map[string]struct{}
 	defaultModel string
 	fileConfig   *config.FileConfig
 }
@@ -26,9 +26,9 @@ type Loader struct {
 // defaultModel is the fallback model when an agent doesn't specify one (may be empty).
 // fileConfig provides defaults from .jerry/config.yaml (may be nil).
 func NewLoader(knownTools []string, defaultModel string, fileConfig *config.FileConfig) *Loader {
-	known := make(map[string]bool, len(knownTools))
+	known := make(map[string]struct{}, len(knownTools))
 	for _, name := range knownTools {
-		known[name] = true
+		known[name] = struct{}{}
 	}
 	if fileConfig == nil {
 		fileConfig = &config.FileConfig{}
@@ -44,19 +44,19 @@ func NewLoader(knownTools []string, defaultModel string, fileConfig *config.File
 func (l *Loader) Load(path string) (*AgentConfig, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return nil, jerryErrors.Wrap(jerryErrors.CodeAgentLoadFailed,
+		return nil, jerrerr.Wrap(jerrerr.CodeAgentLoadFailed,
 			fmt.Sprintf("cannot resolve path %q", path), err)
 	}
 
 	data, err := os.ReadFile(absPath)
 	if err != nil {
-		return nil, jerryErrors.Wrap(jerryErrors.CodeAgentLoadFailed,
+		return nil, jerrerr.Wrap(jerrerr.CodeAgentLoadFailed,
 			fmt.Sprintf("cannot read agent file %q", path), err)
 	}
 
 	agentCfg, parseErr := l.parse(string(data))
 	if parseErr != nil {
-		return nil, jerryErrors.Wrap(jerryErrors.CodeAgentLoadFailed,
+		return nil, jerrerr.Wrap(jerrerr.CodeAgentLoadFailed,
 			fmt.Sprintf("agent %q", path), parseErr)
 	}
 
@@ -146,11 +146,6 @@ func (l *Loader) applyDefaults(agentCfg *AgentConfig) {
 		agentCfg.Temperature = &temp
 	}
 
-	// ContextWindow: frontmatter → config.yaml → 0 (disabled).
-	if agentCfg.ContextWindow == 0 {
-		agentCfg.ContextWindow = l.fileConfig.Defaults.ContextWindow
-	}
-
 	// Timeout: frontmatter → config.yaml → 0 (engine applies its default).
 	if agentCfg.Timeout.Duration == 0 {
 		agentCfg.Timeout = l.fileConfig.Defaults.Timeout
@@ -185,7 +180,7 @@ func (l *Loader) validate(agentCfg *AgentConfig) error {
 
 	// Validate tool references.
 	for _, ta := range agentCfg.Tools {
-		if !l.knownTools[ta.Name] {
+		if _, ok := l.knownTools[ta.Name]; !ok {
 			known := make([]string, 0, len(l.knownTools))
 			for name := range l.knownTools {
 				known = append(known, name)

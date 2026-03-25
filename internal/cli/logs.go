@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/state"
 )
 
@@ -32,7 +32,7 @@ func newLogsCmd(app *App) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if app.StateStore == nil {
-				return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+				return jerrerr.New(jerrerr.CodeJerryDirNotFound,
 					"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 			}
 
@@ -361,7 +361,7 @@ func showLLMCalls(entries []state.LogEntry) error {
 // files. Detected generically by the presence of both "path" and "content"
 // in the arguments — no tool name check needed.
 func extractWrittenFiles(entries []state.LogEntry) []string {
-	seen := map[string]bool{}
+	seen := map[string]struct{}{}
 	var files []string
 	for _, entry := range entries {
 		if entry.Type != state.LogToolCall {
@@ -373,8 +373,8 @@ func extractWrittenFiles(entries []state.LogEntry) []string {
 		}
 		path, hasPath := data.Arguments["path"].(string)
 		_, hasContent := data.Arguments["content"]
-		if hasPath && hasContent && !seen[path] {
-			seen[path] = true
+		if _, dup := seen[path]; hasPath && hasContent && !dup {
+			seen[path] = struct{}{}
 			files = append(files, path)
 		}
 	}

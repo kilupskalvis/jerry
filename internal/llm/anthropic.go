@@ -14,7 +14,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 
-	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // DefaultMaxOutputTokens is the maximum output tokens requested per call.
@@ -48,7 +48,7 @@ func NewAnthropicClient(apiKey, model string, opts ...option.RequestOption) *Ant
 // Send translates our Message types to Anthropic SDK types, calls the API,
 // and translates the response back.
 func (c *AnthropicClient) Send(
-	requestCtx context.Context,
+	ctx context.Context,
 	system string,
 	messages []Message,
 	tools []ToolDef,
@@ -72,7 +72,7 @@ func (c *AnthropicClient) Send(
 		params.Tools = sdkTools
 	}
 
-	sdkResp, err := c.sdk.Messages.New(requestCtx, params)
+	sdkResp, err := c.sdk.Messages.New(ctx, params)
 	if err != nil {
 		return nil, c.translateError(err)
 	}
@@ -246,24 +246,24 @@ func (c *AnthropicClient) translateError(err error) error {
 					Message: fmt.Sprintf("Anthropic: context too long: %s", errMsg),
 				}
 			}
-			return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
+			return jerrerr.New(jerrerr.CodeLLMCallFailed,
 				fmt.Sprintf("Anthropic API error (HTTP 400): %s", errMsg))
 		case http.StatusUnauthorized:
-			return jerryErrors.New(jerryErrors.CodeLLMAuthFailed,
+			return jerrerr.New(jerrerr.CodeLLMAuthFailed,
 				"Anthropic API authentication failed — check ANTHROPIC_API_KEY")
 		case http.StatusTooManyRequests:
-			return jerryErrors.New(jerryErrors.CodeLLMRateLimited,
+			return jerrerr.New(jerrerr.CodeLLMRateLimited,
 				"Anthropic API rate limited after SDK retries exhausted")
 		case http.StatusInternalServerError, http.StatusBadGateway,
 			http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-			return jerryErrors.New(jerryErrors.CodeLLMServerError,
+			return jerrerr.New(jerrerr.CodeLLMServerError,
 				fmt.Sprintf("Anthropic API server error (HTTP %d)", apiErr.StatusCode))
 		default:
-			return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
+			return jerrerr.New(jerrerr.CodeLLMCallFailed,
 				fmt.Sprintf("Anthropic API error (HTTP %d): %s", apiErr.StatusCode, err.Error()))
 		}
 	}
 
-	return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
+	return jerrerr.New(jerrerr.CodeLLMCallFailed,
 		fmt.Sprintf("LLM call failed: %s", err.Error()))
 }

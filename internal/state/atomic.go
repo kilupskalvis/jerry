@@ -1,5 +1,3 @@
-// Atomic JSON file writes via temp file + fsync + rename.
-
 package state
 
 import (

@@ -1,5 +1,3 @@
-// git_log tool: view recent git commits.
-
 package tools
 
 import (
@@ -32,7 +30,7 @@ func NewGitLogTool(repoRoot string) Tool {
 				},
 			},
 		},
-		Execute: func(toolCtx context.Context, args map[string]any) (string, error) {
+		Execute: func(ctx context.Context, args map[string]any) (string, error) {
 			count := 10
 			if c, ok := args["count"].(float64); ok {
 				count = int(c)
@@ -54,7 +52,7 @@ func NewGitLogTool(repoRoot string) Tool {
 				gitArgs = append(gitArgs, "--", path)
 			}
 
-			result, gitErr := runGit(toolCtx, repoRoot, gitArgs...)
+			result, gitErr := runGit(ctx, repoRoot, gitArgs...)
 			if gitErr != nil {
 				return fmt.Sprintf("Error: %s\n%s", gitErr, result), nil
 			}
