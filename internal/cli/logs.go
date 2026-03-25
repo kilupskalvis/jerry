@@ -16,6 +16,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/state"
 )
 
+// @lattice:flow logs
 func newLogsCmd(app *App) *cobra.Command {
 	var (
 		stepFilter string

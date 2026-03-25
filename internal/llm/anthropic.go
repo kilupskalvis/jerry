@@ -47,6 +47,7 @@ func NewAnthropicClient(apiKey, model string, opts ...option.RequestOption) *Ant
 
 // Send translates our Message types to Anthropic SDK types, calls the API,
 // and translates the response back.
+// @lattice:boundary anthropic
 func (c *AnthropicClient) Send(
 	ctx context.Context,
 	system string,

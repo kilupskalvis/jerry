@@ -41,6 +41,7 @@ func NewOpenAIClient(apiKey, model string, opts ...option.RequestOption) *OpenAI
 
 // Send translates our Message types to OpenAI SDK types, calls the API,
 // and translates the response back.
+// @lattice:boundary openai
 func (c *OpenAIClient) Send(
 	ctx context.Context,
 	system string,

@@ -36,6 +36,10 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 						"type":        "string",
 						"description": "Shell command to execute",
 					},
+					"cwd": map[string]any{
+						"type":        "string",
+						"description": "Working directory relative to repository root (default: repository root)",
+					},
 				},
 				"required": []any{"command"},
 			},
@@ -46,13 +50,22 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 				return "Error: missing required parameter 'command'", nil
 			}
 
+			workDir := repoRoot
+			if cwd, ok := args["cwd"].(string); ok && cwd != "" {
+				resolved, pathErr := resolvePath(repoRoot, cwd)
+				if pathErr != "" {
+					return pathErr, nil
+				}
+				workDir = resolved
+			}
+
 			cmdEnv := buildToolEnv(env)
 
 			timeoutCtx, cancel := context.WithTimeout(ctx, ToolCommandTimeout)
 			defer cancel()
 
 			cmd := exec.Command("/bin/sh", "-c", command)
-			cmd.Dir = repoRoot
+			cmd.Dir = workDir
 			cmd.Env = cmdEnv
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 

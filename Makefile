@@ -1,8 +1,10 @@
 .PHONY: build test lint fmt vet clean install-hooks
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+
 # Build the jerry binary.
 build:
-	go build -o jerry ./cmd/jerry
+	go build -ldflags "-X main.Version=$(VERSION)" -o jerry ./cmd/jerry
 
 # Run all tests with race detector.
 test:

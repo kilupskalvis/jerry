@@ -22,6 +22,9 @@ import (
 	"github.com/kilupskalvis/jerry/internal/tools"
 )
 
+// Version is set at build time via ldflags: -ldflags "-X main.Version=v1.0.0"
+var Version = "dev"
+
 func main() {
 	os.Exit(run())
 }
@@ -34,6 +37,7 @@ func run() int {
 	printer := output.NewPrinter(os.Stdout, os.Stderr)
 	app := buildApp(printer)
 	rootCmd := cli.NewRootCmd(app)
+	rootCmd.Version = Version
 
 	if execErr := rootCmd.ExecuteContext(ctx); execErr != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "jerry: error: %s\n", execErr.Error())

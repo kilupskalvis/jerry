@@ -10,6 +10,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/pipeline"
 )
 
+// @lattice:flow validate
 func newValidateCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate [pipeline]",

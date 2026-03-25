@@ -21,6 +21,7 @@ func NewFileStateStore(runsDir string) *FileStateStore {
 }
 
 // InitRun creates the run directory and writes the initial state file.
+// @lattice:boundary filesystem
 func (s *FileStateStore) InitRun(runState RunState) error {
 	runDir := filepath.Join(s.runsDir, runState.RunID)
 

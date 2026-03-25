@@ -44,6 +44,7 @@ func (e *Executor) CanExecute(step pipeline.Step) bool {
 }
 
 // Execute runs the script and returns the output.
+// @lattice:boundary shell
 func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
 	startTime := time.Now()
 
@@ -61,7 +62,7 @@ func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeli
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	fullCtx := store.Get()
-	cmd.Env = e.buildEnvironment(fullCtx.RunID, step.Name, contextFilePath)
+	cmd.Env = e.buildEnvironment(fullCtx.RunID, fullCtx.Trigger.Intent, step.Name, contextFilePath)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -138,11 +139,12 @@ func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeli
 
 // buildEnvironment constructs a clean environment for the script.
 // Only includes PATH, HOME, JERRY_* variables, and JERRY_SECRET_* from config.
-func (e *Executor) buildEnvironment(runID, stepName, contextFilePath string) []string {
+func (e *Executor) buildEnvironment(runID, intent, stepName, contextFilePath string) []string {
 	envVars := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
 		"JERRY_RUN_ID=" + runID,
+		"JERRY_INTENT=" + intent,
 		"JERRY_STEP_NAME=" + stepName,
 		"JERRY_CONTEXT_FILE=" + contextFilePath,
 	}

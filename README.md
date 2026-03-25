@@ -138,8 +138,9 @@ These are starting points. Add your team's conventions to the Markdown body, spl
 | `jerry init` | Scaffold `.jerry/` with agents, pipelines, and config |
 | `jerry init --ci github` | Also generate GitHub Actions workflow |
 | `jerry run <pipeline> [intent]` | Execute a pipeline |
-| `jerry run <pipeline> --dry-run` | Preview without executing |
+| `jerry run <pipeline> --dry-run` | Preview and validate without executing |
 | `jerry run --resume <run-id>` | Resume a failed run from the last checkpoint |
+| `jerry validate [pipeline]` | Validate pipelines and agent definitions |
 | `jerry logs` | Show project overview and recent runs |
 | `jerry logs <run-id>` | Run details with step breakdown |
 | `jerry logs <run-id> --step <name>` | Tool calls for a specific step |
@@ -190,7 +191,6 @@ defaults:
   model: claude-sonnet-4-6
   timeout: 600s
   max_iterations: 50
-  context_window: 200000
 ```
 
 ### Environment Variables

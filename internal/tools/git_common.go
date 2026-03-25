@@ -13,6 +13,7 @@ import (
 const GitCommandTimeout = 30 * time.Second
 
 // runGit executes a git command in the repo root and returns the trimmed output.
+// @lattice:boundary git
 func runGit(ctx context.Context, repoRoot string, args ...string) (string, error) {
 	gitCtx, gitCancel := context.WithTimeout(ctx, GitCommandTimeout)
 	defer gitCancel()

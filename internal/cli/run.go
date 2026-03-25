@@ -106,6 +106,7 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 	}, nil
 }
 
+// @lattice:flow run
 func runPipeline(ctx context.Context, app *App, pipelineName string, triggerData contextstore.TriggerData) error {
 	if app.Loader == nil || app.Engine == nil {
 		return jerrerr.New(jerrerr.CodeJerryDirNotFound,

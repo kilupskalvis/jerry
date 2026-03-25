@@ -37,6 +37,7 @@ func newInitCmd() *cobra.Command {
 	return cmd
 }
 
+// @lattice:flow init
 func runInit(targetPath, ciPlatform string) error {
 	if targetPath == "" {
 		cwd, cwdErr := os.Getwd()
