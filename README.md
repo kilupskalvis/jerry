@@ -10,8 +10,8 @@
 </td></tr></table>
 
 <p align="center">
-<b>The open protocol for composable AI code generation</b><br>
-GitHub Actions brought composability to CI/CD. Jerry brings it to AI-powered software development.
+<b>Orchestrator for composable AI code generation pipelines</b><br>
+Define agents in Markdown, wire them into YAML pipelines, run on any LLM.
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@ AI code generation tools — Devin, SWE-agent, OpenHands, Factory — are monoli
 
 ## The Solution
 
-Jerry defines a protocol and runtime that makes AI code generation composable. Teams define pipelines in YAML, configure agents in Markdown, and compose steps from any source. Swap the analyzer, swap the generator, swap the model — without replacing anything else.
+Jerry orchestrates AI code generation into composable pipelines. Teams define pipelines in YAML, configure agents in Markdown, and compose steps from any source. Swap the analyzer, swap the generator, swap the model — without replacing anything else.
 
 ```yaml
 # .jerry/pipelines/feature.yaml
@@ -44,7 +44,7 @@ steps:
     script: go test ./...             # Run tests
 ```
 
-This is not another AI coding agent. It is the infrastructure layer that agents run on — like GitHub Actions is for CI/CD.
+This is not another AI coding agent. It is the orchestration layer that agents run on — like GitHub Actions is for CI/CD.
 
 ## Installation
 
@@ -243,7 +243,7 @@ Generates a GitLab CI job triggered via the pipeline API or web UI.
 
 ## Runtime Features
 
-- **Context window management**: automatic compaction when conversations exceed the model's context limit — reactive (on API error) and proactive (at 80% of configured limit)
+- **Context window management**: automatic compaction when conversations exceed the model's context limit
 - **Resumable pipelines**: state checkpointed after every step, resume from the failure point with `jerry run --resume <run-id>`
 - **Structured logging**: every LLM call, tool call, and decision logged to JSONL with timestamps and token counts
 - **Output validation**: agent output validated against JSON Schema translated from the simplified frontmatter notation

@@ -14,9 +14,10 @@
 # Plans (local development specs)
 .jerry_plans/
 
-# IDE
+# IDE and tools
 .idea/
 .vscode/
+.claude/
 *.swp
 
 # OS

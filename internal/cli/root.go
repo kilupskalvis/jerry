@@ -30,8 +30,8 @@ func NewRootCmd(app *App) *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:   "jerry",
-		Short: "Jerry — composable AI code generation pipelines",
-		Long:  "Jerry is an open-source protocol and runtime for composable AI code generation pipelines.",
+		Short: "Jerry — orchestrator for composable AI code generation pipelines",
+		Long:  "Jerry is an open-source orchestrator for composable AI code generation pipelines.",
 		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			if verbose {
 				app.Printer.SetVerbosity(output.VerbosityVerbose)
