@@ -12,8 +12,8 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go/option"
 
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/llm"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // anthropicResponse builds a minimal Anthropic API response JSON.
@@ -286,12 +286,12 @@ func TestAnthropicClient_AuthFailure(t *testing.T) {
 		t.Fatal("expected error for 401 response")
 	}
 
-	var motifErr *motifErrors.Error
-	if !errors.As(err, &motifErr) {
-		t.Fatalf("expected motif Error, got %T: %v", err, err)
+	var jerryErr *jerryErrors.Error
+	if !errors.As(err, &jerryErr) {
+		t.Fatalf("expected jerry Error, got %T: %v", err, err)
 	}
-	if motifErr.Code != motifErrors.CodeLLMAuthFailed {
-		t.Errorf("expected code %q, got %q", motifErrors.CodeLLMAuthFailed, motifErr.Code)
+	if jerryErr.Code != jerryErrors.CodeLLMAuthFailed {
+		t.Errorf("expected code %q, got %q", jerryErrors.CodeLLMAuthFailed, jerryErr.Code)
 	}
 }
 

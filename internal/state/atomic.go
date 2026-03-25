@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // AtomicWriteJSON writes data as formatted JSON to the given path atomically.

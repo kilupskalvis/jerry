@@ -1,5 +1,5 @@
 // Package integration contains end-to-end tests that exercise the full
-// Motif pipeline: loading, validation, execution, state persistence,
+// Jerry pipeline: loading, validation, execution, state persistence,
 // context flow, retries, fallbacks, and timeouts.
 //
 // These tests construct real pipeline YAMLs, run the engine with real
@@ -15,23 +15,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/agent"
-	"github.com/kilupskalvis/motif/internal/config"
-	"github.com/kilupskalvis/motif/internal/contextstore"
-	"github.com/kilupskalvis/motif/internal/output"
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/script"
-	"github.com/kilupskalvis/motif/internal/state"
-	"github.com/kilupskalvis/motif/internal/testutil"
-	"github.com/kilupskalvis/motif/internal/tools"
+	"github.com/kilupskalvis/jerry/internal/agent"
+	"github.com/kilupskalvis/jerry/internal/config"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/script"
+	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/testutil"
+	"github.com/kilupskalvis/jerry/internal/tools"
 )
 
 // buildEngine constructs a full engine with real executors for integration testing.
 func buildEngine(t *testing.T, repoRoot string) (*pipeline.Engine, *state.FileStateStore) {
 	t.Helper()
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	runsDir := filepath.Join(motifDir, "runs")
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	runsDir := filepath.Join(jerryDir, "runs")
 	if mkErr := os.MkdirAll(runsDir, 0o755); mkErr != nil {
 		t.Fatalf("failed to create runs dir: %v", mkErr)
 	}
@@ -61,15 +61,15 @@ func (devNull) Write(p []byte) (int, error) { return len(p), nil }
 // --- Tests ---
 
 func TestFullPipeline_Init(t *testing.T) {
-	// Simulate what motif init creates, then validate
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	// Simulate what jerry init creates, then validate
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"example": `name: example
 description: "Example pipeline"
 steps:
   - name: show-trigger
     script: |
       echo "Pipeline triggered"
-      cat "$MOTIF_CONTEXT_FILE"
+      cat "$JERRY_CONTEXT_FILE"
   - name: list-files
     script: ls -la
   - name: check-status
@@ -79,8 +79,8 @@ steps:
 `,
 	})
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 
 	// Validate should pass
 	p, loadErr := loader.Load("example")
@@ -96,11 +96,11 @@ steps:
 }
 
 func TestFullPipeline_RunExample(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"example": `name: example
 steps:
   - name: greet
-    script: echo "hello motif"
+    script: echo "hello jerry"
   - name: status
     script: |
       echo '{"status": "ok"}'
@@ -116,8 +116,8 @@ steps:
 	}
 
 	runCtx := context.Background()
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("example")
 
 	runState, runErr := engine.Run(runCtx, *p, trigger)
@@ -138,7 +138,7 @@ steps:
 	}
 
 	// Verify state files exist
-	runsDir := filepath.Join(motifDir, "runs")
+	runsDir := filepath.Join(jerryDir, "runs")
 	entries, _ := os.ReadDir(runsDir)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 run directory, got %d", len(entries))
@@ -164,7 +164,7 @@ steps:
 
 func TestFullPipeline_ContextFlow(t *testing.T) {
 	// Step 1 produces JSON output, step 2 reads it from context file
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"flow": `name: flow
 steps:
   - name: produce
@@ -173,7 +173,7 @@ steps:
     output_key: step_one_data
   - name: consume
     script: |
-      cat "$MOTIF_CONTEXT_FILE"
+      cat "$JERRY_CONTEXT_FILE"
     output_key: step_two_data
 `,
 	})
@@ -181,8 +181,8 @@ steps:
 	engine, _ := buildEngine(t, repoRoot)
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("flow")
 
 	runState, runErr := engine.Run(context.Background(), *p, trigger)
@@ -205,7 +205,7 @@ steps:
 	}
 
 	// Step 2's output should contain the context with step_one_data in it
-	// (it ran cat $MOTIF_CONTEXT_FILE which includes step_one_data)
+	// (it ran cat $JERRY_CONTEXT_FILE which includes step_one_data)
 	stepTwoData, ok := runState.Context.Data["step_two_data"]
 	if !ok {
 		t.Fatal("context should contain 'step_two_data'")
@@ -228,13 +228,13 @@ steps:
 }
 
 func TestFullPipeline_RetryThenSucceed(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, nil)
+	repoRoot := testutil.SetupTestJerryDir(t, nil)
 
 	// Create a counter file to track attempts
 	counterFile := filepath.Join(repoRoot, "attempt_counter")
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	testutil.WritePipeline(t, motifDir, "retry", `name: retry
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	testutil.WritePipeline(t, jerryDir, "retry", `name: retry
 steps:
   - name: flaky
     script: |
@@ -255,7 +255,7 @@ steps:
 
 	engine, _ := buildEngine(t, repoRoot)
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	loader := pipeline.NewLoader(motifDir)
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("retry")
 
 	runState, runErr := engine.Run(context.Background(), *p, trigger)
@@ -284,11 +284,11 @@ steps:
 }
 
 func TestFullPipeline_FallbackOnFailure(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, nil)
+	repoRoot := testutil.SetupTestJerryDir(t, nil)
 	fallbackMarker := filepath.Join(repoRoot, "fallback_ran")
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	testutil.WritePipeline(t, motifDir, "fallback", `name: fallback
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	testutil.WritePipeline(t, jerryDir, "fallback", `name: fallback
 steps:
   - name: risky
     script: exit 1
@@ -298,7 +298,7 @@ steps:
 
 	engine, _ := buildEngine(t, repoRoot)
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	loader := pipeline.NewLoader(motifDir)
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("fallback")
 
 	runState, runErr := engine.Run(context.Background(), *p, trigger)
@@ -318,10 +318,10 @@ steps:
 }
 
 func TestFullPipeline_TimeoutKillsScript(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, nil)
+	repoRoot := testutil.SetupTestJerryDir(t, nil)
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	testutil.WritePipeline(t, motifDir, "timeout", `name: timeout
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	testutil.WritePipeline(t, jerryDir, "timeout", `name: timeout
 steps:
   - name: slow
     script: sleep 3600
@@ -330,7 +330,7 @@ steps:
 
 	engine, _ := buildEngine(t, repoRoot)
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	loader := pipeline.NewLoader(motifDir)
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("timeout")
 
 	start := time.Now()
@@ -356,7 +356,7 @@ steps:
 }
 
 func TestFullPipeline_StateFilesWritten(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"stateful": `name: stateful
 steps:
   - name: one
@@ -372,8 +372,8 @@ steps:
 
 	engine, stateStore := buildEngine(t, repoRoot)
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("stateful")
 
 	runState, runErr := engine.Run(context.Background(), *p, trigger)
@@ -382,7 +382,7 @@ steps:
 	}
 
 	// Verify state.json exists and is valid
-	runDir := filepath.Join(motifDir, "runs", runState.RunID)
+	runDir := filepath.Join(jerryDir, "runs", runState.RunID)
 	stateContent, readErr := os.ReadFile(filepath.Join(runDir, "state.json"))
 	if readErr != nil {
 		t.Fatalf("failed to read state.json: %v", readErr)
@@ -428,15 +428,15 @@ steps:
 }
 
 func TestFullPipeline_ValidateDetectsErrors(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"broken": `steps:
   - name: s
     script: echo hi
 `,
 	})
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 
 	_, loadErr := loader.Load("broken")
 	if loadErr == nil {
@@ -448,11 +448,11 @@ func TestFullPipeline_ValidateDetectsErrors(t *testing.T) {
 }
 
 func TestFullPipeline_AgentStepFailsWithoutAPIKey(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, nil)
+	repoRoot := testutil.SetupTestJerryDir(t, nil)
 
 	// Create a dummy agent file so validation passes
-	motifDir := filepath.Join(repoRoot, ".motif")
-	agentsDir := filepath.Join(motifDir, "agents")
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	agentsDir := filepath.Join(jerryDir, "agents")
 	os.MkdirAll(agentsDir, 0o755)
 	agentPath := filepath.Join(agentsDir, "dummy.md")
 	os.WriteFile(agentPath, []byte(`---
@@ -470,7 +470,7 @@ output_schema:
 This is a test agent.
 `), 0o644)
 
-	testutil.WritePipeline(t, motifDir, "mixed", `name: mixed
+	testutil.WritePipeline(t, jerryDir, "mixed", `name: mixed
 steps:
   - name: agent-step
     agent: ./agents/dummy.md
@@ -480,7 +480,7 @@ steps:
 
 	engine, _ := buildEngine(t, repoRoot)
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	loader := pipeline.NewLoader(motifDir)
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("mixed")
 
 	// Without an API key, agent steps should fail (not skip).
@@ -494,11 +494,11 @@ steps:
 }
 
 func TestFullPipeline_IntentPassedToContext(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"intent": `name: intent
 steps:
   - name: check
-    script: cat "$MOTIF_CONTEXT_FILE"
+    script: cat "$JERRY_CONTEXT_FILE"
 `,
 	})
 
@@ -509,8 +509,8 @@ steps:
 		Intent: "add notification preferences",
 	}
 
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("intent")
 
 	runState, runErr := engine.Run(context.Background(), *p, trigger)
@@ -532,7 +532,7 @@ steps:
 }
 
 func TestFullPipeline_MultipleOutputKeys(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"multi": `name: multi
 steps:
   - name: alpha
@@ -552,8 +552,8 @@ steps:
 
 	engine, _ := buildEngine(t, repoRoot)
 	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 	p, _ := loader.Load("multi")
 
 	runState, runErr := engine.Run(context.Background(), *p, trigger)

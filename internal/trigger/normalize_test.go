@@ -16,7 +16,7 @@ func TestNormalizeGitHub_IssueOpened(t *testing.T) {
 			"user":     map[string]any{"login": "testuser"},
 			"labels": []any{
 				map[string]any{"name": "feature"},
-				map[string]any{"name": "motif"},
+				map[string]any{"name": "jerry"},
 			},
 		},
 	}

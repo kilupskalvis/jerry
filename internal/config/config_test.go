@@ -6,33 +6,33 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/config"
+	"github.com/kilupskalvis/jerry/internal/config"
 )
 
-func TestFindMotifDir_Found(t *testing.T) {
+func TestFindJerryDir_Found(t *testing.T) {
 	tmpDir := t.TempDir()
-	motifDir := filepath.Join(tmpDir, ".motif")
-	if err := os.Mkdir(motifDir, 0o755); err != nil {
-		t.Fatalf("failed to create .motif dir: %v", err)
+	jerryDir := filepath.Join(tmpDir, ".jerry")
+	if err := os.Mkdir(jerryDir, 0o755); err != nil {
+		t.Fatalf("failed to create .jerry dir: %v", err)
 	}
 
-	foundMotifDir, foundRepoRoot, err := config.FindMotifDir(tmpDir)
+	foundJerryDir, foundRepoRoot, err := config.FindJerryDir(tmpDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if foundMotifDir != motifDir {
-		t.Errorf("motifDir = %q, want %q", foundMotifDir, motifDir)
+	if foundJerryDir != jerryDir {
+		t.Errorf("jerryDir = %q, want %q", foundJerryDir, jerryDir)
 	}
 	if foundRepoRoot != tmpDir {
 		t.Errorf("repoRoot = %q, want %q", foundRepoRoot, tmpDir)
 	}
 }
 
-func TestFindMotifDir_FoundInParent(t *testing.T) {
+func TestFindJerryDir_FoundInParent(t *testing.T) {
 	tmpDir := t.TempDir()
-	motifDir := filepath.Join(tmpDir, ".motif")
-	if err := os.Mkdir(motifDir, 0o755); err != nil {
-		t.Fatalf("failed to create .motif dir: %v", err)
+	jerryDir := filepath.Join(tmpDir, ".jerry")
+	if err := os.Mkdir(jerryDir, 0o755); err != nil {
+		t.Fatalf("failed to create .jerry dir: %v", err)
 	}
 
 	// Create nested subdirectories
@@ -41,57 +41,57 @@ func TestFindMotifDir_FoundInParent(t *testing.T) {
 		t.Fatalf("failed to create nested dirs: %v", err)
 	}
 
-	foundMotifDir, foundRepoRoot, err := config.FindMotifDir(nested)
+	foundJerryDir, foundRepoRoot, err := config.FindJerryDir(nested)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if foundMotifDir != motifDir {
-		t.Errorf("motifDir = %q, want %q", foundMotifDir, motifDir)
+	if foundJerryDir != jerryDir {
+		t.Errorf("jerryDir = %q, want %q", foundJerryDir, jerryDir)
 	}
 	if foundRepoRoot != tmpDir {
 		t.Errorf("repoRoot = %q, want %q", foundRepoRoot, tmpDir)
 	}
 }
 
-func TestFindMotifDir_NotFound(t *testing.T) {
+func TestFindJerryDir_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	_, _, err := config.FindMotifDir(tmpDir)
+	_, _, err := config.FindJerryDir(tmpDir)
 	if err == nil {
-		t.Fatal("expected error when .motif/ does not exist")
+		t.Fatal("expected error when .jerry/ does not exist")
 	}
 }
 
-func TestFindMotifDir_ReturnsAbsolutePaths(t *testing.T) {
+func TestFindJerryDir_ReturnsAbsolutePaths(t *testing.T) {
 	tmpDir := t.TempDir()
-	motifDir := filepath.Join(tmpDir, ".motif")
-	if err := os.Mkdir(motifDir, 0o755); err != nil {
-		t.Fatalf("failed to create .motif dir: %v", err)
+	jerryDir := filepath.Join(tmpDir, ".jerry")
+	if err := os.Mkdir(jerryDir, 0o755); err != nil {
+		t.Fatalf("failed to create .jerry dir: %v", err)
 	}
 
-	foundMotifDir, foundRepoRoot, err := config.FindMotifDir(tmpDir)
+	foundJerryDir, foundRepoRoot, err := config.FindJerryDir(tmpDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !filepath.IsAbs(foundMotifDir) {
-		t.Errorf("motifDir %q is not absolute", foundMotifDir)
+	if !filepath.IsAbs(foundJerryDir) {
+		t.Errorf("jerryDir %q is not absolute", foundJerryDir)
 	}
 	if !filepath.IsAbs(foundRepoRoot) {
 		t.Errorf("repoRoot %q is not absolute", foundRepoRoot)
 	}
 }
 
-func TestFindMotifDir_IgnoresFile(t *testing.T) {
+func TestFindJerryDir_IgnoresFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	// Create .motif as a file, not a directory
-	motifFile := filepath.Join(tmpDir, ".motif")
-	if err := os.WriteFile(motifFile, []byte("not a directory"), 0o644); err != nil {
-		t.Fatalf("failed to create .motif file: %v", err)
+	// Create .jerry as a file, not a directory
+	jerryFile := filepath.Join(tmpDir, ".jerry")
+	if err := os.WriteFile(jerryFile, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("failed to create .jerry file: %v", err)
 	}
 
-	_, _, err := config.FindMotifDir(tmpDir)
+	_, _, err := config.FindJerryDir(tmpDir)
 	if err == nil {
-		t.Fatal("expected error when .motif is a file, not a directory")
+		t.Fatal("expected error when .jerry is a file, not a directory")
 	}
 }
 

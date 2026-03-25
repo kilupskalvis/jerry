@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/agent"
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/agent"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 func TestParseOutput_ValidJSON(t *testing.T) {
@@ -46,12 +46,12 @@ func TestParseOutput_InvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 
-	var motifErr *motifErrors.Error
-	if !errors.As(err, &motifErr) {
-		t.Fatalf("expected motif Error, got %T", err)
+	var jerryErr *jerryErrors.Error
+	if !errors.As(err, &jerryErr) {
+		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if motifErr.Code != motifErrors.CodeInvalidOutputJSON {
-		t.Errorf("expected code %q, got %q", motifErrors.CodeInvalidOutputJSON, motifErr.Code)
+	if jerryErr.Code != jerryErrors.CodeInvalidOutputJSON {
+		t.Errorf("expected code %q, got %q", jerryErrors.CodeInvalidOutputJSON, jerryErr.Code)
 	}
 }
 
@@ -81,15 +81,15 @@ func TestParseOutput_SchemaMismatch(t *testing.T) {
 		t.Fatal("expected error for missing schema key")
 	}
 
-	var motifErr *motifErrors.Error
-	if !errors.As(err, &motifErr) {
-		t.Fatalf("expected motif Error, got %T", err)
+	var jerryErr *jerryErrors.Error
+	if !errors.As(err, &jerryErr) {
+		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if motifErr.Code != motifErrors.CodeOutputSchemaViolation {
-		t.Errorf("expected code %q, got %q", motifErrors.CodeOutputSchemaViolation, motifErr.Code)
+	if jerryErr.Code != jerryErrors.CodeOutputSchemaViolation {
+		t.Errorf("expected code %q, got %q", jerryErrors.CodeOutputSchemaViolation, jerryErr.Code)
 	}
-	if !strings.Contains(motifErr.Message, "items") {
-		t.Errorf("error should mention missing key 'items', got: %s", motifErr.Message)
+	if !strings.Contains(jerryErr.Message, "items") {
+		t.Errorf("error should mention missing key 'items', got: %s", jerryErr.Message)
 	}
 }
 
@@ -109,12 +109,12 @@ func TestParseOutput_ArrayNotObject(t *testing.T) {
 		t.Fatal("expected error for array output")
 	}
 
-	var motifErr *motifErrors.Error
-	if !errors.As(err, &motifErr) {
-		t.Fatalf("expected motif Error, got %T", err)
+	var jerryErr *jerryErrors.Error
+	if !errors.As(err, &jerryErr) {
+		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if motifErr.Code != motifErrors.CodeInvalidOutputJSON {
-		t.Errorf("expected code %q, got %q", motifErrors.CodeInvalidOutputJSON, motifErr.Code)
+	if jerryErr.Code != jerryErrors.CodeInvalidOutputJSON {
+		t.Errorf("expected code %q, got %q", jerryErrors.CodeInvalidOutputJSON, jerryErr.Code)
 	}
 }
 
@@ -127,12 +127,12 @@ func TestParseOutput_FullSchemaValidation_WrongType(t *testing.T) {
 		t.Fatal("expected schema violation error for wrong type")
 	}
 
-	var motifErr *motifErrors.Error
-	if !errors.As(err, &motifErr) {
-		t.Fatalf("expected motif Error, got %T", err)
+	var jerryErr *jerryErrors.Error
+	if !errors.As(err, &jerryErr) {
+		t.Fatalf("expected jerry Error, got %T", err)
 	}
-	if motifErr.Code != motifErrors.CodeOutputSchemaViolation {
-		t.Errorf("code = %q, want %q", motifErr.Code, motifErrors.CodeOutputSchemaViolation)
+	if jerryErr.Code != jerryErrors.CodeOutputSchemaViolation {
+		t.Errorf("code = %q, want %q", jerryErr.Code, jerryErrors.CodeOutputSchemaViolation)
 	}
 }
 

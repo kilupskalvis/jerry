@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxFileReadSize is the maximum bytes read from a single file.

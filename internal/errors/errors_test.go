@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/errors"
 )
 
 func TestNew(t *testing.T) {

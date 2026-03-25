@@ -1,4 +1,4 @@
-// Command motif is the Motif CLI — a runtime for composable AI code generation pipelines.
+// Command jerry is the Jerry CLI — a runtime for composable AI code generation pipelines.
 package main
 
 import (
@@ -11,15 +11,15 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/kilupskalvis/motif/internal/agent"
-	"github.com/kilupskalvis/motif/internal/cli"
-	"github.com/kilupskalvis/motif/internal/config"
-	"github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/output"
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/script"
-	"github.com/kilupskalvis/motif/internal/state"
-	"github.com/kilupskalvis/motif/internal/tools"
+	"github.com/kilupskalvis/jerry/internal/agent"
+	"github.com/kilupskalvis/jerry/internal/cli"
+	"github.com/kilupskalvis/jerry/internal/config"
+	"github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/script"
+	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/tools"
 )
 
 func main() {
@@ -36,12 +36,12 @@ func run() int {
 	rootCmd := cli.NewRootCmd(app)
 
 	if execErr := rootCmd.ExecuteContext(signalCtx); execErr != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "motif: error: %s\n", execErr.Error())
+		_, _ = fmt.Fprintf(os.Stderr, "jerry: error: %s\n", execErr.Error())
 
-		var motifErr *errors.Error
-		if stderrors.As(execErr, &motifErr) {
-			switch motifErr.Code {
-			case errors.CodeMotifDirNotFound:
+		var jerryErr *errors.Error
+		if stderrors.As(execErr, &jerryErr) {
+			switch jerryErr.Code {
+			case errors.CodeJerryDirNotFound:
 				return 2
 			case errors.CodeRunNotFound, errors.CodeRunNotResumable, errors.CodePipelineChanged:
 				return 4
@@ -63,13 +63,13 @@ func buildApp(printer *output.Printer) *cli.App {
 		return app
 	}
 
-	motifDir, repoRoot, findErr := config.FindMotifDir(cwd)
+	jerryDir, repoRoot, findErr := config.FindJerryDir(cwd)
 	if findErr != nil {
 		return app
 	}
 
-	// Load .motif/config.yaml.
-	fileConfig, cfgErr := config.LoadFileConfig(motifDir, "config.yaml")
+	// Load .jerry/config.yaml.
+	fileConfig, cfgErr := config.LoadFileConfig(jerryDir, "config.yaml")
 	if cfgErr != nil {
 		printer.Warning("failed to load config.yaml: %s", cfgErr)
 		fileConfig = &config.FileConfig{}
@@ -91,7 +91,7 @@ func buildApp(printer *output.Printer) *cli.App {
 	}
 
 	// Resolve default model: env var → config.yaml.
-	defaultModel := os.Getenv("MOTIF_DEFAULT_MODEL")
+	defaultModel := os.Getenv("JERRY_DEFAULT_MODEL")
 	if defaultModel == "" {
 		defaultModel = fileConfig.Defaults.Model
 	}
@@ -103,7 +103,7 @@ func buildApp(printer *output.Printer) *cli.App {
 	}
 
 	cfg := config.Config{
-		MotifDir:           motifDir,
+		JerryDir:           jerryDir,
 		RepoRoot:           repoRoot,
 		Env:                secretEnv,
 		DefaultStepTimeout: defaultTimeout,
@@ -111,8 +111,8 @@ func buildApp(printer *output.Printer) *cli.App {
 		FileConfig:         fileConfig,
 	}
 
-	loader := pipeline.NewLoader(motifDir)
-	runsDir := filepath.Join(motifDir, "runs")
+	loader := pipeline.NewLoader(jerryDir)
+	runsDir := filepath.Join(jerryDir, "runs")
 	stateStore := state.NewFileStateStore(runsDir)
 	scriptExec := script.NewExecutor(cfg.RepoRoot, cfg.Env)
 
@@ -150,12 +150,12 @@ func resolveKey(envVar string, dotEnv map[string]string) string {
 	return dotEnv[envVar]
 }
 
-// collectSecretEnv collects environment variables with the MOTIF_SECRET_ prefix.
+// collectSecretEnv collects environment variables with the JERRY_SECRET_ prefix.
 func collectSecretEnv() map[string]string {
 	env := make(map[string]string)
 	for _, entry := range os.Environ() {
 		key, val, found := strings.Cut(entry, "=")
-		if found && strings.HasPrefix(key, "MOTIF_SECRET_") {
+		if found && strings.HasPrefix(key, "JERRY_SECRET_") {
 			env[key] = val
 		}
 	}

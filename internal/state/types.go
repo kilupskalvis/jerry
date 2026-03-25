@@ -5,7 +5,7 @@ package state
 import (
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
 
 // RunStatus represents the current state of a pipeline run.

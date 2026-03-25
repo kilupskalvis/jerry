@@ -1,5 +1,5 @@
 ---
-name: motif-code-generator
+name: jerry-code-generator
 model: claude-sonnet-4-6
 temperature: 0
 max_iterations: 50

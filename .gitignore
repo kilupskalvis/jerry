@@ -1,9 +1,18 @@
 # Build artifacts (binary at repo root)
-/motif
-/motif-*
+/jerry
+/jerry-*
+
+# Secrets
+.env
+
+# Local Jerry project (created by jerry init for testing)
+.jerry/
+
+# Lattice
+.lattice/
 
 # Plans (local development specs)
-.motif_plans/
+.jerry_plans/
 
 # IDE
 .idea/

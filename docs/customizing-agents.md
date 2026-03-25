@@ -1,14 +1,14 @@
-# Customizing Motif Agents
+# Customizing Jerry Agents
 
-Motif ships with three core agents (context, plan, generate) that work out of the box. This guide explains how to adapt them for your team's codebase and conventions.
+Jerry ships with three core agents (context, plan, generate) that work out of the box. This guide explains how to adapt them for your team's codebase and conventions.
 
 ## Getting Started
 
-Run `motif init` to scaffold the core agents into `.motif/agents/`. Then customize them in place — they're just markdown files.
+Run `jerry init` to scaffold the core agents into `.jerry/agents/`. Then customize them in place — they're just markdown files.
 
 ## Adding Project Conventions
 
-The most impactful customization is adding your team's coding standards to the generate agent. Append a section to `.motif/agents/generate.md`:
+The most impactful customization is adding your team's coding standards to the generate agent. Append a section to `.jerry/agents/generate.md`:
 
 ```markdown
 ## Project Conventions
@@ -73,7 +73,7 @@ For simple tasks, use a faster model to save cost:
 model: claude-haiku-4-5
 ```
 
-You can also set defaults in `.motif/config.yaml` so you don't repeat model settings in every agent:
+You can also set defaults in `.jerry/config.yaml` so you don't repeat model settings in every agent:
 
 ```yaml
 defaults:
@@ -137,7 +137,7 @@ The `feature.yaml` pipeline is a starting point. Create additional pipelines for
 - `refactor.yaml` — deeper context analysis, no new features, focus on code quality
 - `test.yaml` — analyze untested code, generate test files only
 
-Each pipeline is a YAML file in `.motif/pipelines/`.
+Each pipeline is a YAML file in `.jerry/pipelines/`.
 
 ## Tips
 

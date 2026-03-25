@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 const (
@@ -32,8 +32,8 @@ var skipDirs = map[string]bool{
 
 // skipPaths lists path prefixes excluded from search (checked with HasPrefix).
 var skipPaths = []string{
-	".motif" + string(filepath.Separator) + "runs",
-	".motif" + string(filepath.Separator) + "cache",
+	".jerry" + string(filepath.Separator) + "runs",
+	".jerry" + string(filepath.Separator) + "cache",
 }
 
 // NewSearchTool creates a search_codebase tool bound to the given repo root.

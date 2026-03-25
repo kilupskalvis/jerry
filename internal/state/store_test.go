@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
-	"github.com/kilupskalvis/motif/internal/state"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/state"
 )
 
 func newTestRunState(runID string) state.RunState {
@@ -17,7 +17,7 @@ func newTestRunState(runID string) state.RunState {
 	return state.RunState{
 		RunID:        runID,
 		PipelineName: "test-pipeline",
-		PipelineFile: ".motif/pipelines/test.yaml",
+		PipelineFile: ".jerry/pipelines/test.yaml",
 		Status:       state.StatusRunning,
 		StartedAt:    now,
 		CurrentStep:  0,

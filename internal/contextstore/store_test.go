@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
 
 func newTestStore() *contextstore.Store {

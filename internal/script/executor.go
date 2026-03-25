@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
 )
 
 // GracePeriod is the time to wait after SIGTERM before sending SIGKILL.
@@ -148,19 +148,19 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 }
 
 // buildEnvironment constructs a clean environment for the script.
-// Only includes PATH, HOME, MOTIF_* variables, and MOTIF_SECRET_* from config.
+// Only includes PATH, HOME, JERRY_* variables, and JERRY_SECRET_* from config.
 func (e *Executor) buildEnvironment(runID, stepName, contextFilePath string) []string {
 	envVars := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
-		"MOTIF_RUN_ID=" + runID,
-		"MOTIF_STEP_NAME=" + stepName,
-		"MOTIF_CONTEXT_FILE=" + contextFilePath,
+		"JERRY_RUN_ID=" + runID,
+		"JERRY_STEP_NAME=" + stepName,
+		"JERRY_CONTEXT_FILE=" + contextFilePath,
 	}
 
-	// Add MOTIF_SECRET_* vars from config
+	// Add JERRY_SECRET_* vars from config
 	for key, value := range e.env {
-		if strings.HasPrefix(key, "MOTIF_SECRET_") {
+		if strings.HasPrefix(key, "JERRY_SECRET_") {
 			envVars = append(envVars, key+"="+value)
 		}
 	}

@@ -1,0 +1,8 @@
+[project]
+languages = ["go"]
+root = "."
+exclude = ["node_modules", "venv", ".git", "dist", "__pycache__", ".lattice"]
+
+[lint]
+strict = false
+ignore = []

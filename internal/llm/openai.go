@@ -14,7 +14,7 @@ import (
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/shared"
 
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // Compile-time assertion that OpenAIClient implements Client.
@@ -183,24 +183,24 @@ func (c *OpenAIClient) translateError(err error) error {
 					Message: fmt.Sprintf("OpenAI: context too long: %s", apiErr.Message),
 				}
 			}
-			return motifErrors.New(motifErrors.CodeLLMCallFailed,
+			return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
 				fmt.Sprintf("OpenAI API error (HTTP 400): %s", apiErr.Message))
 		case http.StatusUnauthorized:
-			return motifErrors.New(motifErrors.CodeLLMAuthFailed,
+			return jerryErrors.New(jerryErrors.CodeLLMAuthFailed,
 				"OpenAI API authentication failed — check OPENAI_API_KEY")
 		case http.StatusTooManyRequests:
-			return motifErrors.New(motifErrors.CodeLLMRateLimited,
+			return jerryErrors.New(jerryErrors.CodeLLMRateLimited,
 				"OpenAI API rate limited after SDK retries exhausted")
 		default:
 			if apiErr.StatusCode >= 500 {
-				return motifErrors.New(motifErrors.CodeLLMServerError,
+				return jerryErrors.New(jerryErrors.CodeLLMServerError,
 					fmt.Sprintf("OpenAI API server error (HTTP %d)", apiErr.StatusCode))
 			}
-			return motifErrors.New(motifErrors.CodeLLMCallFailed,
+			return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
 				fmt.Sprintf("OpenAI API error (HTTP %d): %s", apiErr.StatusCode, apiErr.Message))
 		}
 	}
 
-	return motifErrors.New(motifErrors.CodeLLMCallFailed,
+	return jerryErrors.New(jerryErrors.CodeLLMCallFailed,
 		fmt.Sprintf("OpenAI call failed: %s", err.Error()))
 }

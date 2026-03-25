@@ -10,7 +10,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // ParseOutput attempts to extract structured data from the agent's final response.
@@ -19,13 +19,13 @@ import (
 func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error) {
 	parsed, err := extractJSON(rawOutput)
 	if err != nil {
-		return nil, motifErrors.New(motifErrors.CodeInvalidOutputJSON,
+		return nil, jerryErrors.New(jerryErrors.CodeInvalidOutputJSON,
 			fmt.Sprintf("agent output is not valid JSON: %s", err))
 	}
 
 	result, ok := parsed.(map[string]any)
 	if !ok {
-		return nil, motifErrors.New(motifErrors.CodeInvalidOutputJSON,
+		return nil, jerryErrors.New(jerryErrors.CodeInvalidOutputJSON,
 			"agent output must be a JSON object, not an array or scalar")
 	}
 
@@ -44,36 +44,36 @@ func ParseOutput(rawOutput string, schema map[string]any) (map[string]any, error
 func validateAgainstSchema(value, simplifiedSchema map[string]any) error {
 	jsonSchema, translateErr := TranslateSchema(simplifiedSchema)
 	if translateErr != nil {
-		fmt.Fprintf(os.Stderr, "motif: warning: schema translation failed (%s), falling back to key checking\n", translateErr)
+		fmt.Fprintf(os.Stderr, "jerry: warning: schema translation failed (%s), falling back to key checking\n", translateErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	schemaJSON, marshalErr := json.Marshal(jsonSchema)
 	if marshalErr != nil {
-		fmt.Fprintf(os.Stderr, "motif: warning: schema marshal failed (%s), falling back to key checking\n", marshalErr)
+		fmt.Fprintf(os.Stderr, "jerry: warning: schema marshal failed (%s), falling back to key checking\n", marshalErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	compiled, compileErr := jsonschema.UnmarshalJSON(strings.NewReader(string(schemaJSON)))
 	if compileErr != nil {
-		fmt.Fprintf(os.Stderr, "motif: warning: schema compilation failed (%s), falling back to key checking\n", compileErr)
+		fmt.Fprintf(os.Stderr, "jerry: warning: schema compilation failed (%s), falling back to key checking\n", compileErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	compiler := jsonschema.NewCompiler()
 	if addErr := compiler.AddResource("schema.json", compiled); addErr != nil {
-		fmt.Fprintf(os.Stderr, "motif: warning: schema resource failed (%s), falling back to key checking\n", addErr)
+		fmt.Fprintf(os.Stderr, "jerry: warning: schema resource failed (%s), falling back to key checking\n", addErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	schema, schemaErr := compiler.Compile("schema.json")
 	if schemaErr != nil {
-		fmt.Fprintf(os.Stderr, "motif: warning: schema compile failed (%s), falling back to key checking\n", schemaErr)
+		fmt.Fprintf(os.Stderr, "jerry: warning: schema compile failed (%s), falling back to key checking\n", schemaErr)
 		return validateTopLevelKeys(value, simplifiedSchema)
 	}
 
 	if validErr := schema.Validate(value); validErr != nil {
-		return motifErrors.New(motifErrors.CodeOutputSchemaViolation,
+		return jerryErrors.New(jerryErrors.CodeOutputSchemaViolation,
 			fmt.Sprintf("agent output does not match schema: %s", validErr))
 	}
 
@@ -91,7 +91,7 @@ func validateTopLevelKeys(result, schema map[string]any) error {
 	}
 
 	if len(missing) > 0 {
-		return motifErrors.New(motifErrors.CodeOutputSchemaViolation,
+		return jerryErrors.New(jerryErrors.CodeOutputSchemaViolation,
 			fmt.Sprintf("agent output missing required keys: %s", strings.Join(missing, ", ")))
 	}
 

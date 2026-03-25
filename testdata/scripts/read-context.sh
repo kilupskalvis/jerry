@@ -1,2 +1,2 @@
 #!/bin/sh
-cat "$MOTIF_CONTEXT_FILE"
+cat "$JERRY_CONTEXT_FILE"

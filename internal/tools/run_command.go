@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 const (

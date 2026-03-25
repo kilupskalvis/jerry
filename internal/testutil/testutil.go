@@ -1,4 +1,4 @@
-// Package testutil provides test helpers for creating temporary Motif
+// Package testutil provides test helpers for creating temporary Jerry
 // directory structures and test fixtures.
 package testutil
 
@@ -8,18 +8,18 @@ import (
 	"testing"
 )
 
-// SetupTestMotifDir creates a temporary directory with a .motif/ structure
+// SetupTestJerryDir creates a temporary directory with a .jerry/ structure
 // containing the given pipelines. Pipeline names are keys, YAML content is values.
 // Uses t.TempDir() for automatic cleanup.
-func SetupTestMotifDir(t *testing.T, pipelines map[string]string) string {
+func SetupTestJerryDir(t *testing.T, pipelines map[string]string) string {
 	t.Helper()
 
 	tmpDir := t.TempDir()
-	motifDir := filepath.Join(tmpDir, ".motif")
-	pipelinesDir := filepath.Join(motifDir, "pipelines")
-	agentsDir := filepath.Join(motifDir, "agents")
-	scriptsDir := filepath.Join(motifDir, "scripts")
-	runsDir := filepath.Join(motifDir, "runs")
+	jerryDir := filepath.Join(tmpDir, ".jerry")
+	pipelinesDir := filepath.Join(jerryDir, "pipelines")
+	agentsDir := filepath.Join(jerryDir, "agents")
+	scriptsDir := filepath.Join(jerryDir, "scripts")
+	runsDir := filepath.Join(jerryDir, "runs")
 
 	for _, dir := range []string{pipelinesDir, agentsDir, scriptsDir, runsDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -28,17 +28,17 @@ func SetupTestMotifDir(t *testing.T, pipelines map[string]string) string {
 	}
 
 	for name, content := range pipelines {
-		WritePipeline(t, motifDir, name, content)
+		WritePipeline(t, jerryDir, name, content)
 	}
 
 	return tmpDir
 }
 
-// WritePipeline writes a pipeline YAML file to the given .motif/pipelines/ directory.
-func WritePipeline(t *testing.T, motifDir, name, content string) {
+// WritePipeline writes a pipeline YAML file to the given .jerry/pipelines/ directory.
+func WritePipeline(t *testing.T, jerryDir, name, content string) {
 	t.Helper()
 
-	pipelinesDir := filepath.Join(motifDir, "pipelines")
+	pipelinesDir := filepath.Join(jerryDir, "pipelines")
 	if err := os.MkdirAll(pipelinesDir, 0o755); err != nil {
 		t.Fatalf("failed to create pipelines dir: %v", err)
 	}

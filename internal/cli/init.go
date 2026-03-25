@@ -1,4 +1,4 @@
-// motif init: scaffolds a .motif/ directory with example pipeline, core agents, and scripts.
+// jerry init: scaffolds a .jerry/ directory with example pipeline, core agents, and scripts.
 
 package cli
 
@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/errors"
 )
 
 //go:embed agents/plan.md agents/generate.md agents/feature.yaml agents/github-pr.sh agents/github-workflow.yml agents/gitlab-ci.yml
@@ -24,8 +24,8 @@ func newInitCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Initialize a new .motif/ directory",
-		Long:  "Scaffolds a .motif/ directory with an example pipeline, core agents, scripts, and configuration.",
+		Short: "Initialize a new .jerry/ directory",
+		Long:  "Scaffolds a .jerry/ directory with an example pipeline, core agents, scripts, and configuration.",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runInit(targetPath, ciPlatform)
 		},
@@ -41,25 +41,25 @@ func runInit(targetPath, ciPlatform string) error {
 	if targetPath == "" {
 		cwd, cwdErr := os.Getwd()
 		if cwdErr != nil {
-			return errors.Wrap(errors.CodeMotifDirNotFound, "failed to get current directory", cwdErr)
+			return errors.Wrap(errors.CodeJerryDirNotFound, "failed to get current directory", cwdErr)
 		}
 		targetPath = cwd
 	}
 
-	motifDir := filepath.Join(targetPath, ".motif")
+	jerryDir := filepath.Join(targetPath, ".jerry")
 
-	if info, statErr := os.Stat(motifDir); statErr == nil && info.IsDir() {
-		return errors.New(errors.CodeMotifDirExists,
-			fmt.Sprintf("Motif is already initialized in %s", targetPath))
+	if info, statErr := os.Stat(jerryDir); statErr == nil && info.IsDir() {
+		return errors.New(errors.CodeJerryDirExists,
+			fmt.Sprintf("Jerry is already initialized in %s", targetPath))
 	}
 
 	// Create directory structure.
 	dirs := []string{
-		filepath.Join(motifDir, "pipelines"),
-		filepath.Join(motifDir, "agents"),
-		filepath.Join(motifDir, "scripts"),
-		filepath.Join(motifDir, "runs"),
-		filepath.Join(motifDir, "cache"),
+		filepath.Join(jerryDir, "pipelines"),
+		filepath.Join(jerryDir, "agents"),
+		filepath.Join(jerryDir, "scripts"),
+		filepath.Join(jerryDir, "runs"),
+		filepath.Join(jerryDir, "cache"),
 	}
 	for _, dir := range dirs {
 		if mkdirErr := os.MkdirAll(dir, 0o755); mkdirErr != nil {
@@ -70,10 +70,10 @@ func runInit(targetPath, ciPlatform string) error {
 
 	// Write static template files.
 	staticFiles := map[string]string{
-		filepath.Join(motifDir, "pipelines", "example.yaml"):  examplePipelineYAML,
-		filepath.Join(motifDir, "scripts", "echo-context.sh"): echoContextScript,
-		filepath.Join(motifDir, ".gitignore"):                 motifGitignore,
-		filepath.Join(motifDir, "config.yaml"):                defaultConfigYAML,
+		filepath.Join(jerryDir, "pipelines", "example.yaml"):  examplePipelineYAML,
+		filepath.Join(jerryDir, "scripts", "echo-context.sh"): echoContextScript,
+		filepath.Join(jerryDir, ".gitignore"):                 jerryGitignore,
+		filepath.Join(jerryDir, "config.yaml"):                defaultConfigYAML,
 	}
 	for path, content := range staticFiles {
 		perm := os.FileMode(0o644)
@@ -91,10 +91,10 @@ func runInit(targetPath, ciPlatform string) error {
 		src  string
 		perm os.FileMode
 	}{
-		filepath.Join(motifDir, "agents", "plan.md"):         {src: "agents/plan.md", perm: 0o644},
-		filepath.Join(motifDir, "agents", "generate.md"):     {src: "agents/generate.md", perm: 0o644},
-		filepath.Join(motifDir, "pipelines", "feature.yaml"): {src: "agents/feature.yaml", perm: 0o644},
-		filepath.Join(motifDir, "scripts", "github-pr.sh"):   {src: "agents/github-pr.sh", perm: 0o755},
+		filepath.Join(jerryDir, "agents", "plan.md"):         {src: "agents/plan.md", perm: 0o644},
+		filepath.Join(jerryDir, "agents", "generate.md"):     {src: "agents/generate.md", perm: 0o644},
+		filepath.Join(jerryDir, "pipelines", "feature.yaml"): {src: "agents/feature.yaml", perm: 0o644},
+		filepath.Join(jerryDir, "scripts", "github-pr.sh"):   {src: "agents/github-pr.sh", perm: 0o755},
 	}
 	for destPath, meta := range embeddedFiles {
 		content, readErr := embeddedAgents.ReadFile(meta.src)
@@ -115,23 +115,23 @@ func runInit(targetPath, ciPlatform string) error {
 		}
 	}
 
-	fmt.Printf("Motif initialized in %s\n", targetPath)
+	fmt.Printf("Jerry initialized in %s\n", targetPath)
 	fmt.Println("  Agents:    plan.md, generate.md")
 	fmt.Println("  Pipelines: example.yaml, feature.yaml")
 	fmt.Println("")
-	fmt.Println("Run 'motif run example' to try the example pipeline.")
-	fmt.Println("Run 'motif run feature \"describe what to build\"' to generate code with AI agents.")
+	fmt.Println("Run 'jerry run example' to try the example pipeline.")
+	fmt.Println("Run 'jerry run feature \"describe what to build\"' to generate code with AI agents.")
 	return nil
 }
 
 const examplePipelineYAML = `name: example
-description: "Example Motif pipeline — run with 'motif run example'"
+description: "Example Jerry pipeline — run with 'jerry run example'"
 
 steps:
   - name: show-trigger
     script: |
       echo "Pipeline triggered. Context:"
-      cat "$MOTIF_CONTEXT_FILE"
+      cat "$JERRY_CONTEXT_FILE"
 
   - name: list-files
     script: ls -la
@@ -143,18 +143,18 @@ steps:
 `
 
 const echoContextScript = `#!/bin/sh
-# Example script that reads the Motif context.
+# Example script that reads the Jerry context.
 # Usage: reference in a pipeline step as:
-#   script: .motif/scripts/echo-context.sh
+#   script: .jerry/scripts/echo-context.sh
 
-echo "=== Motif Context ==="
-cat "$MOTIF_CONTEXT_FILE"
+echo "=== Jerry Context ==="
+cat "$JERRY_CONTEXT_FILE"
 echo ""
-echo "Run ID:    $MOTIF_RUN_ID"
-echo "Step Name: $MOTIF_STEP_NAME"
+echo "Run ID:    $JERRY_RUN_ID"
+echo "Step Name: $JERRY_STEP_NAME"
 `
 
-const defaultConfigYAML = `# Motif configuration — defaults for all agents and pipelines.
+const defaultConfigYAML = `# Jerry configuration — defaults for all agents and pipelines.
 # Agent frontmatter values take precedence over these defaults.
 #
 # defaults:
@@ -175,7 +175,7 @@ func generateCIConfig(targetPath, platform string) error {
 		if readErr != nil {
 			return errors.Wrap(errors.CodeStateWriteFailed, "failed to read GitHub workflow template", readErr)
 		}
-		destPath := filepath.Join(ciDir, "motif.yml")
+		destPath := filepath.Join(ciDir, "jerry.yml")
 		if writeErr := os.WriteFile(destPath, content, 0o644); writeErr != nil {
 			return errors.Wrap(errors.CodeStateWriteFailed, "failed to write GitHub workflow", writeErr)
 		}
@@ -186,7 +186,7 @@ func generateCIConfig(targetPath, platform string) error {
 		if readErr != nil {
 			return errors.Wrap(errors.CodeStateWriteFailed, "failed to read GitLab CI template", readErr)
 		}
-		destPath := filepath.Join(targetPath, ".motif-gitlab-ci.yml")
+		destPath := filepath.Join(targetPath, ".jerry-gitlab-ci.yml")
 		if writeErr := os.WriteFile(destPath, content, 0o644); writeErr != nil {
 			return errors.Wrap(errors.CodeStateWriteFailed, "failed to write GitLab CI config", writeErr)
 		}
@@ -198,6 +198,6 @@ func generateCIConfig(targetPath, platform string) error {
 	return nil
 }
 
-const motifGitignore = `runs/
+const jerryGitignore = `runs/
 cache/
 `

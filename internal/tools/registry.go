@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // Tool defines a single tool that agents can use during the agentic loop.
@@ -50,14 +50,14 @@ type Registry struct {
 
 // NewRegistry creates a tool registry with all built-in tools registered.
 // repoRoot is the working directory for file/command operations.
-// env holds environment variables passed to command execution (MOTIF_SECRET_* etc.).
+// env holds environment variables passed to command execution (JERRY_SECRET_* etc.).
 func NewRegistry(repoRoot string, env map[string]string) *Registry {
 	r := &Registry{
 		tools:    make(map[string]Tool),
 		repoRoot: repoRoot,
 	}
 
-	// Build env slice for run_command: PATH, HOME, plus MOTIF_* vars.
+	// Build env slice for run_command: PATH, HOME, plus JERRY_* vars.
 	envSlice := make([]string, 0, len(env))
 	for k, v := range env {
 		envSlice = append(envSlice, k+"="+v)

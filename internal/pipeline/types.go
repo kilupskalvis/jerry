@@ -1,7 +1,7 @@
-// Package pipeline defines the core types and interfaces for Motif pipelines.
+// Package pipeline defines the core types and interfaces for Jerry pipelines.
 // This package is imported by executor implementations (script, agent) and
 // by the CLI layer. It does NOT import executor packages — wiring happens
-// in cmd/motif/main.go to avoid circular dependencies.
+// in cmd/jerry/main.go to avoid circular dependencies.
 package pipeline
 
 import (

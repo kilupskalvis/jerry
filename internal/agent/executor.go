@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"time"
 
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/llm"
-	"github.com/kilupskalvis/motif/internal/output"
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/tools"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/tools"
 )
 
 // Compile-time interface compliance assertion.
@@ -66,7 +66,7 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 		var clientErr error
 		client, clientErr = llm.NewClientForModel(agentCfg.Model, agentCfg.Provider, e.anthropicKey, e.openaiKey)
 		if clientErr != nil {
-			return nil, motifErrors.Wrap(motifErrors.CodeLLMAuthFailed,
+			return nil, jerryErrors.Wrap(jerryErrors.CodeLLMAuthFailed,
 				fmt.Sprintf("agent %q", agentCfg.Name), clientErr)
 		}
 	}
@@ -82,7 +82,7 @@ func (e *Executor) Execute(stepCtx context.Context, step pipeline.Step, store pi
 
 	toolDefs, dispatch, resolveErr := e.registry.Resolve(toolAccess)
 	if resolveErr != nil {
-		return nil, motifErrors.Wrap(motifErrors.CodeToolNotFound,
+		return nil, jerryErrors.Wrap(jerryErrors.CodeToolNotFound,
 			fmt.Sprintf("agent %q: tool resolution failed", agentCfg.Name), resolveErr)
 	}
 

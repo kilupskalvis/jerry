@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/tools"
+	"github.com/kilupskalvis/jerry/internal/tools"
 )
 
 func setupGitRepo(t *testing.T) string {

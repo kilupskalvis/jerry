@@ -1,4 +1,4 @@
-// motif logs: view project overview, execution history, and run details.
+// jerry logs: view project overview, execution history, and run details.
 
 package cli
 
@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/state"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/state"
 )
 
 func newLogsCmd(app *App) *cobra.Command {
@@ -32,8 +32,8 @@ func newLogsCmd(app *App) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if app.StateStore == nil {
-				return motifErrors.New(motifErrors.CodeMotifDirNotFound,
-					"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
+				return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+					"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 			}
 
 			if showLast {
@@ -59,17 +59,17 @@ func newLogsCmd(app *App) *cobra.Command {
 
 func showOverview(app *App) error {
 	if app.Loader != nil {
-		motifDir := app.Loader.MotifDir()
-		fmt.Fprintf(os.Stderr, "Motif project: %s\n", motifDir)
+		jerryDir := app.Loader.JerryDir()
+		fmt.Fprintf(os.Stderr, "Jerry project: %s\n", jerryDir)
 
-		pipelineNames := listFilesWithExt(filepath.Join(motifDir, "pipelines"), ".yaml", ".yml")
+		pipelineNames := listFilesWithExt(filepath.Join(jerryDir, "pipelines"), ".yaml", ".yml")
 		if len(pipelineNames) > 0 {
 			fmt.Fprintf(os.Stderr, "Pipelines: %d (%s)\n", len(pipelineNames), strings.Join(pipelineNames, ", "))
 		} else {
 			fmt.Fprintln(os.Stderr, "Pipelines: none")
 		}
 
-		agentNames := listFilesWithExt(filepath.Join(motifDir, "agents"), ".md")
+		agentNames := listFilesWithExt(filepath.Join(jerryDir, "agents"), ".md")
 		if len(agentNames) > 0 {
 			fmt.Fprintf(os.Stderr, "Agents: %d (%s)\n", len(agentNames), strings.Join(agentNames, ", "))
 		} else {

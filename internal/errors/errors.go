@@ -1,4 +1,4 @@
-// Package errors defines the standard error types and codes used throughout Motif.
+// Package errors defines the standard error types and codes used throughout Jerry.
 // Every component returns errors using these types, enabling programmatic error
 // handling via codes and human-readable messages.
 package errors
@@ -11,8 +11,8 @@ const (
 	// Pipeline and configuration errors.
 	CodeInvalidPipeline    = "INVALID_PIPELINE"
 	CodePipelineNotFound   = "PIPELINE_NOT_FOUND"
-	CodeMotifDirNotFound   = "MOTIF_DIR_NOT_FOUND"
-	CodeMotifDirExists     = "MOTIF_DIR_EXISTS"
+	CodeJerryDirNotFound   = "JERRY_DIR_NOT_FOUND"
+	CodeJerryDirExists     = "JERRY_DIR_EXISTS"
 	CodeContextWriteDenied = "CONTEXT_WRITE_DENIED"
 	CodeStateWriteFailed   = "STATE_WRITE_FAILED"
 
@@ -54,7 +54,7 @@ const (
 	CodeConfigInvalid = "CONFIG_INVALID"
 )
 
-// Error is the standard error type returned by all Motif components.
+// Error is the standard error type returned by all Jerry components.
 // It implements the error interface and supports unwrapping via errors.Unwrap.
 type Error struct {
 	// Code is a machine-readable error code (one of the Code* constants).

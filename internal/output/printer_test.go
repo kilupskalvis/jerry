@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/output"
+	"github.com/kilupskalvis/jerry/internal/output"
 )
 
 func newTestPrinter() (*output.Printer, *bytes.Buffer, *bytes.Buffer) {
@@ -20,7 +20,7 @@ func TestInfo(t *testing.T) {
 	printer.Info("starting %s", "pipeline")
 
 	got := stderr.String()
-	expected := "motif: starting pipeline\n"
+	expected := "jerry: starting pipeline\n"
 	if got != expected {
 		t.Errorf("Info output = %q, want %q", got, expected)
 	}
@@ -95,7 +95,7 @@ func TestWarning(t *testing.T) {
 	printer.Warning("step '%s' uses unsupported feature", "gate")
 
 	got := stderr.String()
-	expected := "motif: warning: step 'gate' uses unsupported feature\n"
+	expected := "jerry: warning: step 'gate' uses unsupported feature\n"
 	if got != expected {
 		t.Errorf("Warning output = %q, want %q", got, expected)
 	}
@@ -106,7 +106,7 @@ func TestPipelineComplete(t *testing.T) {
 	printer.PipelineComplete(4500*time.Millisecond, "run_abc123")
 
 	got := stderr.String()
-	expected := "motif: Pipeline completed in 4.5s (run: run_abc123)\n"
+	expected := "jerry: Pipeline completed in 4.5s (run: run_abc123)\n"
 	if got != expected {
 		t.Errorf("PipelineComplete output = %q, want %q", got, expected)
 	}

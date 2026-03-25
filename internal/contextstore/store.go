@@ -1,5 +1,5 @@
 // Package contextstore manages the shared context object that flows
-// through a Motif pipeline. The context is the single communication
+// through a Jerry pipeline. The context is the single communication
 // channel between steps — steps do not communicate directly.
 //
 // All read operations return deep copies to prevent external mutations
@@ -12,10 +12,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/errors"
 )
 
-// ProtocolVersion is the current version of the Motif context protocol.
+// ProtocolVersion is the current version of the Jerry context protocol.
 const ProtocolVersion = "1.0"
 
 // Context represents the shared state flowing through the pipeline.
@@ -124,7 +124,7 @@ func (s *Store) WriteContextFile() (path string, cleanup func(), err error) {
 			"failed to marshal context to JSON", marshalErr)
 	}
 
-	tmpFile, createErr := os.CreateTemp("", "motif-context-*.json")
+	tmpFile, createErr := os.CreateTemp("", "jerry-context-*.json")
 	if createErr != nil {
 		return "", nil, errors.Wrap(errors.CodeStateWriteFailed,
 			"failed to create temp context file", createErr)

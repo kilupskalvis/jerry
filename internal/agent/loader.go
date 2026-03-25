@@ -10,8 +10,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/kilupskalvis/motif/internal/config"
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/config"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // Loader parses agent markdown definition files into AgentConfig.
@@ -24,7 +24,7 @@ type Loader struct {
 // NewLoader creates an agent loader.
 // knownTools is the list of tool names the runtime supports (from Registry.KnownToolNames).
 // defaultModel is the fallback model when an agent doesn't specify one (may be empty).
-// fileConfig provides defaults from .motif/config.yaml (may be nil).
+// fileConfig provides defaults from .jerry/config.yaml (may be nil).
 func NewLoader(knownTools []string, defaultModel string, fileConfig *config.FileConfig) *Loader {
 	known := make(map[string]bool, len(knownTools))
 	for _, name := range knownTools {
@@ -44,19 +44,19 @@ func NewLoader(knownTools []string, defaultModel string, fileConfig *config.File
 func (l *Loader) Load(path string) (*AgentConfig, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return nil, motifErrors.Wrap(motifErrors.CodeAgentLoadFailed,
+		return nil, jerryErrors.Wrap(jerryErrors.CodeAgentLoadFailed,
 			fmt.Sprintf("cannot resolve path %q", path), err)
 	}
 
 	data, err := os.ReadFile(absPath)
 	if err != nil {
-		return nil, motifErrors.Wrap(motifErrors.CodeAgentLoadFailed,
+		return nil, jerryErrors.Wrap(jerryErrors.CodeAgentLoadFailed,
 			fmt.Sprintf("cannot read agent file %q", path), err)
 	}
 
 	agentCfg, parseErr := l.parse(string(data))
 	if parseErr != nil {
-		return nil, motifErrors.Wrap(motifErrors.CodeAgentLoadFailed,
+		return nil, jerryErrors.Wrap(jerryErrors.CodeAgentLoadFailed,
 			fmt.Sprintf("agent %q", path), parseErr)
 	}
 
@@ -122,7 +122,7 @@ func splitFrontmatter(content string) (frontmatter, body string, err error) {
 }
 
 // applyDefaults fills in missing optional fields using three-tier resolution:
-// agent frontmatter → .motif/config.yaml → hardcoded fallback.
+// agent frontmatter → .jerry/config.yaml → hardcoded fallback.
 func (l *Loader) applyDefaults(agentCfg *AgentConfig) {
 	// Model: frontmatter → config.yaml → defaultModel (env var).
 	if agentCfg.Model == "" {

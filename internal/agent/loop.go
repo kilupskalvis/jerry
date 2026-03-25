@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"time"
 
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/llm"
-	"github.com/kilupskalvis/motif/internal/output"
-	"github.com/kilupskalvis/motif/internal/state"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/state"
 )
 
 // MaxRetryIterations is the maximum additional iterations allowed during
@@ -139,7 +139,7 @@ func (l *Loop) Run(
 	}
 
 	result.Messages = messages
-	return result, motifErrors.New(motifErrors.CodeAgentMaxIterations,
+	return result, jerryErrors.New(jerryErrors.CodeAgentMaxIterations,
 		fmt.Sprintf("agent %q reached max iterations (%d)", agentCfg.Name, agentCfg.MaxIterations))
 }
 

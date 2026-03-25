@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/agent"
-	"github.com/kilupskalvis/motif/internal/config"
+	"github.com/kilupskalvis/jerry/internal/agent"
+	"github.com/kilupskalvis/jerry/internal/config"
 )
 
 var testKnownTools = []string{"read_file", "write_file", "glob", "search_codebase", "run_command", "list_directory"}

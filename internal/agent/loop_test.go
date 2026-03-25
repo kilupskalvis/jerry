@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/agent"
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/llm"
-	"github.com/kilupskalvis/motif/internal/output"
+	"github.com/kilupskalvis/jerry/internal/agent"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/output"
 )
 
 func newTestLoop(responses []*llm.Response) (*agent.Loop, *mockLLMClient) {
@@ -147,12 +147,12 @@ func TestLoop_MaxIterationsReached(t *testing.T) {
 		t.Fatal("expected error for max iterations")
 	}
 
-	var motifErr *motifErrors.Error
-	if !errors.As(err, &motifErr) {
-		t.Fatalf("expected motif Error, got %T: %v", err, err)
+	var jerryErr *jerryErrors.Error
+	if !errors.As(err, &jerryErr) {
+		t.Fatalf("expected jerry Error, got %T: %v", err, err)
 	}
-	if motifErr.Code != motifErrors.CodeAgentMaxIterations {
-		t.Errorf("expected code %q, got %q", motifErrors.CodeAgentMaxIterations, motifErr.Code)
+	if jerryErr.Code != jerryErrors.CodeAgentMaxIterations {
+		t.Errorf("expected code %q, got %q", jerryErrors.CodeAgentMaxIterations, jerryErr.Code)
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // reservedOutputKeys are context keys that steps cannot use as output_key.
@@ -28,18 +28,18 @@ var validBackoffStrategies = map[string]bool{
 
 // Loader reads and validates pipeline YAML files.
 type Loader struct {
-	motifDir string
+	jerryDir string
 }
 
-// NewLoader creates a loader that reads pipelines from the given .motif/ directory.
-func NewLoader(motifDir string) *Loader {
-	return &Loader{motifDir: motifDir}
+// NewLoader creates a loader that reads pipelines from the given .jerry/ directory.
+func NewLoader(jerryDir string) *Loader {
+	return &Loader{jerryDir: jerryDir}
 }
 
 // Load reads and validates a pipeline by name.
-// Looks for .motif/pipelines/<name>.yaml, then .motif/pipelines/<name>.yml.
+// Looks for .jerry/pipelines/<name>.yaml, then .jerry/pipelines/<name>.yml.
 func (l *Loader) Load(name string) (*Pipeline, error) {
-	pipelinesDir := filepath.Join(l.motifDir, "pipelines")
+	pipelinesDir := filepath.Join(l.jerryDir, "pipelines")
 
 	// Try .yaml first, then .yml
 	for _, ext := range []string{".yaml", ".yml"} {
@@ -75,7 +75,7 @@ func (l *Loader) LoadFile(path string) (*Pipeline, error) {
 	absPath, _ := filepath.Abs(path)
 	p.SourceFile = absPath
 
-	// Pre-resolve agent paths relative to .motif/ so execution doesn't
+	// Pre-resolve agent paths relative to .jerry/ so execution doesn't
 	// depend on the working directory.
 	l.resolveAgentPaths(&p)
 
@@ -83,7 +83,7 @@ func (l *Loader) LoadFile(path string) (*Pipeline, error) {
 }
 
 // resolveAgentPaths rewrites relative agent paths on all steps to absolute
-// paths resolved against the .motif/ directory.
+// paths resolved against the .jerry/ directory.
 func (l *Loader) resolveAgentPaths(p *Pipeline) {
 	for i := range p.Steps {
 		if p.Steps[i].Agent != "" {
@@ -95,9 +95,9 @@ func (l *Loader) resolveAgentPaths(p *Pipeline) {
 	}
 }
 
-// MotifDir returns the .motif/ directory path this loader reads from.
-func (l *Loader) MotifDir() string {
-	return l.motifDir
+// JerryDir returns the .jerry/ directory path this loader reads from.
+func (l *Loader) JerryDir() string {
+	return l.jerryDir
 }
 
 // validate runs structural and semantic validation on a pipeline.
@@ -196,13 +196,13 @@ func (l *Loader) validate(p *Pipeline) []string {
 	return errs
 }
 
-// resolveAgentPath resolves an agent file path relative to the .motif/ directory.
+// resolveAgentPath resolves an agent file path relative to the .jerry/ directory.
 func (l *Loader) resolveAgentPath(agentRef string) string {
 	if filepath.IsAbs(agentRef) {
 		return agentRef
 	}
-	// Agent paths are relative to the .motif/ directory
-	return filepath.Join(l.motifDir, agentRef)
+	// Agent paths are relative to the .jerry/ directory
+	return filepath.Join(l.jerryDir, agentRef)
 }
 
 // countExecutors returns how many executor fields are set on a step.

@@ -133,7 +133,7 @@ func (w *LogWriter) Log(logType LogType, step string, data any) {
 
 	dataJSON, marshalErr := json.Marshal(data)
 	if marshalErr != nil {
-		fmt.Fprintf(os.Stderr, "motif: warning: failed to marshal log data for %s: %s\n", logType, marshalErr)
+		fmt.Fprintf(os.Stderr, "jerry: warning: failed to marshal log data for %s: %s\n", logType, marshalErr)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (w *LogWriter) Log(logType LogType, step string, data any) {
 
 	line, lineErr := json.Marshal(entry)
 	if lineErr != nil {
-		fmt.Fprintf(os.Stderr, "motif: warning: failed to marshal log entry for %s: %s\n", logType, lineErr)
+		fmt.Fprintf(os.Stderr, "jerry: warning: failed to marshal log entry for %s: %s\n", logType, lineErr)
 		return
 	}
 	line = append(line, '\n')

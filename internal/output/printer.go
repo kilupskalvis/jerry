@@ -1,4 +1,4 @@
-// Package output handles all CLI output formatting for Motif.
+// Package output handles all CLI output formatting for Jerry.
 // All human-readable output goes to stderr so that stdout remains
 // clean for piping. Uses Unicode symbols for visual clarity.
 package output
@@ -42,7 +42,7 @@ func (p *Printer) SetVerbosity(v Verbosity) {
 // Info prints an informational message to stderr.
 func (p *Printer) Info(format string, args ...any) {
 	if p.verbosity >= VerbosityDefault {
-		fmt.Fprintf(p.stderr, "motif: "+format+"\n", args...)
+		fmt.Fprintf(p.stderr, "jerry: "+format+"\n", args...)
 	}
 }
 
@@ -119,22 +119,22 @@ func (p *Printer) ToolProgressVerbose(iteration int, toolName string, args map[s
 func (p *Printer) Warning(format string, args ...any) {
 	// Warnings shown at default and verbose levels.
 	if p.verbosity >= VerbosityDefault {
-		fmt.Fprintf(p.stderr, "motif: warning: "+format+"\n", args...)
+		fmt.Fprintf(p.stderr, "jerry: warning: "+format+"\n", args...)
 	}
 }
 
 // PipelineComplete prints the final success message.
 func (p *Printer) PipelineComplete(duration time.Duration, runID string) {
 	if p.verbosity >= VerbosityQuiet {
-		fmt.Fprintf(p.stderr, "motif: Pipeline completed in %s (run: %s)\n",
+		fmt.Fprintf(p.stderr, "jerry: Pipeline completed in %s (run: %s)\n",
 			formatDuration(duration), runID)
 	}
 }
 
 // PipelineFailed prints the final failure message.
 func (p *Printer) PipelineFailed(stepName, message, runID string) {
-	fmt.Fprintf(p.stderr, "motif: Pipeline failed at step '%s': %s\n", stepName, message)
-	fmt.Fprintf(p.stderr, "motif: Run saved: %s\n", runID)
+	fmt.Fprintf(p.stderr, "jerry: Pipeline failed at step '%s': %s\n", stepName, message)
+	fmt.Fprintf(p.stderr, "jerry: Run saved: %s\n", runID)
 }
 
 // ValidationResult prints the result of validating a pipeline.

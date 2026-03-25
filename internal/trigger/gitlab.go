@@ -3,7 +3,7 @@
 package trigger
 
 import (
-	"github.com/kilupskalvis/motif/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
 
 // NormalizeGitLabEvent converts a GitLab webhook payload into TriggerData.

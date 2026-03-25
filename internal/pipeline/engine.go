@@ -11,10 +11,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/output"
-	"github.com/kilupskalvis/motif/internal/state"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/state"
 )
 
 const (
@@ -59,7 +59,7 @@ func (e *Engine) Run(runCtx context.Context, pipelineDef Pipeline, trigger conte
 	}
 
 	if initErr := e.stateStore.InitRun(runState); initErr != nil {
-		return &runState, motifErrors.Wrap(motifErrors.CodeStateWriteFailed,
+		return &runState, jerryErrors.Wrap(jerryErrors.CodeStateWriteFailed,
 			"failed to initialize run state", initErr)
 	}
 

@@ -1,4 +1,4 @@
-// motif run: executes or resumes a pipeline.
+// jerry run: executes or resumes a pipeline.
 
 package cli
 
@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/state"
-	"github.com/kilupskalvis/motif/internal/trigger"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
 func newRunCmd(app *App) *cobra.Command {
@@ -36,7 +36,7 @@ func newRunCmd(app *App) *cobra.Command {
 				return resumePipeline(cmd.Context(), app, resumeRunID, force)
 			}
 
-			// Positional intent: motif run feature "Add health endpoint"
+			// Positional intent: jerry run feature "Add health endpoint"
 			if len(args) > 1 && intent == "" {
 				intent = args[1]
 			}
@@ -112,8 +112,8 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 
 func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerData contextstore.TriggerData) error {
 	if app.Loader == nil || app.Engine == nil {
-		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
-			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
+		return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+			"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 	}
 
 	pipelineDef, loadErr := app.Loader.Load(pipelineName)
@@ -138,8 +138,8 @@ func runPipeline(runCtx context.Context, app *App, pipelineName string, triggerD
 
 func dryRunPipeline(app *App, pipelineName, intent string) error {
 	if app.Loader == nil {
-		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
-			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
+		return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+			"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 	}
 
 	pipelineDef, loadErr := app.Loader.Load(pipelineName)
@@ -166,7 +166,7 @@ func dryRunPipeline(app *App, pipelineName, intent string) error {
 	}
 
 	fmt.Fprintln(os.Stderr, "\nValidation: pipeline is valid")
-	fmt.Fprintf(os.Stderr, "\nTo execute: motif run %s", pipelineName)
+	fmt.Fprintf(os.Stderr, "\nTo execute: jerry run %s", pipelineName)
 	if intent != "" {
 		fmt.Fprintf(os.Stderr, " %q", intent)
 	}
@@ -177,23 +177,23 @@ func dryRunPipeline(app *App, pipelineName, intent string) error {
 
 func resumePipeline(runCtx context.Context, app *App, runID string, force bool) error {
 	if app.Loader == nil || app.Engine == nil || app.StateStore == nil {
-		return motifErrors.New(motifErrors.CodeMotifDirNotFound,
-			"not in a Motif project (no .motif/ directory found) — run 'motif init' to initialize")
+		return jerryErrors.New(jerryErrors.CodeJerryDirNotFound,
+			"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 	}
 
 	runState, loadErr := app.StateStore.LoadRun(runID)
 	if loadErr != nil {
-		return motifErrors.New(motifErrors.CodeRunNotFound,
+		return jerryErrors.New(jerryErrors.CodeRunNotFound,
 			fmt.Sprintf("run %q not found", runID))
 	}
 
 	switch runState.Status {
 	case state.StatusCompleted:
-		return motifErrors.New(motifErrors.CodeRunNotResumable,
+		return jerryErrors.New(jerryErrors.CodeRunNotResumable,
 			fmt.Sprintf("run %q is already completed — nothing to resume", runID))
 	case state.StatusRunning:
 		if !force {
-			return motifErrors.New(motifErrors.CodeRunNotResumable,
+			return jerryErrors.New(jerryErrors.CodeRunNotResumable,
 				fmt.Sprintf("run %q has status 'running' — if the process crashed, use --force to resume", runID))
 		}
 	case state.StatusFailed:
@@ -216,13 +216,13 @@ func resumePipeline(runCtx context.Context, app *App, runID string, force bool) 
 		fromStep--
 	}
 	if fromStep >= len(pipelineDef.Steps) {
-		return motifErrors.New(motifErrors.CodeRunNotResumable,
+		return jerryErrors.New(jerryErrors.CodeRunNotResumable,
 			"all steps already completed in saved state")
 	}
 
 	for i, saved := range runState.StepResults {
 		if i < len(pipelineDef.Steps) && saved.Name != pipelineDef.Steps[i].Name {
-			return motifErrors.New(motifErrors.CodePipelineChanged,
+			return jerryErrors.New(jerryErrors.CodePipelineChanged,
 				fmt.Sprintf("pipeline structure has changed — step %q at position %d "+
 					"does not match saved state (expected %q). Cannot safely resume.",
 					pipelineDef.Steps[i].Name, i, saved.Name))

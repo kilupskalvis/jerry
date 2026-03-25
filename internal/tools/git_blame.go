@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // NewGitBlameTool creates a git_blame tool bound to the given repo root.

@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxDiffOutputSize is the maximum bytes returned by git_diff/git_blame.

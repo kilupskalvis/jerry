@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/tools"
+	"github.com/kilupskalvis/jerry/internal/tools"
 )
 
 func setupRepoRoot(t *testing.T) string {

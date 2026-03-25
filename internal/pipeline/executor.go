@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
 
 // StepExecutor executes a single pipeline step and returns the result.

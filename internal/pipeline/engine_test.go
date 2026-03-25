@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
-	motifErrors "github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/output"
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/state"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
+	jerryErrors "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/state"
 )
 
 // mockExecutor is a configurable StepExecutor for testing.
@@ -227,7 +227,7 @@ func TestRun_RetrySuccess(t *testing.T) {
 		executeFunc: func(_ context.Context, _ pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
 			attempts++
 			if attempts <= 2 {
-				return nil, motifErrors.New(motifErrors.CodeScriptFailed, "failed")
+				return nil, jerryErrors.New(jerryErrors.CodeScriptFailed, "failed")
 			}
 			return &pipeline.StepOutput{Duration: time.Millisecond}, nil
 		},
@@ -260,7 +260,7 @@ func TestRun_RetrySuccess(t *testing.T) {
 func TestRun_RetryExhausted(t *testing.T) {
 	exec := &mockExecutor{
 		executeFunc: func(_ context.Context, _ pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
-			return nil, motifErrors.New(motifErrors.CodeScriptFailed, "always fails")
+			return nil, jerryErrors.New(jerryErrors.CodeScriptFailed, "always fails")
 		},
 	}
 	store := &mockStateStore{}
@@ -292,7 +292,7 @@ func TestRun_FallbackExecuted(t *testing.T) {
 		executeFunc: func(_ context.Context, step pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
 			callCount++
 			if step.Name == "risky" {
-				return nil, motifErrors.New(motifErrors.CodeScriptFailed, "failed")
+				return nil, jerryErrors.New(jerryErrors.CodeScriptFailed, "failed")
 			}
 			// This is the fallback execution
 			fallbackCalled = true
@@ -329,7 +329,7 @@ func TestRun_StepTimeout(t *testing.T) {
 	exec := &mockExecutor{
 		executeFunc: func(stepCtx context.Context, _ pipeline.Step, _ pipeline.ContextReader) (*pipeline.StepOutput, error) {
 			<-stepCtx.Done()
-			return nil, motifErrors.New(motifErrors.CodeScriptTimeout, "timed out")
+			return nil, jerryErrors.New(jerryErrors.CodeScriptTimeout, "timed out")
 		},
 	}
 	store := &mockStateStore{}

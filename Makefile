@@ -1,8 +1,8 @@
 .PHONY: build test lint fmt vet clean install-hooks
 
-# Build the motif binary.
+# Build the jerry binary.
 build:
-	go build -o motif ./cmd/motif
+	go build -o jerry ./cmd/jerry
 
 # Run all tests with race detector.
 test:
@@ -15,7 +15,7 @@ lint:
 # Format all Go files.
 fmt:
 	gofmt -w .
-	goimports -w -local github.com/kilupskalvis/motif .
+	goimports -w -local github.com/kilupskalvis/jerry .
 
 # Run go vet.
 vet:
@@ -26,7 +26,7 @@ ci: fmt vet lint test build
 
 # Remove build artifacts.
 clean:
-	rm -f motif motif-*
+	rm -f jerry jerry-*
 
 # Install git hooks.
 install-hooks:

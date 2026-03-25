@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // NewWriteFileTool creates a write_file tool bound to the given repo root.
@@ -52,7 +52,7 @@ func NewWriteFileTool(repoRoot string) Tool {
 			}
 
 			// Atomic write: write to temp file, then rename.
-			tmp := absPath + ".motif.tmp"
+			tmp := absPath + ".jerry.tmp"
 			if writeErr := os.WriteFile(tmp, []byte(content), 0o644); writeErr != nil {
 				return fmt.Sprintf("Error: cannot write to '%s': %s", path, writeErr), nil
 			}

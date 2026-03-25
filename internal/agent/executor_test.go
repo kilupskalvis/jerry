@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/agent"
-	"github.com/kilupskalvis/motif/internal/contextstore"
-	"github.com/kilupskalvis/motif/internal/llm"
-	"github.com/kilupskalvis/motif/internal/output"
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/tools"
+	"github.com/kilupskalvis/jerry/internal/agent"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/tools"
 )
 
 func newTestExecutor(loader *agent.Loader, reg *tools.Registry, mockClient llm.Client, printer *output.Printer) *agent.Executor {

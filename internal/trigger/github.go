@@ -5,7 +5,7 @@ package trigger
 import (
 	"fmt"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
 
 // NormalizeGitHubEvent converts a GitHub webhook payload into TriggerData.

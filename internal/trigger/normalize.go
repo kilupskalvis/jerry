@@ -1,4 +1,4 @@
-// Package trigger normalizes external event payloads into Motif's TriggerData format.
+// Package trigger normalizes external event payloads into Jerry's TriggerData format.
 package trigger
 
 import (
@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
 
 // FromFile reads a JSON file and returns TriggerData. The file can contain

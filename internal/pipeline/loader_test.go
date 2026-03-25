@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/testutil"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/testutil"
 )
 
 func TestLoad_ValidBasic(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"basic": `
 name: basic
 description: "Basic pipeline"
@@ -23,8 +23,8 @@ steps:
     output_key: result
 `,
 	})
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 
 	p, err := loader.Load("basic")
 	if err != nil {
@@ -42,7 +42,7 @@ steps:
 }
 
 func TestLoad_ValidWithRetries(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"retries": `
 name: retries
 steps:
@@ -52,8 +52,8 @@ steps:
     retry_backoff: exponential
 `,
 	})
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 
 	p, err := loader.Load("retries")
 	if err != nil {
@@ -68,7 +68,7 @@ steps:
 }
 
 func TestLoad_PipelineDiscovery_YAML(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"test": `
 name: test
 steps:
@@ -76,8 +76,8 @@ steps:
     script: echo hi
 `,
 	})
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 
 	// Should find test.yaml when asked for "test"
 	p, err := loader.Load("test")
@@ -90,17 +90,17 @@ steps:
 }
 
 func TestLoad_PipelineDiscovery_YML(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, nil)
-	motifDir := filepath.Join(repoRoot, ".motif")
+	repoRoot := testutil.SetupTestJerryDir(t, nil)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
 
 	// Write a .yml file manually
-	pipelinesDir := filepath.Join(motifDir, "pipelines")
+	pipelinesDir := filepath.Join(jerryDir, "pipelines")
 	content := []byte("name: yml-test\nsteps:\n  - name: s\n    script: echo hi\n")
 	if err := os.WriteFile(filepath.Join(pipelinesDir, "alt.yml"), content, 0o644); err != nil {
 		t.Fatalf("failed to write yml file: %v", err)
 	}
 
-	loader := pipeline.NewLoader(motifDir)
+	loader := pipeline.NewLoader(jerryDir)
 	p, err := loader.Load("alt")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -111,9 +111,9 @@ func TestLoad_PipelineDiscovery_YML(t *testing.T) {
 }
 
 func TestLoad_PipelineNotFound(t *testing.T) {
-	repoRoot := testutil.SetupTestMotifDir(t, nil)
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	repoRoot := testutil.SetupTestJerryDir(t, nil)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 
 	_, err := loader.Load("nonexistent")
 	if err == nil {
@@ -243,11 +243,11 @@ steps:
 func assertValidationError(t *testing.T, yamlContent, expectedSubstring string) {
 	t.Helper()
 
-	repoRoot := testutil.SetupTestMotifDir(t, map[string]string{
+	repoRoot := testutil.SetupTestJerryDir(t, map[string]string{
 		"test": yamlContent,
 	})
-	motifDir := filepath.Join(repoRoot, ".motif")
-	loader := pipeline.NewLoader(motifDir)
+	jerryDir := filepath.Join(repoRoot, ".jerry")
+	loader := pipeline.NewLoader(jerryDir)
 
 	_, err := loader.Load("test")
 	if err == nil {

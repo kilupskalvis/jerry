@@ -1,4 +1,4 @@
-// Config file loading: parses .motif/config.yaml and .env files.
+// Config file loading: parses .jerry/config.yaml and .env files.
 
 package config
 
@@ -11,11 +11,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/kilupskalvis/motif/internal/errors"
-	"github.com/kilupskalvis/motif/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
 )
 
-// FileConfig represents the parsed .motif/config.yaml file.
+// FileConfig represents the parsed .jerry/config.yaml file.
 type FileConfig struct {
 	Defaults DefaultsConfig `yaml:"defaults,omitempty"`
 }

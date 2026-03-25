@@ -1,4 +1,4 @@
-module github.com/kilupskalvis/motif
+module github.com/kilupskalvis/jerry
 
 go 1.25.6
 

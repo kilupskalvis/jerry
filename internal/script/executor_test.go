@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/motif/internal/contextstore"
-	"github.com/kilupskalvis/motif/internal/pipeline"
-	"github.com/kilupskalvis/motif/internal/script"
+	"github.com/kilupskalvis/jerry/internal/contextstore"
+	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/script"
 )
 
 func newTestExecutor(t *testing.T) (*script.Executor, string) {
 	t.Helper()
 	repoRoot := t.TempDir()
 	env := map[string]string{
-		"MOTIF_SECRET_TEST": "secret_value",
+		"JERRY_SECRET_TEST": "secret_value",
 	}
 	return script.NewExecutor(repoRoot, env), repoRoot
 }
@@ -143,15 +143,15 @@ func TestExecute_Environment(t *testing.T) {
 		}
 	}
 
-	// Should have MOTIF_* vars
-	if _, ok := envMap["MOTIF_RUN_ID"]; !ok {
-		t.Error("missing MOTIF_RUN_ID")
+	// Should have JERRY_* vars
+	if _, ok := envMap["JERRY_RUN_ID"]; !ok {
+		t.Error("missing JERRY_RUN_ID")
 	}
-	if _, ok := envMap["MOTIF_STEP_NAME"]; !ok {
-		t.Error("missing MOTIF_STEP_NAME")
+	if _, ok := envMap["JERRY_STEP_NAME"]; !ok {
+		t.Error("missing JERRY_STEP_NAME")
 	}
-	if _, ok := envMap["MOTIF_CONTEXT_FILE"]; !ok {
-		t.Error("missing MOTIF_CONTEXT_FILE")
+	if _, ok := envMap["JERRY_CONTEXT_FILE"]; !ok {
+		t.Error("missing JERRY_CONTEXT_FILE")
 	}
 	if _, ok := envMap["PATH"]; !ok {
 		t.Error("missing PATH")
@@ -163,7 +163,7 @@ func TestExecute_Environment(t *testing.T) {
 	// Should NOT have random env vars from the parent process
 	// (checking a few common ones that should be excluded)
 	for key := range envMap {
-		if key == "PATH" || key == "HOME" || strings.HasPrefix(key, "MOTIF_") {
+		if key == "PATH" || key == "HOME" || strings.HasPrefix(key, "JERRY_") {
 			continue
 		}
 		// Allow PWD and SHLVL which sh may set internally
@@ -177,7 +177,7 @@ func TestExecute_Environment(t *testing.T) {
 func TestExecute_SecretEnvVars(t *testing.T) {
 	exec, _ := newTestExecutor(t)
 	store := newTestStore()
-	step := pipeline.Step{Name: "test", Script: "echo $MOTIF_SECRET_TEST"}
+	step := pipeline.Step{Name: "test", Script: "echo $JERRY_SECRET_TEST"}
 
 	stepCtx := context.Background()
 	output, err := exec.Execute(stepCtx, step, store)
@@ -194,7 +194,7 @@ func TestExecute_ContextFile(t *testing.T) {
 	store := newTestStore()
 	_ = store.Set("test_data", "hello")
 
-	step := pipeline.Step{Name: "test", Script: `cat "$MOTIF_CONTEXT_FILE"`}
+	step := pipeline.Step{Name: "test", Script: `cat "$JERRY_CONTEXT_FILE"`}
 
 	stepCtx := context.Background()
 	output, err := exec.Execute(stepCtx, step, store)
@@ -335,7 +335,7 @@ func TestExecute_ContextFileCleanup(t *testing.T) {
 	exec, _ := newTestExecutor(t)
 	store := newTestStore()
 	// Script prints the context file path so we can check it was cleaned up
-	step := pipeline.Step{Name: "test", Script: `echo "$MOTIF_CONTEXT_FILE"`}
+	step := pipeline.Step{Name: "test", Script: `echo "$JERRY_CONTEXT_FILE"`}
 
 	stepCtx := context.Background()
 	output, err := exec.Execute(stepCtx, step, store)

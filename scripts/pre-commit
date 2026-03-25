@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Pre-commit hook for Motif.
+# Pre-commit hook for Jerry.
 # Runs formatting checks, vet, and lint on staged Go files.
 # Install: copy to .git/hooks/pre-commit (done automatically by the repo).
 

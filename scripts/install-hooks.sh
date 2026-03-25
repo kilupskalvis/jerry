@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Install git hooks for the Motif project.
+# Install git hooks for the Jerry project.
 # Run once after cloning: ./scripts/install-hooks.sh
 
 set -e

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxListDirEntries is the maximum entries returned from list_directory.

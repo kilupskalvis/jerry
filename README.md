@@ -1,23 +1,23 @@
 <table align="center"><tr><td>
 <pre>
-███╗   ███╗ ██████╗ ████████╗██╗███████╗
-████╗ ████║██╔═══██╗╚══██╔══╝██║██╔════╝
-██╔████╔██║██║   ██║   ██║   ██║█████╗
-██║╚██╔╝██║██║   ██║   ██║   ██║██╔══╝
-██║ ╚═╝ ██║╚██████╔╝   ██║   ██║██║
-╚═╝     ╚═╝ ╚═════╝    ╚═╝   ╚═╝╚═╝
+     ██╗███████╗██████╗ ██████╗ ██╗   ██╗
+     ██║██╔════╝██╔══██╗██╔══██╗╚██╗ ██╔╝
+     ██║█████╗  ██████╔╝██████╔╝ ╚████╔╝
+██   ██║██╔══╝  ██╔══██╗██╔══██╗  ╚██╔╝
+╚█████╔╝███████╗██║  ██║██║  ██║   ██║
+ ╚════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
 </pre>
 </td></tr></table>
 
 <p align="center">
 <b>The open protocol for composable AI code generation</b><br>
-GitHub Actions brought composability to CI/CD. Motif brings it to AI-powered software development.
+GitHub Actions brought composability to CI/CD. Jerry brings it to AI-powered software development.
 </p>
 
 <p align="center">
-<a href="https://go.dev/"><img src="https://img.shields.io/github/go-mod/go-version/kilupskalvis/motif" alt="Go Version"></a>
-<a href="https://github.com/kilupskalvis/motif/releases"><img src="https://img.shields.io/github/v/release/kilupskalvis/motif" alt="Release"></a>
-<a href="LICENSE"><img src="https://img.shields.io/github/license/kilupskalvis/motif" alt="License"></a>
+<a href="https://go.dev/"><img src="https://img.shields.io/github/go-mod/go-version/kilupskalvis/jerry" alt="Go Version"></a>
+<a href="https://github.com/kilupskalvis/jerry/releases"><img src="https://img.shields.io/github/v/release/kilupskalvis/jerry" alt="Release"></a>
+<a href="LICENSE"><img src="https://img.shields.io/github/license/kilupskalvis/jerry" alt="License"></a>
 </p>
 
 ## The Problem
@@ -30,10 +30,10 @@ AI code generation tools — Devin, SWE-agent, OpenHands, Factory — are monoli
 
 ## The Solution
 
-Motif defines a protocol and runtime that makes AI code generation composable. Teams define pipelines in YAML, configure agents in Markdown, and compose steps from any source. Swap the analyzer, swap the generator, swap the model — without replacing anything else.
+Jerry defines a protocol and runtime that makes AI code generation composable. Teams define pipelines in YAML, configure agents in Markdown, and compose steps from any source. Swap the analyzer, swap the generator, swap the model — without replacing anything else.
 
 ```yaml
-# .motif/pipelines/feature.yaml
+# .jerry/pipelines/feature.yaml
 name: feature
 steps:
   - name: plan
@@ -51,24 +51,24 @@ This is not another AI coding agent. It is the infrastructure layer that agents 
 ### Go Install
 
 ```bash
-go install github.com/kilupskalvis/motif/cmd/motif@latest
+go install github.com/kilupskalvis/jerry/cmd/jerry@latest
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/kilupskalvis/motif.git
-cd motif
-go build -o motif ./cmd/motif
+git clone https://github.com/kilupskalvis/jerry.git
+cd jerry
+go build -o jerry ./cmd/jerry
 ```
 
 ## Quick Start
 
 ```bash
-motif init                                          # Scaffold project
+jerry init                                          # Scaffold project
 export ANTHROPIC_API_KEY=sk-ant-...                 # Set API key
-motif run feature "Add a GET /health endpoint"      # Generate code
-motif logs                                          # See what happened
+jerry run feature "Add a GET /health endpoint"      # Generate code
+jerry logs                                          # See what happened
 ```
 
 ## How It Works
@@ -122,7 +122,7 @@ trigger → plan agent → generate agent → validate script
 
 ## Core Agents
 
-`motif init` ships two agents:
+`jerry init` ships two agents:
 
 | Agent | Purpose | Tools | Iteration Budget |
 |-------|---------|-------|-----------------|
@@ -135,17 +135,17 @@ These are starting points. Add your team's conventions to the Markdown body, spl
 
 | Command | Description |
 |---------|-------------|
-| `motif init` | Scaffold `.motif/` with agents, pipelines, and config |
-| `motif init --ci github` | Also generate GitHub Actions workflow |
-| `motif run <pipeline> [intent]` | Execute a pipeline |
-| `motif run <pipeline> --dry-run` | Preview without executing |
-| `motif run --resume <run-id>` | Resume a failed run from the last checkpoint |
-| `motif logs` | Show project overview and recent runs |
-| `motif logs <run-id>` | Run details with step breakdown |
-| `motif logs <run-id> --step <name>` | Tool calls for a specific step |
-| `motif logs <run-id> --tools` | All tool calls across steps |
-| `motif logs <run-id> --llm` | All LLM calls with token counts |
-| `motif logs --last` | Most recent run |
+| `jerry init` | Scaffold `.jerry/` with agents, pipelines, and config |
+| `jerry init --ci github` | Also generate GitHub Actions workflow |
+| `jerry run <pipeline> [intent]` | Execute a pipeline |
+| `jerry run <pipeline> --dry-run` | Preview without executing |
+| `jerry run --resume <run-id>` | Resume a failed run from the last checkpoint |
+| `jerry logs` | Show project overview and recent runs |
+| `jerry logs <run-id>` | Run details with step breakdown |
+| `jerry logs <run-id> --step <name>` | Tool calls for a specific step |
+| `jerry logs <run-id> --tools` | All tool calls across steps |
+| `jerry logs <run-id> --llm` | All LLM calls with token counts |
+| `jerry logs --last` | Most recent run |
 
 Global flags: `--verbose`, `--quiet`.
 
@@ -181,7 +181,7 @@ tools:
 
 ## Configuration
 
-### `.motif/config.yaml`
+### `.jerry/config.yaml`
 
 Project-wide defaults. Agent frontmatter takes precedence.
 
@@ -199,8 +199,8 @@ defaults:
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | API key for Claude models |
 | `OPENAI_API_KEY` | API key for GPT and O-series models |
-| `MOTIF_DEFAULT_MODEL` | Override default model |
-| `MOTIF_SECRET_*` | Passed to script step environments |
+| `JERRY_DEFAULT_MODEL` | Override default model |
+| `JERRY_SECRET_*` | Passed to script step environments |
 
 A `.env` file in the repository root is loaded automatically. Process environment takes precedence.
 
@@ -218,13 +218,13 @@ model: ft:gpt-4o:my-org:custom-model
 ### GitHub Actions
 
 ```bash
-motif init --ci github
+jerry init --ci github
 ```
 
-Generates a workflow that runs the feature pipeline when issues are labeled `motif`. Or use the action directly in any workflow:
+Generates a workflow that runs the feature pipeline when issues are labeled `jerry`. Or use the action directly in any workflow:
 
 ```yaml
-- uses: motif-protocol/runner@v1
+- uses: jerry-protocol/runner@v1
   with:
     pipeline: feature
   env:
@@ -236,7 +236,7 @@ The action handles checkout, install, pipeline execution, and PR creation — on
 ### GitLab CI
 
 ```bash
-motif init --ci gitlab
+jerry init --ci gitlab
 ```
 
 Generates a GitLab CI job triggered via the pipeline API or web UI.
@@ -244,7 +244,7 @@ Generates a GitLab CI job triggered via the pipeline API or web UI.
 ## Runtime Features
 
 - **Context window management**: automatic compaction when conversations exceed the model's context limit — reactive (on API error) and proactive (at 80% of configured limit)
-- **Resumable pipelines**: state checkpointed after every step, resume from the failure point with `motif run --resume <run-id>`
+- **Resumable pipelines**: state checkpointed after every step, resume from the failure point with `jerry run --resume <run-id>`
 - **Structured logging**: every LLM call, tool call, and decision logged to JSONL with timestamps and token counts
 - **Output validation**: agent output validated against JSON Schema translated from the simplified frontmatter notation
 - **Retry and fallback**: configurable per-step retry with fixed or exponential backoff, optional fallback steps
@@ -253,7 +253,7 @@ Generates a GitLab CI job triggered via the pipeline API or web UI.
 ## Project Structure
 
 ```
-.motif/
+.jerry/
   pipelines/            # Pipeline definitions (YAML)
   agents/               # Agent definitions (Markdown)
   scripts/              # Shell scripts for deterministic steps
@@ -269,7 +269,7 @@ Generates a GitLab CI job triggered via the pipeline API or web UI.
 ```bash
 go test ./...           # Run tests
 go test -race ./...     # Run with race detector
-go build ./cmd/motif    # Build
+go build ./cmd/jerry    # Build
 golangci-lint run       # Lint
 ```
 

@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kilupskalvis/motif/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxGitLogCount is the maximum number of commits returned by git_log.

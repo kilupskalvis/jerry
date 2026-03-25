@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kilupskalvis/motif/internal/cli"
+	"github.com/kilupskalvis/jerry/internal/cli"
 )
 
 func TestInitCmd_CreatesDirectory(t *testing.T) {
@@ -18,13 +18,13 @@ func TestInitCmd_CreatesDirectory(t *testing.T) {
 		t.Fatalf("init failed: %v", err)
 	}
 
-	motifDir := filepath.Join(tmpDir, ".motif")
-	info, statErr := os.Stat(motifDir)
+	jerryDir := filepath.Join(tmpDir, ".jerry")
+	info, statErr := os.Stat(jerryDir)
 	if statErr != nil {
-		t.Fatalf(".motif/ not created: %v", statErr)
+		t.Fatalf(".jerry/ not created: %v", statErr)
 	}
 	if !info.IsDir() {
-		t.Fatal(".motif should be a directory")
+		t.Fatal(".jerry should be a directory")
 	}
 }
 
@@ -35,7 +35,7 @@ func TestInitCmd_CreatesExamplePipeline(t *testing.T) {
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	pipelinePath := filepath.Join(tmpDir, ".motif", "pipelines", "example.yaml")
+	pipelinePath := filepath.Join(tmpDir, ".jerry", "pipelines", "example.yaml")
 	if _, statErr := os.Stat(pipelinePath); statErr != nil {
 		t.Fatalf("example.yaml not created: %v", statErr)
 	}
@@ -53,7 +53,7 @@ func TestInitCmd_CreatesScripts(t *testing.T) {
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	scriptPath := filepath.Join(tmpDir, ".motif", "scripts", "echo-context.sh")
+	scriptPath := filepath.Join(tmpDir, ".jerry", "scripts", "echo-context.sh")
 	info, statErr := os.Stat(scriptPath)
 	if statErr != nil {
 		t.Fatalf("echo-context.sh not created: %v", statErr)
@@ -72,7 +72,7 @@ func TestInitCmd_CreatesGitignore(t *testing.T) {
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	gitignorePath := filepath.Join(tmpDir, ".motif", ".gitignore")
+	gitignorePath := filepath.Join(tmpDir, ".jerry", ".gitignore")
 	content, readErr := os.ReadFile(gitignorePath)
 	if readErr != nil {
 		t.Fatalf(".gitignore not created: %v", readErr)
@@ -94,7 +94,7 @@ func TestInitCmd_CreatesAgents(t *testing.T) {
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	agentsDir := filepath.Join(tmpDir, ".motif", "agents")
+	agentsDir := filepath.Join(tmpDir, ".jerry", "agents")
 	for _, name := range []string{"plan.md", "generate.md"} {
 		path := filepath.Join(agentsDir, name)
 		info, statErr := os.Stat(path)
@@ -115,7 +115,7 @@ func TestInitCmd_CreatesFeaturePipeline(t *testing.T) {
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	featurePath := filepath.Join(tmpDir, ".motif", "pipelines", "feature.yaml")
+	featurePath := filepath.Join(tmpDir, ".jerry", "pipelines", "feature.yaml")
 	content, readErr := os.ReadFile(featurePath)
 	if readErr != nil {
 		t.Fatalf("feature.yaml not created: %v", readErr)
@@ -138,7 +138,7 @@ func TestInitCmd_AlreadyExists(t *testing.T) {
 	rootCmd2.SetArgs([]string{"init", "--path", tmpDir})
 	err := rootCmd2.Execute()
 	if err == nil {
-		t.Fatal("expected error when .motif/ already exists")
+		t.Fatal("expected error when .jerry/ already exists")
 	}
 }
 
@@ -156,9 +156,9 @@ func TestInitCmd_WithPathFlag(t *testing.T) {
 		t.Fatalf("init with --path failed: %v", err)
 	}
 
-	motifDir := filepath.Join(targetDir, ".motif")
-	if _, statErr := os.Stat(motifDir); statErr != nil {
-		t.Fatalf(".motif/ not created in target dir: %v", statErr)
+	jerryDir := filepath.Join(targetDir, ".jerry")
+	if _, statErr := os.Stat(jerryDir); statErr != nil {
+		t.Fatalf(".jerry/ not created in target dir: %v", statErr)
 	}
 }
 

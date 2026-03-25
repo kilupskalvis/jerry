@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/kilupskalvis/motif/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/errors"
 )
 
 // FileStateStore implements StateStore using the local filesystem.
 type FileStateStore struct {
-	runsDir string // absolute path to .motif/runs/
+	runsDir string // absolute path to .jerry/runs/
 }
 
 // NewFileStateStore creates a state store that persists to the given directory.
