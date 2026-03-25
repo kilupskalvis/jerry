@@ -35,6 +35,29 @@ func NewLoader(jerryDir string) *Loader {
 	return &Loader{jerryDir: jerryDir}
 }
 
+// ListPipelines returns the names of all pipelines in the pipelines directory.
+func (l *Loader) ListPipelines() []string {
+	pipelinesDir := filepath.Join(l.jerryDir, "pipelines")
+	entries, err := os.ReadDir(pipelinesDir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		for _, ext := range []string{".yaml", ".yml"} {
+			if strings.HasSuffix(name, ext) {
+				names = append(names, strings.TrimSuffix(name, ext))
+				break
+			}
+		}
+	}
+	return names
+}
+
 // Load reads and validates a pipeline by name.
 // Looks for .jerry/pipelines/<name>.yaml, then .jerry/pipelines/<name>.yml.
 func (l *Loader) Load(name string) (*Pipeline, error) {

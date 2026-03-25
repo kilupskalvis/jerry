@@ -118,13 +118,8 @@ func runPipeline(ctx context.Context, app *App, pipelineName string, triggerData
 	}
 
 	if app.AgentLoader != nil {
-		for _, step := range pipelineDef.Steps {
-			if step.Agent == "" {
-				continue
-			}
-			if _, agentErr := app.AgentLoader.Load(step.Agent); agentErr != nil {
-				return fmt.Errorf("pre-flight validation failed: step %q: %w", step.Name, agentErr)
-			}
+		if errs := validateAgents(app.AgentLoader, pipelineDef); len(errs) > 0 {
+			return fmt.Errorf("pre-flight validation failed: %s", errs[0])
 		}
 	}
 
