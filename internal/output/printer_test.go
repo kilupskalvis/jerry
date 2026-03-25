@@ -114,7 +114,7 @@ func TestWarning(t *testing.T) {
 
 func TestPipelineComplete(t *testing.T) {
 	printer, _, stderr := newTestPrinter()
-	printer.PipelineComplete(4500*time.Millisecond, "run_abc123")
+	printer.PipelineComplete(4500*time.Millisecond, "run_abc123", 0)
 
 	got := stderr.String()
 	expected := "jerry: Pipeline completed in 4.5s (run: run_abc123)\n"
@@ -123,9 +123,20 @@ func TestPipelineComplete(t *testing.T) {
 	}
 }
 
+func TestPipelineCompleteWithTokens(t *testing.T) {
+	printer, _, stderr := newTestPrinter()
+	printer.PipelineComplete(135*time.Second, "run_abc123", 85000)
+
+	got := stderr.String()
+	expected := "jerry: Pipeline completed in 2m 15s (run: run_abc123, 85k tokens)\n"
+	if got != expected {
+		t.Errorf("PipelineComplete with tokens output = %q, want %q", got, expected)
+	}
+}
+
 func TestPipelineFailed(t *testing.T) {
 	printer, _, stderr := newTestPrinter()
-	printer.PipelineFailed("validate", "script exited with code 1", "run_abc123")
+	printer.PipelineFailed("validate", "script exited with code 1", "feature", "run_abc123")
 
 	got := stderr.String()
 	if !strings.Contains(got, "validate") {
@@ -133,6 +144,12 @@ func TestPipelineFailed(t *testing.T) {
 	}
 	if !strings.Contains(got, "run_abc123") {
 		t.Errorf("PipelineFailed should contain run ID, got %q", got)
+	}
+	if !strings.Contains(got, "jerry logs run_abc123") {
+		t.Errorf("PipelineFailed should suggest logs command, got %q", got)
+	}
+	if !strings.Contains(got, "jerry run feature --resume run_abc123") {
+		t.Errorf("PipelineFailed should suggest resume command, got %q", got)
 	}
 }
 
@@ -168,8 +185,8 @@ func TestAllOutputGoesToStderr(t *testing.T) {
 	printer.StepSkipped("step", "reason")
 	printer.StepOutput("output")
 	printer.Warning("warn")
-	printer.PipelineComplete(time.Second, "run_1")
-	printer.PipelineFailed("step", "err", "run_1")
+	printer.PipelineComplete(time.Second, "run_1", 0)
+	printer.PipelineFailed("step", "err", "test", "run_1")
 	printer.ValidationResult("f.yaml", true, "ok")
 
 	if stdout.Len() != 0 {

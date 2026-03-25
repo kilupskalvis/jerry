@@ -40,12 +40,7 @@ func run() int {
 
 		var jerryErr *jerrerr.Error
 		if errors.As(execErr, &jerryErr) {
-			switch jerryErr.Code {
-			case jerrerr.CodeJerryDirNotFound:
-				return 2
-			case jerrerr.CodeRunNotFound, jerrerr.CodeRunNotResumable, jerrerr.CodePipelineChanged:
-				return 4
-			}
+			return jerryErr.ExitCode()
 		}
 		return 1
 	}

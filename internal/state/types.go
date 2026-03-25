@@ -41,17 +41,19 @@ type RunState struct {
 
 // StepResult records the outcome of a single step execution.
 type StepResult struct {
-	Name        string       `json:"name"`
-	Type        string       `json:"type"`
-	Status      StepStatus   `json:"status"`
-	StartedAt   time.Time    `json:"started_at"`
-	CompletedAt time.Time    `json:"completed_at"`
-	DurationMs  int64        `json:"duration_ms"`
-	RetriesUsed int          `json:"retries_used"`
-	Output      any          `json:"output,omitempty"`
-	Stdout      string       `json:"stdout,omitempty"`
-	Stderr      string       `json:"stderr,omitempty"`
-	Error       *ErrorDetail `json:"error,omitempty"`
+	Name         string       `json:"name"`
+	Type         string       `json:"type"`
+	Status       StepStatus   `json:"status"`
+	StartedAt    time.Time    `json:"started_at"`
+	CompletedAt  time.Time    `json:"completed_at"`
+	DurationMs   int64        `json:"duration_ms"`
+	RetriesUsed  int          `json:"retries_used"`
+	TokensInput  int          `json:"tokens_input,omitempty"`
+	TokensOutput int          `json:"tokens_output,omitempty"`
+	Output       any          `json:"output,omitempty"`
+	Stdout       string       `json:"stdout,omitempty"`
+	Stderr       string       `json:"stderr,omitempty"`
+	Error        *ErrorDetail `json:"error,omitempty"`
 }
 
 // ErrorDetail holds error information for a failed step.

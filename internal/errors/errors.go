@@ -50,6 +50,36 @@ const (
 	CodeConfigInvalid = "CONFIG_INVALID"
 )
 
+// Exit codes per spec: 1=step failure, 2=config error, 3=runtime error.
+const (
+	ExitStepFailure = 1
+	ExitConfig      = 2
+	ExitRuntime     = 3
+)
+
+var exitCodes = map[string]int{
+	// Config errors (exit 2).
+	CodeInvalidPipeline:  ExitConfig,
+	CodePipelineNotFound: ExitConfig,
+	CodeJerryDirNotFound: ExitConfig,
+	CodeJerryDirExists:   ExitConfig,
+	CodeConfigInvalid:    ExitConfig,
+	CodeAgentLoadFailed:  ExitConfig,
+	CodeToolNotFound:     ExitConfig,
+	CodeRunNotFound:      ExitConfig,
+	CodeRunNotResumable:  ExitConfig,
+	CodePipelineChanged:  ExitConfig,
+
+	// Runtime errors (exit 3).
+	CodeLLMAuthFailed:      ExitRuntime,
+	CodeLLMRateLimited:     ExitRuntime,
+	CodeLLMServerError:     ExitRuntime,
+	CodeLLMCallFailed:      ExitRuntime,
+	CodeStateWriteFailed:   ExitRuntime,
+	CodeContextWriteDenied: ExitRuntime,
+	CodeGitNotAvailable:    ExitRuntime,
+}
+
 // Error is the standard error type for Jerry.
 type Error struct {
 	Code    string
@@ -93,6 +123,15 @@ func Wrap(code, message string, cause error) *Error {
 		Message: message,
 		Cause:   cause,
 	}
+}
+
+// ExitCode returns the CLI exit code for this error.
+// Defaults to ExitStepFailure (1) for unrecognized codes.
+func (e *Error) ExitCode() int {
+	if code, ok := exitCodes[e.Code]; ok {
+		return code
+	}
+	return ExitStepFailure
 }
 
 // WithStep returns a copy of the error with the Step field set.

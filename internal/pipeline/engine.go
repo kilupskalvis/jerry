@@ -90,7 +90,7 @@ func (e *Engine) Run(ctx context.Context, pipelineDef Pipeline, trigger contexts
 		runState.CompletedAt = &now
 		runState.Context = ctxStore.Snapshot()
 		_ = e.stateStore.SaveFinal(runState)
-		e.printer.PipelineComplete(time.Since(startTime), runID)
+		e.printer.PipelineComplete(time.Since(startTime), runID, totalTokens(runState.StepResults))
 	}
 
 	e.logPipelineEnd(logWriter, &runState, startTime)
@@ -128,7 +128,7 @@ func (e *Engine) RunFrom(
 		existingState.CompletedAt = &now
 		existingState.Context = existingStore.Snapshot()
 		_ = e.stateStore.SaveFinal(*existingState)
-		e.printer.PipelineComplete(time.Since(existingState.StartedAt), existingState.RunID)
+		e.printer.PipelineComplete(time.Since(existingState.StartedAt), existingState.RunID, totalTokens(existingState.StepResults))
 	}
 
 	e.logPipelineEnd(logWriter, existingState, existingState.StartedAt)
@@ -212,7 +212,7 @@ func (e *Engine) runSteps(
 			logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
 				Status: "failed", DurationMs: stepDuration.Milliseconds(),
 			})
-			e.printer.PipelineFailed(step.Name, execErr.Error(), runState.RunID)
+			e.printer.PipelineFailed(step.Name, execErr.Error(), runState.PipelineName, runState.RunID)
 
 			return execErr
 		}
@@ -236,6 +236,8 @@ func (e *Engine) runSteps(
 		if stepOutput != nil {
 			result.Stdout = stepOutput.Stdout
 			result.Stderr = stepOutput.Stderr
+			result.TokensInput = stepOutput.TokensInput
+			result.TokensOutput = stepOutput.TokensOutput
 		}
 		runState.StepResults = append(runState.StepResults, result)
 		runState.Context = ctxStore.Snapshot()
@@ -391,6 +393,14 @@ func stepType(step Step) string {
 		return "agent"
 	}
 	return "script"
+}
+
+func totalTokens(results []state.StepResult) int {
+	total := 0
+	for _, r := range results {
+		total += r.TokensInput + r.TokensOutput
+	}
+	return total
 }
 
 func generateRunID() string {

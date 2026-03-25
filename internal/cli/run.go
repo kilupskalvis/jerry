@@ -156,7 +156,16 @@ func dryRunPipeline(app *App, pipelineName, intent string) error {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "\nValidation: pipeline is valid")
+	if app.AgentLoader != nil {
+		if errs := validateAgents(app.AgentLoader, pipelineDef); len(errs) > 0 {
+			fmt.Fprintln(os.Stderr, "\nValidation errors:")
+			for _, e := range errs {
+				fmt.Fprintf(os.Stderr, "  ✗ %s\n", e)
+			}
+			return fmt.Errorf("dry run failed: validation errors found")
+		}
+	}
+	fmt.Fprintln(os.Stderr, "\nValidation: pipeline and agents are valid")
 	fmt.Fprintf(os.Stderr, "\nTo execute: jerry run %s", pipelineName)
 	if intent != "" {
 		fmt.Fprintf(os.Stderr, " %q", intent)
