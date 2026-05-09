@@ -113,6 +113,42 @@ func TestFromReader_GitHubAutoDetect(t *testing.T) {
 	}
 }
 
+func TestFromReader_RepositoryDispatchWithClientPayload(t *testing.T) {
+	input := `{
+		"action": "jerry-ticket",
+		"client_payload": {
+			"type": "ticket",
+			"source": "jira",
+			"intent": "Add dark mode support",
+			"raw_payload": {"key": "PROJ-123"}
+		}
+	}`
+	trigger, err := FromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if trigger.Type != "ticket" {
+		t.Errorf("type = %q, want 'ticket'", trigger.Type)
+	}
+	if trigger.Source != "jira" {
+		t.Errorf("source = %q, want 'jira'", trigger.Source)
+	}
+	if trigger.Intent != "Add dark mode support" {
+		t.Errorf("intent = %q, want 'Add dark mode support'", trigger.Intent)
+	}
+}
+
+func TestFromReader_RepositoryDispatchWithoutPreNormalized(t *testing.T) {
+	input := `{"action": "some-event", "client_payload": {"foo": "bar"}}`
+	trigger, err := FromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if trigger.Type != "webhook" {
+		t.Errorf("type = %q, want 'webhook' for non-normalized client_payload", trigger.Type)
+	}
+}
+
 func TestFromReader_InvalidJSON(t *testing.T) {
 	_, err := FromReader(strings.NewReader("not json"))
 	if err == nil {

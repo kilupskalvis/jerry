@@ -57,6 +57,19 @@ func parse(data []byte) (*TriggerData, error) {
 		if _, hasPR := raw["pull_request"]; hasPR {
 			return NormalizeGitHubEvent("pull_request."+action, raw)
 		}
+		if cp, hasCP := raw["client_payload"].(map[string]any); hasCP {
+			if _, cpHasType := cp["type"]; cpHasType {
+				if _, cpHasSource := cp["source"]; cpHasSource {
+					cpJSON, marshalErr := json.Marshal(cp)
+					if marshalErr == nil {
+						var t TriggerData
+						if unmarshalErr := json.Unmarshal(cpJSON, &t); unmarshalErr == nil {
+							return &t, nil
+						}
+					}
+				}
+			}
+		}
 	}
 
 	if objectKind, ok := raw["object_kind"].(string); ok {
