@@ -30,10 +30,6 @@ const (
 	CodeToolNotFound            = "TOOL_NOT_FOUND"
 	CodeToolConstraintViolation = "TOOL_CONSTRAINT_VIOLATION"
 
-	// Output parsing errors.
-	CodeInvalidOutputJSON     = "INVALID_OUTPUT_JSON"
-	CodeOutputSchemaViolation = "OUTPUT_SCHEMA_VIOLATION"
-
 	// Context compaction errors.
 	CodeCompactionFailed = "COMPACTION_FAILED"
 	CodeContextTooLong   = "CONTEXT_TOO_LONG"

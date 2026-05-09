@@ -25,11 +25,6 @@ func TestLoad_ValidBasic(t *testing.T) {
 	path := writeAgentFile(t, dir, "basic.md", `---
 name: test-agent
 model: claude-sonnet-4-6
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  summary: string
 tools:
   - read_file
   - glob
@@ -65,11 +60,6 @@ func TestLoad_ValidNoTools(t *testing.T) {
 	path := writeAgentFile(t, dir, "no-tools.md", `---
 name: reasoning-agent
 model: claude-sonnet-4-6
-context_access:
-  - trigger
-output_key: analysis
-output_schema:
-  conclusion: string
 ---
 
 # Reasoning Agent
@@ -92,11 +82,6 @@ func TestLoad_ValidWithConstraints(t *testing.T) {
 	path := writeAgentFile(t, dir, "constrained.md", `---
 name: constrained-agent
 model: claude-sonnet-4-6
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  done: string
 tools:
   - read_file
   - write_file:
@@ -134,11 +119,6 @@ func TestLoad_ValidDefaults(t *testing.T) {
 	path := writeAgentFile(t, dir, "defaults.md", `---
 name: defaults-agent
 model: claude-sonnet-4-6
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  done: string
 ---
 
 # Defaults Agent
@@ -163,11 +143,6 @@ func TestLoad_DefaultModelFromLoader(t *testing.T) {
 	dir := t.TempDir()
 	path := writeAgentFile(t, dir, "no-model.md", `---
 name: no-model-agent
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  done: string
 ---
 
 # No Model
@@ -217,11 +192,6 @@ func TestLoad_InvalidNoName(t *testing.T) {
 	dir := t.TempDir()
 	path := writeAgentFile(t, dir, "no-name.md", `---
 model: claude-sonnet-4-6
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  done: string
 ---
 
 # No Name
@@ -244,11 +214,6 @@ func TestLoad_InvalidUnknownTool(t *testing.T) {
 	path := writeAgentFile(t, dir, "unknown-tool.md", `---
 name: bad-tools-agent
 model: claude-sonnet-4-6
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  done: string
 tools:
   - nonexistent_tool
 ---
@@ -273,11 +238,6 @@ func TestLoad_InvalidNoInstructions(t *testing.T) {
 	path := writeAgentFile(t, dir, "no-instructions.md", `---
 name: empty-body-agent
 model: claude-sonnet-4-6
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  done: string
 ---
 `)
 
@@ -295,11 +255,6 @@ func TestLoad_InvalidNoModel(t *testing.T) {
 	dir := t.TempDir()
 	path := writeAgentFile(t, dir, "no-model.md", `---
 name: no-model
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  done: string
 ---
 
 # Agent

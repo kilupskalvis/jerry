@@ -69,7 +69,6 @@ type StepEndData struct {
 	ToolCalls    int    `json:"tool_calls,omitempty"`
 	TokensInput  int    `json:"tokens_input,omitempty"`
 	TokensOutput int    `json:"tokens_output,omitempty"`
-	OutputKey    string `json:"output_key,omitempty"`
 }
 
 type LLMCallData struct {
