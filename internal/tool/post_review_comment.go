@@ -48,22 +48,19 @@ func NewPostReviewCommentTool(triggerRef *trigger.TriggerData) Tool {
 				return fmt.Sprintf("Error: %v", err), nil
 			}
 
-			number, err := extractPRNumber(triggerRef.RawPayload)
-			if err != nil {
-				return fmt.Sprintf("Error: %v", err), nil
+			if triggerRef.Number == 0 {
+				return "Error: cannot determine PR number from trigger", nil
 			}
-
-			commitSHA := extractCommitSHA(triggerRef.RawPayload)
-			if commitSHA == "" {
-				return "Error: cannot determine commit SHA from trigger payload", nil
+			if triggerRef.HeadSHA == "" {
+				return "Error: cannot determine commit SHA from trigger", nil
 			}
 
 			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d/comments",
-				gh.Owner, gh.Repo, number)
+				gh.Owner, gh.Repo, triggerRef.Number)
 
 			payload := map[string]any{
 				"body":      args.Body,
-				"commit_id": commitSHA,
+				"commit_id": triggerRef.HeadSHA,
 				"path":      args.Path,
 				"line":      args.Line,
 			}

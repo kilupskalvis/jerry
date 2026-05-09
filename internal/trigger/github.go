@@ -40,25 +40,12 @@ func normalizeGitHubIssue(t *TriggerData, payload map[string]any) (*TriggerData,
 	}
 
 	t.Intent, _ = issue["title"].(string)
-
-	t.RawPayload = map[string]any{
-		"issue_number": issue["number"],
-		"issue_url":    issue["html_url"],
-		"issue_body":   issue["body"],
-		"author":       extractNestedString(issue, "user", "login"),
+	if n, ok := issue["number"].(float64); ok {
+		t.Number = int(n)
 	}
-
-	if labels, ok := issue["labels"].([]any); ok {
-		labelNames := make([]any, 0, len(labels))
-		for _, l := range labels {
-			if lMap, ok := l.(map[string]any); ok {
-				if name, ok := lMap["name"].(string); ok {
-					labelNames = append(labelNames, name)
-				}
-			}
-		}
-		t.RawPayload["labels"] = labelNames
-	}
+	t.URL, _ = issue["html_url"].(string)
+	t.Author = extractNestedString(issue, "user", "login")
+	extractGitHubRepo(t, payload)
 
 	return t, nil
 }
@@ -72,15 +59,24 @@ func normalizeGitHubPR(t *TriggerData, payload map[string]any) (*TriggerData, er
 	}
 
 	t.Intent, _ = pr["title"].(string)
-
-	t.RawPayload = map[string]any{
-		"pr_number": pr["number"],
-		"pr_url":    pr["html_url"],
-		"pr_body":   pr["body"],
-		"author":    extractNestedString(pr, "user", "login"),
+	if n, ok := pr["number"].(float64); ok {
+		t.Number = int(n)
 	}
+	t.URL, _ = pr["html_url"].(string)
+	t.Author = extractNestedString(pr, "user", "login")
+	t.HeadSHA = extractNestedString(pr, "head", "sha")
+	extractGitHubRepo(t, payload)
 
 	return t, nil
+}
+
+func extractGitHubRepo(t *TriggerData, payload map[string]any) {
+	if repo, ok := payload["repository"].(map[string]any); ok {
+		if owner, ok := repo["owner"].(map[string]any); ok {
+			t.RepoOwner, _ = owner["login"].(string)
+		}
+		t.RepoName, _ = repo["name"].(string)
+	}
 }
 
 func extractNestedString(m map[string]any, keys ...string) string {

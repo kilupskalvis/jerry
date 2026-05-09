@@ -34,8 +34,8 @@ func TestNormalizeGitHub_IssueOpened(t *testing.T) {
 	if trigger.Intent != "Add notification preferences" {
 		t.Errorf("intent = %q, want 'Add notification preferences'", trigger.Intent)
 	}
-	if trigger.RawPayload["issue_number"] != float64(42) {
-		t.Errorf("issue_number = %v, want 42", trigger.RawPayload["issue_number"])
+	if trigger.Number != 42 {
+		t.Errorf("number = %d, want 42", trigger.Number)
 	}
 }
 

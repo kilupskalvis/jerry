@@ -52,9 +52,8 @@ func NewAddCheckStatusTool(triggerRef *trigger.TriggerData) Tool {
 				return fmt.Sprintf("Error: %v", err), nil
 			}
 
-			commitSHA := extractCommitSHA(triggerRef.RawPayload)
-			if commitSHA == "" {
-				return "Error: cannot determine commit SHA from trigger payload", nil
+			if triggerRef.HeadSHA == "" {
+				return "Error: cannot determine commit SHA from trigger", nil
 			}
 
 			conclusion := args.Status
@@ -63,7 +62,7 @@ func NewAddCheckStatusTool(triggerRef *trigger.TriggerData) Tool {
 
 			payload := map[string]any{
 				"name":       args.Name,
-				"head_sha":   commitSHA,
+				"head_sha":   triggerRef.HeadSHA,
 				"status":     "completed",
 				"conclusion": conclusion,
 				"output": map[string]string{

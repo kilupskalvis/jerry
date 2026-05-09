@@ -24,61 +24,25 @@ func resolveGitHubContext(t *trigger.TriggerData) (*githubContext, error) {
 		return nil, fmt.Errorf("GITHUB_TOKEN environment variable is required for GitHub operations")
 	}
 
-	if t == nil || t.RawPayload == nil {
+	if t == nil {
 		return nil, fmt.Errorf("no trigger context available — this tool requires a CI trigger (--trigger-file)")
 	}
 
-	owner, repo, err := extractRepo(t.RawPayload)
-	if err != nil {
-		return nil, err
+	owner := t.RepoOwner
+	repo := t.RepoName
+	if owner == "" || repo == "" {
+		if envRepo := os.Getenv("GITHUB_REPOSITORY"); envRepo != "" {
+			parts := strings.SplitN(envRepo, "/", 2)
+			if len(parts) == 2 {
+				owner, repo = parts[0], parts[1]
+			}
+		}
+	}
+	if owner == "" || repo == "" {
+		return nil, fmt.Errorf("cannot determine repository — set GITHUB_REPOSITORY or use a GitHub trigger")
 	}
 
 	return &githubContext{Owner: owner, Repo: repo, Token: token}, nil
-}
-
-func extractRepo(payload map[string]any) (string, string, error) {
-	if repoMap, ok := payload["repository"].(map[string]any); ok {
-		if fullName, ok := repoMap["full_name"].(string); ok {
-			parts := strings.SplitN(fullName, "/", 2)
-			if len(parts) == 2 {
-				return parts[0], parts[1], nil
-			}
-		}
-	}
-
-	envRepo := os.Getenv("GITHUB_REPOSITORY")
-	if envRepo != "" {
-		parts := strings.SplitN(envRepo, "/", 2)
-		if len(parts) == 2 {
-			return parts[0], parts[1], nil
-		}
-	}
-
-	return "", "", fmt.Errorf("cannot determine repository — set GITHUB_REPOSITORY or use a GitHub trigger")
-}
-
-func extractPRNumber(payload map[string]any) (int, error) {
-	if n, ok := payload["pr_number"].(float64); ok {
-		return int(n), nil
-	}
-	if n, ok := payload["issue_number"].(float64); ok {
-		return int(n), nil
-	}
-	return 0, fmt.Errorf("cannot determine PR/issue number from trigger payload")
-}
-
-func extractCommitSHA(payload map[string]any) string {
-	if sha, ok := payload["head_sha"].(string); ok {
-		return sha
-	}
-	if pr, ok := payload["pull_request"].(map[string]any); ok {
-		if head, ok := pr["head"].(map[string]any); ok {
-			if sha, ok := head["sha"].(string); ok {
-				return sha
-			}
-		}
-	}
-	return os.Getenv("GITHUB_SHA")
 }
 
 func githubAPI(method, url, token string, body any) (string, error) {

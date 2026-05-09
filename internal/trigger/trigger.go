@@ -13,6 +13,12 @@ type TriggerData struct {
 	Type       string         `json:"type"`
 	Source     string         `json:"source"`
 	Intent     string         `json:"intent,omitempty"`
+	Number     int            `json:"number,omitempty"`
+	URL        string         `json:"url,omitempty"`
+	Author     string         `json:"author,omitempty"`
+	HeadSHA    string         `json:"head_sha,omitempty"`
+	RepoOwner  string         `json:"repo_owner,omitempty"`
+	RepoName   string         `json:"repo_name,omitempty"`
 	RawPayload map[string]any `json:"raw_payload,omitempty"`
 }
 

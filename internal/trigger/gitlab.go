@@ -14,22 +14,25 @@ func NormalizeGitLabEvent(objectKind string, payload map[string]any) (*TriggerDa
 		t.Type = "ticket"
 		if attrs, ok := payload["object_attributes"].(map[string]any); ok {
 			t.Intent, _ = attrs["title"].(string)
-			t.RawPayload = map[string]any{
-				"issue_id":   attrs["iid"],
-				"issue_url":  attrs["url"],
-				"issue_body": attrs["description"],
+			if n, ok := attrs["iid"].(float64); ok {
+				t.Number = int(n)
 			}
+			t.URL, _ = attrs["url"].(string)
 		}
+		extractGitLabRepo(t, payload)
 	case "merge_request":
 		t.Type = "pull_request"
 		if attrs, ok := payload["object_attributes"].(map[string]any); ok {
 			t.Intent, _ = attrs["title"].(string)
-			t.RawPayload = map[string]any{
-				"mr_id":   attrs["iid"],
-				"mr_url":  attrs["url"],
-				"mr_body": attrs["description"],
+			if n, ok := attrs["iid"].(float64); ok {
+				t.Number = int(n)
+			}
+			t.URL, _ = attrs["url"].(string)
+			if lastCommit, ok := attrs["last_commit"].(map[string]any); ok {
+				t.HeadSHA, _ = lastCommit["id"].(string)
 			}
 		}
+		extractGitLabRepo(t, payload)
 	case "push":
 		t.Type = "push"
 		if commits, ok := payload["commits"].([]any); ok && len(commits) > 0 {
@@ -42,4 +45,15 @@ func NormalizeGitLabEvent(objectKind string, payload map[string]any) (*TriggerDa
 	}
 
 	return t, nil
+}
+
+func extractGitLabRepo(t *TriggerData, payload map[string]any) {
+	if project, ok := payload["project"].(map[string]any); ok {
+		if namespace, ok := project["namespace"].(string); ok {
+			t.RepoOwner = namespace
+		}
+		if name, ok := project["name"].(string); ok {
+			t.RepoName = name
+		}
+	}
 }

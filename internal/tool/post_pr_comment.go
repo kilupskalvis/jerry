@@ -38,20 +38,19 @@ func NewPostPRCommentTool(triggerRef *trigger.TriggerData) Tool {
 				return fmt.Sprintf("Error: %v", err), nil
 			}
 
-			number, err := extractPRNumber(triggerRef.RawPayload)
-			if err != nil {
-				return fmt.Sprintf("Error: %v", err), nil
+			if triggerRef.Number == 0 {
+				return "Error: cannot determine PR/issue number from trigger", nil
 			}
 
 			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments",
-				gh.Owner, gh.Repo, number)
+				gh.Owner, gh.Repo, triggerRef.Number)
 
 			_, apiErr := githubAPI("POST", url, gh.Token, map[string]string{"body": args.Body})
 			if apiErr != nil {
 				return fmt.Sprintf("Error: %v", apiErr), nil
 			}
 
-			return fmt.Sprintf("Comment posted on #%d", number), nil
+			return fmt.Sprintf("Comment posted on #%d", triggerRef.Number), nil
 		},
 	)
 }
