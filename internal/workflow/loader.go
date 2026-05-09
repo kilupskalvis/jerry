@@ -89,6 +89,9 @@ func (l *Loader) JerryDir() string {
 
 func (l *Loader) deriveStepNames(w *Workflow) {
 	for i := range w.Steps {
+		if w.Steps[i].Name != "" {
+			continue
+		}
 		if w.Steps[i].Agent != "" {
 			w.Steps[i].Name = w.Steps[i].Agent
 		} else {
@@ -102,7 +105,9 @@ func (l *Loader) resolveAgentPaths(w *Workflow, workflowDir string) {
 		if w.Steps[i].Agent != "" {
 			agentName := w.Steps[i].Agent
 			w.Steps[i].Agent = filepath.Join(workflowDir, agentName+".md")
-			w.Steps[i].Name = agentName
+			if w.Steps[i].Name == "" {
+				w.Steps[i].Name = agentName
+			}
 		}
 	}
 }

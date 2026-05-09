@@ -26,8 +26,7 @@ type Step struct {
 	Retries int      `yaml:"retries,omitempty"`
 	Timeout Duration `yaml:"timeout,omitempty"`
 
-	// Set by the loader, not from YAML.
-	Name string `yaml:"-"`
+	Name string `yaml:"name,omitempty"`
 }
 
 // Duration is a wrapper around time.Duration that supports YAML
