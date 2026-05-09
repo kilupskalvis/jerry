@@ -7,7 +7,7 @@ import (
 
 	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/workflow"
 )
 
@@ -17,7 +17,7 @@ type App struct {
 	Engine      *workflow.Engine
 	Loader      *workflow.Loader
 	AgentLoader *agent.Loader
-	StateStore  state.StateStore
+	StateStore  run.StateStore
 	Printer     *output.Printer
 }
 
@@ -30,8 +30,8 @@ func NewRootCmd(app *App) *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:   "jerry",
-		Short: "Jerry — orchestrator for composable AI code generation pipelines",
-		Long:  "Jerry is an open-source orchestrator for composable AI code generation pipelines.",
+		Short: "Jerry — the agent runtime for CI/CD",
+		Long:  "Jerry is the agent runtime for CI/CD. Define AI agents in Markdown, run them as steps in your pipeline.",
 		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			if verbose {
 				app.Printer.SetVerbosity(output.VerbosityVerbose)

@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
-	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/run"
 )
 
 // @lattice:flow logs
@@ -85,9 +85,9 @@ func showOverview(app *App) error {
 	var completed, failed int
 	for _, s := range summaries {
 		switch s.Status {
-		case state.StatusCompleted:
+		case run.StatusCompleted:
 			completed++
-		case state.StatusFailed:
+		case run.StatusFailed:
 			failed++
 		}
 	}
@@ -100,7 +100,7 @@ func showOverview(app *App) error {
 	}
 	for _, s := range summaries[:limit] {
 		status := "✓ " + string(s.Status)
-		if s.Status == state.StatusFailed {
+		if s.Status == run.StatusFailed {
 			status = "✗ " + string(s.Status)
 		}
 		ago := time.Since(s.StartedAt).Truncate(time.Second)
@@ -129,7 +129,7 @@ func showRunDetail(app *App, runID, stepFilter string, showTools, showLLM, showJ
 	}
 
 	runDir := app.StateStore.RunDir(runID)
-	entries, _ := state.ReadLogEntries(runDir)
+	entries, _ := run.ReadLogEntries(runDir)
 
 	if showJSON {
 		for _, entry := range entries {
@@ -157,7 +157,7 @@ func showRunDetail(app *App, runID, stepFilter string, showTools, showLLM, showJ
 // showRunOverview prints the run summary: header, token totals, per-step stats,
 // files changed, and errors. All tool-specific knowledge comes from the stored
 // Summary field — this function is completely tool-agnostic.
-func showRunOverview(runState *state.RunState, entries []state.LogEntry) error {
+func showRunOverview(runState *run.RunState, entries []run.LogEntry) error {
 	fmt.Fprintf(os.Stderr, "Run: %s\n", runState.RunID)
 	fmt.Fprintf(os.Stderr, "Workflow: %s\n", runState.WorkflowName)
 	fmt.Fprintf(os.Stderr, "Status: %s\n", runState.Status)
@@ -169,10 +169,10 @@ func showRunOverview(runState *state.RunState, entries []state.LogEntry) error {
 
 	var totalInput, totalOutput int
 	for _, entry := range entries {
-		if entry.Type != state.LogLLMCall {
+		if entry.Type != run.LogLLMCall {
 			continue
 		}
-		var data state.LLMCallData
+		var data run.LLMCallData
 		if json.Unmarshal(entry.Data, &data) == nil {
 			totalInput += data.TokensInput
 			totalOutput += data.TokensOutput
@@ -189,9 +189,9 @@ func showRunOverview(runState *state.RunState, entries []state.LogEntry) error {
 	for _, r := range runState.StepResults {
 		symbol := "✓"
 		switch r.Status {
-		case state.StepFailed:
+		case run.StepFailed:
 			symbol = "✗"
-		case state.StepSkipped:
+		case run.StepSkipped:
 			symbol = "⊘"
 		}
 		duration := time.Duration(r.DurationMs) * time.Millisecond
@@ -227,7 +227,7 @@ func showRunOverview(runState *state.RunState, entries []state.LogEntry) error {
 	}
 
 	for _, r := range runState.StepResults {
-		if r.Status == state.StepFailed && r.Error != nil {
+		if r.Status == run.StepFailed && r.Error != nil {
 			fmt.Fprintf(os.Stderr, "\nError in step %q: %s\n", r.Name, r.Error.Message)
 		}
 	}
@@ -237,7 +237,7 @@ func showRunOverview(runState *state.RunState, entries []state.LogEntry) error {
 
 // showStepDetail prints every log entry for a step. Tool call summaries come
 // from the stored Summary field — no tool-specific interpretation here.
-func showStepDetail(entries []state.LogEntry, stepName string) error {
+func showStepDetail(entries []run.LogEntry, stepName string) error {
 	s := aggregateByStep(entries)[stepName]
 	if s != nil {
 		parts := []string{}
@@ -266,8 +266,8 @@ func showStepDetail(entries []state.LogEntry, stepName string) error {
 		}
 
 		switch entry.Type {
-		case state.LogToolCall:
-			var data state.ToolCallData
+		case run.LogToolCall:
+			var data run.ToolCallData
 			if json.Unmarshal(entry.Data, &data) == nil {
 				hasEntries = true
 				status := "✓"
@@ -281,8 +281,8 @@ func showStepDetail(entries []state.LogEntry, stepName string) error {
 				fmt.Fprintf(os.Stderr, "  iter %d: %s %-20s %s\n",
 					data.Iteration, status, data.Tool, detail)
 			}
-		case state.LogLLMCall:
-			var data state.LLMCallData
+		case run.LogLLMCall:
+			var data run.LLMCallData
 			if json.Unmarshal(entry.Data, &data) == nil {
 				hasEntries = true
 				tools := ""
@@ -304,19 +304,19 @@ func showStepDetail(entries []state.LogEntry, stepName string) error {
 	return nil
 }
 
-func showToolCalls(entries []state.LogEntry) error {
+func showToolCalls(entries []run.LogEntry) error {
 	fmt.Fprintln(os.Stderr, "Tool calls:")
 	currentStep := ""
 	count := 0
 	for _, entry := range entries {
-		if entry.Type != state.LogToolCall {
+		if entry.Type != run.LogToolCall {
 			continue
 		}
 		if entry.Step != currentStep {
 			currentStep = entry.Step
 			fmt.Fprintf(os.Stderr, "\n  Step: %s\n", currentStep)
 		}
-		var data state.ToolCallData
+		var data run.ToolCallData
 		if json.Unmarshal(entry.Data, &data) == nil {
 			count++
 			fmt.Fprintf(os.Stderr, "    %-16s %s  %dms\n", data.Tool, data.Summary, data.DurationMs)
@@ -328,14 +328,14 @@ func showToolCalls(entries []state.LogEntry) error {
 	return nil
 }
 
-func showLLMCalls(entries []state.LogEntry) error {
+func showLLMCalls(entries []run.LogEntry) error {
 	fmt.Fprintln(os.Stderr, "LLM calls:")
 	count := 0
 	for _, entry := range entries {
-		if entry.Type != state.LogLLMCall {
+		if entry.Type != run.LogLLMCall {
 			continue
 		}
-		var data state.LLMCallData
+		var data run.LLMCallData
 		if json.Unmarshal(entry.Data, &data) == nil {
 			count++
 			fmt.Fprintf(os.Stderr, "  [%s iter %d] model=%s in=%d out=%d %s stop=%s\n",
@@ -354,14 +354,14 @@ func showLLMCalls(entries []state.LogEntry) error {
 // extractWrittenFiles collects unique file paths from tool calls that wrote
 // files. Detected generically by the presence of both "path" and "content"
 // in the arguments — no tool name check needed.
-func extractWrittenFiles(entries []state.LogEntry) []string {
+func extractWrittenFiles(entries []run.LogEntry) []string {
 	seen := map[string]struct{}{}
 	var files []string
 	for _, entry := range entries {
-		if entry.Type != state.LogToolCall {
+		if entry.Type != run.LogToolCall {
 			continue
 		}
-		var data state.ToolCallData
+		var data run.ToolCallData
 		if json.Unmarshal(entry.Data, &data) != nil || !data.Success {
 			continue
 		}
@@ -382,7 +382,7 @@ type stepStat struct {
 	tokensOut int
 }
 
-func aggregateByStep(entries []state.LogEntry) map[string]*stepStat {
+func aggregateByStep(entries []run.LogEntry) map[string]*stepStat {
 	stats := map[string]*stepStat{}
 	for _, entry := range entries {
 		if entry.Step == "" {
@@ -393,14 +393,14 @@ func aggregateByStep(entries []state.LogEntry) map[string]*stepStat {
 		}
 		s := stats[entry.Step]
 		switch entry.Type {
-		case state.LogLLMCall:
-			var data state.LLMCallData
+		case run.LogLLMCall:
+			var data run.LLMCallData
 			if json.Unmarshal(entry.Data, &data) == nil {
 				s.llmCalls++
 				s.tokensIn += data.TokensInput
 				s.tokensOut += data.TokensOutput
 			}
-		case state.LogToolCall:
+		case run.LogToolCall:
 			s.toolCalls++
 		}
 	}

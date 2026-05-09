@@ -27,7 +27,7 @@ func (l *Loader) Load(name string) (*Workflow, error) {
 	workflowFile := filepath.Join(l.jerryDir, name, "workflow.yaml")
 
 	if _, err := os.Stat(workflowFile); os.IsNotExist(err) {
-		return nil, errors.New(errors.CodePipelineNotFound,
+		return nil, errors.New(errors.CodeWorkflowNotFound,
 			fmt.Sprintf("workflow %q not found — run 'jerry init' to get started", name))
 	}
 
@@ -38,13 +38,13 @@ func (l *Loader) Load(name string) (*Workflow, error) {
 func (l *Loader) LoadFile(path, name string) (*Workflow, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.Wrap(errors.CodeInvalidPipeline,
+		return nil, errors.Wrap(errors.CodeInvalidWorkflow,
 			fmt.Sprintf("failed to read workflow file %q", path), err)
 	}
 
 	var w Workflow
 	if err := yaml.Unmarshal(content, &w); err != nil {
-		return nil, errors.Wrap(errors.CodeInvalidPipeline,
+		return nil, errors.Wrap(errors.CodeInvalidWorkflow,
 			fmt.Sprintf("invalid YAML in %q", path), err)
 	}
 
@@ -57,7 +57,7 @@ func (l *Loader) LoadFile(path, name string) (*Workflow, error) {
 	l.resolveAgentPaths(&w, workflowDir)
 
 	if errs := l.validate(&w); len(errs) > 0 {
-		return nil, errors.New(errors.CodeInvalidPipeline,
+		return nil, errors.New(errors.CodeInvalidWorkflow,
 			strings.Join(errs, "; "))
 	}
 

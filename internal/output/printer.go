@@ -94,28 +94,25 @@ func (p *Printer) Warning(format string, args ...any) {
 	}
 }
 
-// PipelineComplete prints the final success message.
-func (p *Printer) PipelineComplete(duration time.Duration, runID string, totalTokens int) {
+// WorkflowComplete prints the final success message.
+func (p *Printer) WorkflowComplete(duration time.Duration, runID string, totalTokens int) {
 	if p.verbosity >= VerbosityQuiet {
 		if totalTokens > 0 {
-			fmt.Fprintf(p.stderr, "jerry: Pipeline completed in %s (run: %s, %dk tokens)\n",
+			fmt.Fprintf(p.stderr, "jerry: Workflow completed in %s (run: %s, %dk tokens)\n",
 				formatDuration(duration), runID, totalTokens/1000)
 		} else {
-			fmt.Fprintf(p.stderr, "jerry: Pipeline completed in %s (run: %s)\n",
+			fmt.Fprintf(p.stderr, "jerry: Workflow completed in %s (run: %s)\n",
 				formatDuration(duration), runID)
 		}
 	}
 }
 
-// PipelineFailed prints the final failure message with actionable next steps.
-func (p *Printer) PipelineFailed(stepName, message, pipelineName, runID string) {
-	fmt.Fprintf(p.stderr, "jerry: Pipeline failed at step '%s': %s\n", stepName, message)
-	fmt.Fprintf(p.stderr, "jerry: Run saved: %s\n", runID)
-	fmt.Fprintf(p.stderr, "jerry: To inspect: jerry logs %s\n", runID)
-	fmt.Fprintf(p.stderr, "jerry: To retry:   jerry run %s --resume %s\n", pipelineName, runID)
+// WorkflowFailed prints the failure message.
+func (p *Printer) WorkflowFailed(stepName, message string) {
+	fmt.Fprintf(p.stderr, "jerry: Workflow failed at step '%s': %s\n", stepName, message)
 }
 
-// ValidationResult prints the result of validating a pipeline.
+// ValidationResult prints the result of validating a workflow.
 func (p *Printer) ValidationResult(file string, valid bool, detail string) {
 	if valid {
 		fmt.Fprintf(p.stderr, "  ✓ %s — %s\n", file, detail)

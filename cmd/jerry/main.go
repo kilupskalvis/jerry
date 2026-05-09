@@ -14,12 +14,10 @@ import (
 	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/cli"
 	"github.com/kilupskalvis/jerry/internal/config"
-	"github.com/kilupskalvis/jerry/internal/contextstore"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/script"
-	"github.com/kilupskalvis/jerry/internal/state"
-	"github.com/kilupskalvis/jerry/internal/tools"
+	jerryrun "github.com/kilupskalvis/jerry/internal/run"
+	"github.com/kilupskalvis/jerry/internal/tool"
 	"github.com/kilupskalvis/jerry/internal/workflow"
 )
 
@@ -89,10 +87,10 @@ func buildApp(printer *output.Printer) *cli.App {
 
 	loader := workflow.NewLoader(jerryDir)
 	runsDir := filepath.Join(jerryDir, "runs")
-	stateStore := state.NewFileStateStore(runsDir)
-	scriptExec := script.NewExecutor(repoRoot, secretEnv)
+	stateStore := jerryrun.NewFileStateStore(runsDir)
+	scriptExec := workflow.NewScriptExecutor(repoRoot, secretEnv)
 
-	toolRegistry := tools.NewRegistry(repoRoot, secretEnv)
+	toolRegistry := tool.NewRegistry(repoRoot, secretEnv)
 	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), defaultModel)
 
 	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
@@ -104,7 +102,7 @@ func buildApp(printer *output.Printer) *cli.App {
 		openaiKey = secretEnv["OPENAI_API_KEY"]
 	}
 
-	agentExec := agent.NewExecutor(agentLoader, toolRegistry, anthropicKey, openaiKey)
+	agentExec := workflow.NewAgentExecutor(agentLoader, toolRegistry, anthropicKey, openaiKey)
 
 	engine := workflow.NewEngine(
 		[]workflow.StepExecutor{agentExec, scriptExec},
@@ -114,7 +112,7 @@ func buildApp(printer *output.Printer) *cli.App {
 	)
 
 	// Wire the context store to the script executor when engine creates it.
-	engine.OnStoreCreated = func(store *contextstore.Store) {
+	engine.OnStoreCreated = func(store *jerryrun.ContextStore) {
 		scriptExec.SetStore(store)
 	}
 

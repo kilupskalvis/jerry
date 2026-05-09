@@ -29,40 +29,37 @@ func TestInitCmd_CreatesDirectory(t *testing.T) {
 	}
 }
 
-func TestInitCmd_CreatesExamplePipeline(t *testing.T) {
+func TestInitCmd_CreatesReviewWorkflow(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rootCmd := cli.NewRootCmd(&cli.App{})
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	pipelinePath := filepath.Join(tmpDir, ".jerry", "pipelines", "example.yaml")
-	if _, statErr := os.Stat(pipelinePath); statErr != nil {
-		t.Fatalf("example.yaml not created: %v", statErr)
+	workflowPath := filepath.Join(tmpDir, ".jerry", "review", "workflow.yaml")
+	content, readErr := os.ReadFile(workflowPath)
+	if readErr != nil {
+		t.Fatalf("review/workflow.yaml not created: %v", readErr)
 	}
-
-	content, _ := os.ReadFile(pipelinePath)
-	if len(content) == 0 {
-		t.Error("example.yaml should not be empty")
+	if !strings.Contains(string(content), "reviewer") {
+		t.Error("workflow.yaml should reference reviewer agent")
 	}
 }
 
-func TestInitCmd_CreatesScripts(t *testing.T) {
+func TestInitCmd_CreatesReviewAgent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rootCmd := cli.NewRootCmd(&cli.App{})
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	scriptPath := filepath.Join(tmpDir, ".jerry", "scripts", "echo-context.sh")
-	info, statErr := os.Stat(scriptPath)
-	if statErr != nil {
-		t.Fatalf("echo-context.sh not created: %v", statErr)
+	agentPath := filepath.Join(tmpDir, ".jerry", "review", "reviewer.md")
+	content, readErr := os.ReadFile(agentPath)
+	if readErr != nil {
+		t.Fatalf("review/reviewer.md not created: %v", readErr)
 	}
-
-	// Should be executable
-	if info.Mode()&0o111 == 0 {
-		t.Error("echo-context.sh should be executable")
+	if !strings.Contains(string(content), "name: reviewer") {
+		t.Error("reviewer.md should have name: reviewer in frontmatter")
 	}
 }
 
@@ -79,62 +76,35 @@ func TestInitCmd_CreatesGitignore(t *testing.T) {
 		t.Fatalf(".gitignore not created: %v", readErr)
 	}
 
-	contentStr := string(content)
-	if !strings.Contains(contentStr, "runs/") {
+	if !strings.Contains(string(content), "runs/") {
 		t.Error(".gitignore should contain 'runs/'")
 	}
-	if !strings.Contains(contentStr, "cache/") {
-		t.Error(".gitignore should contain 'cache/'")
-	}
 }
 
-func TestInitCmd_CreatesAgents(t *testing.T) {
+func TestInitCmd_CreatesRunsDir(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rootCmd := cli.NewRootCmd(&cli.App{})
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	agentsDir := filepath.Join(tmpDir, ".jerry", "agents")
-	for _, name := range []string{"plan.md", "generate.md"} {
-		path := filepath.Join(agentsDir, name)
-		info, statErr := os.Stat(path)
-		if statErr != nil {
-			t.Errorf("agents/%s not created: %v", name, statErr)
-			continue
-		}
-		if info.Size() == 0 {
-			t.Errorf("agents/%s should not be empty", name)
-		}
+	runsDir := filepath.Join(tmpDir, ".jerry", "runs")
+	info, statErr := os.Stat(runsDir)
+	if statErr != nil {
+		t.Fatalf("runs/ not created: %v", statErr)
 	}
-}
-
-func TestInitCmd_CreatesFeaturePipeline(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
-
-	featurePath := filepath.Join(tmpDir, ".jerry", "pipelines", "feature.yaml")
-	content, readErr := os.ReadFile(featurePath)
-	if readErr != nil {
-		t.Fatalf("feature.yaml not created: %v", readErr)
-	}
-	if !strings.Contains(string(content), "generate") {
-		t.Error("feature.yaml should reference generate agent")
+	if !info.IsDir() {
+		t.Fatal("runs/ should be a directory")
 	}
 }
 
 func TestInitCmd_AlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// First init
 	rootCmd := cli.NewRootCmd(&cli.App{})
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
 	_ = rootCmd.Execute()
 
-	// Second init should fail
 	rootCmd2 := cli.NewRootCmd(&cli.App{})
 	rootCmd2.SetArgs([]string{"init", "--path", tmpDir})
 	err := rootCmd2.Execute()

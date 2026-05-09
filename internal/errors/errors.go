@@ -4,9 +4,9 @@ package errors
 import "fmt"
 
 const (
-	// Pipeline and configuration errors.
-	CodeInvalidPipeline    = "INVALID_PIPELINE"
-	CodePipelineNotFound   = "PIPELINE_NOT_FOUND"
+	// Workflow and configuration errors.
+	CodeInvalidWorkflow    = "INVALID_WORKFLOW"
+	CodeWorkflowNotFound   = "WORKFLOW_NOT_FOUND"
 	CodeJerryDirNotFound   = "JERRY_DIR_NOT_FOUND"
 	CodeJerryDirExists     = "JERRY_DIR_EXISTS"
 	CodeContextWriteDenied = "CONTEXT_WRITE_DENIED"
@@ -38,10 +38,10 @@ const (
 	CodeCompactionFailed = "COMPACTION_FAILED"
 	CodeContextTooLong   = "CONTEXT_TOO_LONG"
 
-	// Pipeline resume errors.
+	// Workflow resume errors.
 	CodeRunNotFound     = "RUN_NOT_FOUND"
 	CodeRunNotResumable = "RUN_NOT_RESUMABLE"
-	CodePipelineChanged = "PIPELINE_CHANGED"
+	CodeWorkflowChanged = "WORKFLOW_CHANGED"
 
 	// Git tool errors.
 	CodeGitNotAvailable = "GIT_NOT_AVAILABLE"
@@ -59,8 +59,8 @@ const (
 
 var exitCodes = map[string]int{
 	// Config errors (exit 2).
-	CodeInvalidPipeline:  ExitConfig,
-	CodePipelineNotFound: ExitConfig,
+	CodeInvalidWorkflow:  ExitConfig,
+	CodeWorkflowNotFound: ExitConfig,
 	CodeJerryDirNotFound: ExitConfig,
 	CodeJerryDirExists:   ExitConfig,
 	CodeConfigInvalid:    ExitConfig,
@@ -68,7 +68,7 @@ var exitCodes = map[string]int{
 	CodeToolNotFound:     ExitConfig,
 	CodeRunNotFound:      ExitConfig,
 	CodeRunNotResumable:  ExitConfig,
-	CodePipelineChanged:  ExitConfig,
+	CodeWorkflowChanged:  ExitConfig,
 
 	// Runtime errors (exit 3).
 	CodeLLMAuthFailed:      ExitRuntime,

@@ -5,45 +5,43 @@ package trigger
 import (
 	"fmt"
 	"strings"
-
-	"github.com/kilupskalvis/jerry/internal/contextstore"
 )
 
 // NormalizeGitHubEvent converts a GitHub webhook payload into TriggerData.
-func NormalizeGitHubEvent(eventType string, payload map[string]any) (*contextstore.TriggerData, error) {
-	trigger := &contextstore.TriggerData{
+func NormalizeGitHubEvent(eventType string, payload map[string]any) (*TriggerData, error) {
+	t := &TriggerData{
 		Source:     "github",
 		RawPayload: payload,
 	}
 
 	switch {
 	case strings.HasPrefix(eventType, "issues"):
-		return normalizeGitHubIssue(trigger, payload)
+		return normalizeGitHubIssue(t, payload)
 	case strings.HasPrefix(eventType, "pull_request"):
-		return normalizeGitHubPR(trigger, payload)
+		return normalizeGitHubPR(t, payload)
 	case eventType == "push":
-		trigger.Type = "push"
+		t.Type = "push"
 		if headCommit, ok := payload["head_commit"].(map[string]any); ok {
-			trigger.Intent, _ = headCommit["message"].(string)
+			t.Intent, _ = headCommit["message"].(string)
 		}
-		return trigger, nil
+		return t, nil
 	default:
-		trigger.Type = "webhook"
-		return trigger, nil
+		t.Type = "webhook"
+		return t, nil
 	}
 }
 
-func normalizeGitHubIssue(trigger *contextstore.TriggerData, payload map[string]any) (*contextstore.TriggerData, error) {
-	trigger.Type = "ticket"
+func normalizeGitHubIssue(t *TriggerData, payload map[string]any) (*TriggerData, error) {
+	t.Type = "ticket"
 
 	issue, ok := payload["issue"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("GitHub issue event missing 'issue' field")
 	}
 
-	trigger.Intent, _ = issue["title"].(string)
+	t.Intent, _ = issue["title"].(string)
 
-	trigger.RawPayload = map[string]any{
+	t.RawPayload = map[string]any{
 		"issue_number": issue["number"],
 		"issue_url":    issue["html_url"],
 		"issue_body":   issue["body"],
@@ -59,30 +57,30 @@ func normalizeGitHubIssue(trigger *contextstore.TriggerData, payload map[string]
 				}
 			}
 		}
-		trigger.RawPayload["labels"] = labelNames
+		t.RawPayload["labels"] = labelNames
 	}
 
-	return trigger, nil
+	return t, nil
 }
 
-func normalizeGitHubPR(trigger *contextstore.TriggerData, payload map[string]any) (*contextstore.TriggerData, error) {
-	trigger.Type = "pull_request"
+func normalizeGitHubPR(t *TriggerData, payload map[string]any) (*TriggerData, error) {
+	t.Type = "pull_request"
 
 	pr, ok := payload["pull_request"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("GitHub PR event missing 'pull_request' field")
 	}
 
-	trigger.Intent, _ = pr["title"].(string)
+	t.Intent, _ = pr["title"].(string)
 
-	trigger.RawPayload = map[string]any{
+	t.RawPayload = map[string]any{
 		"pr_number": pr["number"],
 		"pr_url":    pr["html_url"],
 		"pr_body":   pr["body"],
 		"author":    extractNestedString(pr, "user", "login"),
 	}
 
-	return trigger, nil
+	return t, nil
 }
 
 func extractNestedString(m map[string]any, keys ...string) string {

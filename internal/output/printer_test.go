@@ -17,10 +17,10 @@ func newTestPrinter() (*output.Printer, *bytes.Buffer, *bytes.Buffer) {
 
 func TestInfo(t *testing.T) {
 	printer, _, stderr := newTestPrinter()
-	printer.Info("starting %s", "pipeline")
+	printer.Info("starting %s", "workflow")
 
 	got := stderr.String()
-	expected := "jerry: starting pipeline\n"
+	expected := "jerry: starting workflow\n"
 	if got != expected {
 		t.Errorf("Info output = %q, want %q", got, expected)
 	}
@@ -112,44 +112,38 @@ func TestWarning(t *testing.T) {
 	}
 }
 
-func TestPipelineComplete(t *testing.T) {
+func TestWorkflowComplete(t *testing.T) {
 	printer, _, stderr := newTestPrinter()
-	printer.PipelineComplete(4500*time.Millisecond, "run_abc123", 0)
+	printer.WorkflowComplete(4500*time.Millisecond, "run_abc123", 0)
 
 	got := stderr.String()
-	expected := "jerry: Pipeline completed in 4.5s (run: run_abc123)\n"
+	expected := "jerry: Workflow completed in 4.5s (run: run_abc123)\n"
 	if got != expected {
-		t.Errorf("PipelineComplete output = %q, want %q", got, expected)
+		t.Errorf("WorkflowComplete output = %q, want %q", got, expected)
 	}
 }
 
-func TestPipelineCompleteWithTokens(t *testing.T) {
+func TestWorkflowCompleteWithTokens(t *testing.T) {
 	printer, _, stderr := newTestPrinter()
-	printer.PipelineComplete(135*time.Second, "run_abc123", 85000)
+	printer.WorkflowComplete(135*time.Second, "run_abc123", 85000)
 
 	got := stderr.String()
-	expected := "jerry: Pipeline completed in 2m 15s (run: run_abc123, 85k tokens)\n"
+	expected := "jerry: Workflow completed in 2m 15s (run: run_abc123, 85k tokens)\n"
 	if got != expected {
-		t.Errorf("PipelineComplete with tokens output = %q, want %q", got, expected)
+		t.Errorf("WorkflowComplete with tokens output = %q, want %q", got, expected)
 	}
 }
 
-func TestPipelineFailed(t *testing.T) {
+func TestWorkflowFailed(t *testing.T) {
 	printer, _, stderr := newTestPrinter()
-	printer.PipelineFailed("validate", "script exited with code 1", "feature", "run_abc123")
+	printer.WorkflowFailed("validate", "script exited with code 1")
 
 	got := stderr.String()
 	if !strings.Contains(got, "validate") {
-		t.Errorf("PipelineFailed should contain step name, got %q", got)
+		t.Errorf("WorkflowFailed should contain step name, got %q", got)
 	}
-	if !strings.Contains(got, "run_abc123") {
-		t.Errorf("PipelineFailed should contain run ID, got %q", got)
-	}
-	if !strings.Contains(got, "jerry logs run_abc123") {
-		t.Errorf("PipelineFailed should suggest logs command, got %q", got)
-	}
-	if !strings.Contains(got, "jerry run feature --resume run_abc123") {
-		t.Errorf("PipelineFailed should suggest resume command, got %q", got)
+	if !strings.Contains(got, "script exited with code 1") {
+		t.Errorf("WorkflowFailed should contain error message, got %q", got)
 	}
 }
 
@@ -185,8 +179,8 @@ func TestAllOutputGoesToStderr(t *testing.T) {
 	printer.StepSkipped("step", "reason")
 	printer.StepOutput("output")
 	printer.Warning("warn")
-	printer.PipelineComplete(time.Second, "run_1", 0)
-	printer.PipelineFailed("step", "err", "test", "run_1")
+	printer.WorkflowComplete(time.Second, "run_1", 0)
+	printer.WorkflowFailed("step", "err")
 	printer.ValidationResult("f.yaml", true, "ok")
 
 	if stdout.Len() != 0 {

@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kilupskalvis/jerry/internal/contextstore"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/run"
+	"github.com/kilupskalvis/jerry/internal/trigger"
 	"github.com/kilupskalvis/jerry/internal/workflow"
 )
 
@@ -40,33 +40,33 @@ type mockStateStore struct {
 	initCalls       int
 	checkpointCalls int
 	finalCalls      int
-	lastState       *state.RunState
+	lastState       *run.RunState
 	runsDir         string
 }
 
-func (m *mockStateStore) InitRun(runState state.RunState) error {
+func (m *mockStateStore) InitRun(runState run.RunState) error {
 	m.initCalls++
 	m.lastState = &runState
 	return nil
 }
 
-func (m *mockStateStore) SaveCheckpoint(runState state.RunState) error {
+func (m *mockStateStore) SaveCheckpoint(runState run.RunState) error {
 	m.checkpointCalls++
 	m.lastState = &runState
 	return nil
 }
 
-func (m *mockStateStore) SaveFinal(runState state.RunState) error {
+func (m *mockStateStore) SaveFinal(runState run.RunState) error {
 	m.finalCalls++
 	m.lastState = &runState
 	return nil
 }
 
-func (m *mockStateStore) LoadRun(_ string) (*state.RunState, error) {
+func (m *mockStateStore) LoadRun(_ string) (*run.RunState, error) {
 	return m.lastState, nil
 }
 
-func (m *mockStateStore) ListRuns() ([]state.RunSummary, error) {
+func (m *mockStateStore) ListRuns() ([]run.RunSummary, error) {
 	return nil, nil
 }
 
@@ -80,7 +80,7 @@ func (m *mockStateStore) RunDir(runID string) string {
 	return dir
 }
 
-func newTestEngine(exec workflow.StepExecutor, stateStore state.StateStore) *workflow.Engine {
+func newTestEngine(exec workflow.StepExecutor, stateStore run.StateStore) *workflow.Engine {
 	printer := output.NewPrinter(devNull{}, devNull{})
 	return workflow.NewEngine(
 		[]workflow.StepExecutor{exec},
@@ -109,8 +109,8 @@ func TestRun_SequentialExecution(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	runState, err := engine.Run(ctx, w, td)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -121,8 +121,8 @@ func TestRun_SequentialExecution(t *testing.T) {
 	if exec.calls[0] != "one" || exec.calls[1] != "two" || exec.calls[2] != "three" {
 		t.Errorf("steps executed out of order: %v", exec.calls)
 	}
-	if runState.Status != state.StatusCompleted {
-		t.Errorf("Status = %q, want %q", runState.Status, state.StatusCompleted)
+	if runState.Status != run.StatusCompleted {
+		t.Errorf("Status = %q, want %q", runState.Status, run.StatusCompleted)
 	}
 }
 
@@ -159,8 +159,8 @@ func TestRun_CumulativeContextFlow(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	_, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	_, err := engine.Run(ctx, w, td)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -188,13 +188,13 @@ func TestRun_RetrySuccess(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	runState, err := engine.Run(ctx, w, td)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if runState.Status != state.StatusCompleted {
+	if runState.Status != run.StatusCompleted {
 		t.Errorf("Status = %q, want completed", runState.Status)
 	}
 	if attempts != 3 {
@@ -219,13 +219,13 @@ func TestRun_RetryExhausted(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	runState, err := engine.Run(ctx, w, td)
 	if err == nil {
 		t.Fatal("expected error after retries exhausted")
 	}
 
-	if runState.Status != state.StatusFailed {
+	if runState.Status != run.StatusFailed {
 		t.Errorf("Status = %q, want failed", runState.Status)
 	}
 }
@@ -248,8 +248,8 @@ func TestRun_StepTimeout(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	_, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	_, err := engine.Run(ctx, w, td)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -270,8 +270,8 @@ func TestRun_StateCheckpoints(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	_, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	_, err := engine.Run(ctx, w, td)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -298,8 +298,8 @@ func TestRun_GenerateRunID(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	runState, err := engine.Run(ctx, w, td)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -324,8 +324,8 @@ func TestRun_NoExecutorFound(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	trigger := contextstore.TriggerData{Type: "manual", Source: "cli"}
-	runState, err := engine.Run(ctx, w, trigger)
+	td := trigger.TriggerData{Type: "manual", Source: "cli"}
+	runState, err := engine.Run(ctx, w, td)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestRun_NoExecutorFound(t *testing.T) {
 	if len(runState.StepResults) != 1 {
 		t.Fatalf("expected 1 step result, got %d", len(runState.StepResults))
 	}
-	if runState.StepResults[0].Status != state.StepSkipped {
+	if runState.StepResults[0].Status != run.StepSkipped {
 		t.Errorf("Status = %q, want skipped", runState.StepResults[0].Status)
 	}
 }

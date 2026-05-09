@@ -20,9 +20,9 @@ func TestNew(t *testing.T) {
 			message: "script exited with code 1",
 		},
 		{
-			name:    "pipeline not found",
-			code:    jerrerr.CodePipelineNotFound,
-			message: "pipeline 'feature' not found",
+			name:    "workflow not found",
+			code:    jerrerr.CodeWorkflowNotFound,
+			message: "workflow 'feature' not found",
 		},
 	}
 

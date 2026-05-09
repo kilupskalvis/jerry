@@ -9,9 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kilupskalvis/jerry/internal/contextstore"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
-	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/trigger"
 	"github.com/kilupskalvis/jerry/internal/workflow"
 )
@@ -60,14 +59,10 @@ func newRunCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&resumeRunID, "resume", "", "Resume a failed run by ID")
 	cmd.Flags().BoolVar(&force, "force", false, "Force resume even if status is 'running'")
 
-	_ = cmd.Flags().MarkHidden("intent")
-	_ = cmd.Flags().MarkHidden("trigger-file")
-	_ = cmd.Flags().MarkHidden("trigger-stdin")
-
 	return cmd
 }
 
-func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore.TriggerData, error) {
+func resolveTrigger(intent, triggerFile string, triggerStdin bool) (trigger.TriggerData, error) {
 	sourcesSet := 0
 	if triggerFile != "" {
 		sourcesSet++
@@ -76,10 +71,10 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 		sourcesSet++
 	}
 	if sourcesSet > 1 {
-		return contextstore.TriggerData{}, fmt.Errorf("specify only one trigger source (got multiple of --trigger-file, --trigger-stdin)")
+		return trigger.TriggerData{}, fmt.Errorf("specify only one trigger source (got multiple of --trigger-file, --trigger-stdin)")
 	}
 
-	var t *contextstore.TriggerData
+	var t *trigger.TriggerData
 	var err error
 	switch {
 	case triggerFile != "":
@@ -89,7 +84,7 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 	}
 	if t != nil {
 		if err != nil {
-			return contextstore.TriggerData{}, err
+			return trigger.TriggerData{}, err
 		}
 		if intent != "" {
 			t.Intent = intent
@@ -97,7 +92,7 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 		return *t, nil
 	}
 
-	return contextstore.TriggerData{
+	return trigger.TriggerData{
 		Type:   "manual",
 		Source: "cli",
 		Intent: intent,
@@ -105,7 +100,7 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (contextstore
 }
 
 // @lattice:flow run
-func runWorkflow(ctx context.Context, app *App, workflowName string, triggerData contextstore.TriggerData) error {
+func runWorkflow(ctx context.Context, app *App, workflowName string, triggerData trigger.TriggerData) error {
 	if app.Loader == nil || app.Engine == nil {
 		return jerrerr.New(jerrerr.CodeJerryDirNotFound,
 			"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
@@ -187,32 +182,24 @@ func resumeWorkflow(ctx context.Context, app *App, runID string, force bool) err
 	}
 
 	switch runState.Status {
-	case state.StatusCompleted:
+	case run.StatusCompleted:
 		return jerrerr.New(jerrerr.CodeRunNotResumable,
 			fmt.Sprintf("run %q is already completed — nothing to resume", runID))
-	case state.StatusRunning:
+	case run.StatusRunning:
 		if !force {
 			return jerrerr.New(jerrerr.CodeRunNotResumable,
 				fmt.Sprintf("run %q has status 'running' — if the process crashed, use --force to resume", runID))
 		}
-	case state.StatusFailed:
+	case run.StatusFailed:
 	}
 
 	name := runState.WorkflowName
-	if name == "" {
-		name = runState.PipelineName
-	}
 
 	var workflowDef *workflow.Workflow
 	var workflowErr error
 
-	file := runState.WorkflowFile
-	if file == "" {
-		file = runState.PipelineFile
-	}
-
-	if file != "" {
-		workflowDef, workflowErr = app.Loader.LoadFile(file, name)
+	if runState.WorkflowFile != "" {
+		workflowDef, workflowErr = app.Loader.LoadFile(runState.WorkflowFile, name)
 	} else {
 		workflowDef, workflowErr = app.Loader.Load(name)
 	}
@@ -221,7 +208,7 @@ func resumeWorkflow(ctx context.Context, app *App, runID string, force bool) err
 	}
 
 	fromStep := len(runState.StepResults)
-	if fromStep > 0 && runState.StepResults[fromStep-1].Status == state.StepFailed {
+	if fromStep > 0 && runState.StepResults[fromStep-1].Status == run.StepFailed {
 		fromStep--
 	}
 	if fromStep >= len(workflowDef.Steps) {
@@ -231,7 +218,7 @@ func resumeWorkflow(ctx context.Context, app *App, runID string, force bool) err
 
 	for i, saved := range runState.StepResults {
 		if i < len(workflowDef.Steps) && saved.Name != workflowDef.Steps[i].Name {
-			return jerrerr.New(jerrerr.CodePipelineChanged,
+			return jerrerr.New(jerrerr.CodeWorkflowChanged,
 				fmt.Sprintf("workflow structure has changed — step %q at position %d "+
 					"does not match saved state (expected %q). Cannot safely resume.",
 					workflowDef.Steps[i].Name, i, saved.Name))
@@ -242,7 +229,7 @@ func resumeWorkflow(ctx context.Context, app *App, runID string, force bool) err
 		runState.StepResults = runState.StepResults[:fromStep]
 	}
 
-	existingStore := contextstore.RestoreFromSnapshot(runState.Context)
+	existingStore := run.RestoreFromSnapshot(runState.Context)
 	_, runErr := app.Engine.RunFrom(ctx, *workflowDef, fromStep, existingStore, runState)
 	return runErr
 }

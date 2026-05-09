@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kilupskalvis/jerry/internal/contextstore"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/run"
+	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
 const DefaultRetryBaseDelay = 2 * time.Second
@@ -18,16 +18,16 @@ const DefaultRetryBaseDelay = 2 * time.Second
 // Engine orchestrates the execution of a workflow.
 type Engine struct {
 	executors      []StepExecutor
-	stateStore     state.StateStore
+	stateStore     run.StateStore
 	printer        *output.Printer
 	defaultTimeout time.Duration
 
 	// OnStoreCreated is called when a new context store is created,
 	// allowing executors to receive a reference to the store.
-	OnStoreCreated func(*contextstore.Store)
+	OnStoreCreated func(*run.ContextStore)
 }
 
-func NewEngine(executors []StepExecutor, stateStore state.StateStore, printer *output.Printer, defaultTimeout time.Duration) *Engine {
+func NewEngine(executors []StepExecutor, stateStore run.StateStore, printer *output.Printer, defaultTimeout time.Duration) *Engine {
 	return &Engine{
 		executors:      executors,
 		stateStore:     stateStore,
@@ -37,23 +37,23 @@ func NewEngine(executors []StepExecutor, stateStore state.StateStore, printer *o
 }
 
 // Run executes a workflow from start to finish.
-func (e *Engine) Run(ctx context.Context, workflowDef Workflow, trigger contextstore.TriggerData) (*state.RunState, error) {
+func (e *Engine) Run(ctx context.Context, workflowDef Workflow, triggerData trigger.TriggerData) (*run.RunState, error) {
 	runID := generateRunID()
 	startTime := time.Now()
 
-	ctxStore := contextstore.NewStore(runID, trigger)
+	ctxStore := run.NewContextStore(runID, triggerData)
 	if e.OnStoreCreated != nil {
 		e.OnStoreCreated(ctxStore)
 	}
 
-	runState := state.RunState{
+	runState := run.RunState{
 		RunID:        runID,
 		WorkflowName: workflowDef.Name,
 		WorkflowFile: workflowDef.SourceFile,
-		Status:       state.StatusRunning,
+		Status:       run.StatusRunning,
 		StartedAt:    startTime,
 		TotalSteps:   len(workflowDef.Steps),
-		StepResults:  []state.StepResult{},
+		StepResults:  []run.StepResult{},
 		Context:      ctxStore.Snapshot(),
 	}
 
@@ -62,7 +62,7 @@ func (e *Engine) Run(ctx context.Context, workflowDef Workflow, trigger contexts
 			"failed to initialize run state", initErr)
 	}
 
-	logWriter, logErr := state.NewLogWriter(e.stateStore.RunDir(runID))
+	logWriter, logErr := run.NewLogWriter(e.stateStore.RunDir(runID))
 	if logErr != nil {
 		e.printer.Warning("failed to create log writer: %s", logErr)
 	}
@@ -72,10 +72,10 @@ func (e *Engine) Run(ctx context.Context, workflowDef Workflow, trigger contexts
 	for i, s := range workflowDef.Steps {
 		stepNames[i] = s.Name
 	}
-	logWriter.Log(state.LogPipelineStart, "", state.PipelineStartData{
+	logWriter.Log(run.LogWorkflowStart, "", run.WorkflowStartData{
 		RunID:         runID,
-		Pipeline:      workflowDef.Name,
-		TriggerIntent: trigger.Intent,
+		Workflow:      workflowDef.Name,
+		TriggerIntent: triggerData.Intent,
 		Steps:         stepNames,
 	})
 
@@ -83,13 +83,13 @@ func (e *Engine) Run(ctx context.Context, workflowDef Workflow, trigger contexts
 
 	execErr := e.runSteps(ctx, workflowDef.Steps, 0, ctxStore, &runState, logWriter)
 
-	if runState.Status == state.StatusRunning {
-		runState.Status = state.StatusCompleted
+	if runState.Status == run.StatusRunning {
+		runState.Status = run.StatusCompleted
 		now := time.Now()
 		runState.CompletedAt = &now
 		runState.Context = ctxStore.Snapshot()
 		_ = e.stateStore.SaveFinal(runState)
-		e.printer.PipelineComplete(time.Since(startTime), runID, totalTokens(runState.StepResults))
+		e.printer.WorkflowComplete(time.Since(startTime), runID, totalTokens(runState.StepResults))
 	}
 
 	e.logWorkflowEnd(logWriter, &runState, startTime)
@@ -102,16 +102,16 @@ func (e *Engine) RunFrom(
 	ctx context.Context,
 	workflowDef Workflow,
 	fromStep int,
-	existingStore *contextstore.Store,
-	existingState *state.RunState,
-) (*state.RunState, error) {
-	existingState.Status = state.StatusRunning
+	existingStore *run.ContextStore,
+	existingState *run.RunState,
+) (*run.RunState, error) {
+	existingState.Status = run.StatusRunning
 
 	if e.OnStoreCreated != nil {
 		e.OnStoreCreated(existingStore)
 	}
 
-	logWriter, logErr := state.NewLogWriter(e.stateStore.RunDir(existingState.RunID))
+	logWriter, logErr := run.NewLogWriter(e.stateStore.RunDir(existingState.RunID))
 	if logErr != nil {
 		e.printer.Warning("failed to create log writer for resume: %s", logErr)
 	}
@@ -122,13 +122,13 @@ func (e *Engine) RunFrom(
 
 	execErr := e.runSteps(ctx, workflowDef.Steps, fromStep, existingStore, existingState, logWriter)
 
-	if existingState.Status == state.StatusRunning {
-		existingState.Status = state.StatusCompleted
+	if existingState.Status == run.StatusRunning {
+		existingState.Status = run.StatusCompleted
 		now := time.Now()
 		existingState.CompletedAt = &now
 		existingState.Context = existingStore.Snapshot()
 		_ = e.stateStore.SaveFinal(*existingState)
-		e.printer.PipelineComplete(time.Since(existingState.StartedAt), existingState.RunID, totalTokens(existingState.StepResults))
+		e.printer.WorkflowComplete(time.Since(existingState.StartedAt), existingState.RunID, totalTokens(existingState.StepResults))
 	}
 
 	e.logWorkflowEnd(logWriter, existingState, existingState.StartedAt)
@@ -140,9 +140,9 @@ func (e *Engine) runSteps(
 	ctx context.Context,
 	steps []Step,
 	fromStep int,
-	ctxStore *contextstore.Store,
-	runState *state.RunState,
-	logWriter *state.LogWriter,
+	ctxStore *run.ContextStore,
+	runState *run.RunState,
+	logWriter *run.LogWriter,
 ) error {
 	for i := fromStep; i < len(steps); i++ {
 		step := steps[i]
@@ -151,10 +151,10 @@ func (e *Engine) runSteps(
 
 		executor := e.findExecutor(step)
 		if executor == nil {
-			result := state.StepResult{
-				Name: step.Name, Type: stepType(step), Status: state.StepSkipped,
+			result := run.StepResult{
+				Name: step.Name, Type: stepType(step), Status: run.StepSkipped,
 				StartedAt: stepStartTime, CompletedAt: time.Now(),
-				Error: &state.ErrorDetail{Code: "NO_EXECUTOR", Message: "no executor found for this step"},
+				Error: &run.ErrorDetail{Code: "NO_EXECUTOR", Message: "no executor found for this step"},
 			}
 			runState.StepResults = append(runState.StepResults, result)
 			e.printer.StepSkipped(step.Name, "no executor found")
@@ -163,7 +163,7 @@ func (e *Engine) runSteps(
 		}
 
 		e.printer.StepStart(step.Name)
-		logWriter.Log(state.LogStepStart, step.Name, state.StepStartData{
+		logWriter.Log(run.LogStepStart, step.Name, run.StepStartData{
 			Type: stepType(step), AgentFile: step.Agent,
 		})
 
@@ -178,14 +178,14 @@ func (e *Engine) runSteps(
 		stepDuration := time.Since(stepStartTime)
 
 		if execErr != nil {
-			result := state.StepResult{
-				Name: step.Name, Type: stepType(step), Status: state.StepFailed,
+			result := run.StepResult{
+				Name: step.Name, Type: stepType(step), Status: run.StepFailed,
 				StartedAt: stepStartTime, CompletedAt: time.Now(),
 				DurationMs: stepDuration.Milliseconds(), RetriesUsed: retriesUsed,
-				Error: &state.ErrorDetail{Code: "STEP_FAILED", Message: execErr.Error()},
+				Error: &run.ErrorDetail{Code: "STEP_FAILED", Message: execErr.Error()},
 			}
 			runState.StepResults = append(runState.StepResults, result)
-			runState.Status = state.StatusFailed
+			runState.Status = run.StatusFailed
 			runState.Context = ctxStore.Snapshot()
 			now := time.Now()
 			runState.CompletedAt = &now
@@ -193,10 +193,10 @@ func (e *Engine) runSteps(
 			_ = e.stateStore.SaveFinal(*runState)
 
 			e.printer.StepFailed(step.Name, execErr.Error())
-			logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
+			logWriter.Log(run.LogStepEnd, step.Name, run.StepEndData{
 				Status: "failed", DurationMs: stepDuration.Milliseconds(),
 			})
-			e.printer.PipelineFailed(step.Name, execErr.Error(), runState.WorkflowName, runState.RunID)
+			e.printer.WorkflowFailed(step.Name, execErr.Error())
 
 			return execErr
 		}
@@ -206,8 +206,8 @@ func (e *Engine) runSteps(
 			ctxStore.Append(stepOutput.StepName, stepOutput.Data)
 		}
 
-		result := state.StepResult{
-			Name: step.Name, Type: stepType(step), Status: state.StepSuccess,
+		result := run.StepResult{
+			Name: step.Name, Type: stepType(step), Status: run.StepSuccess,
 			StartedAt: stepStartTime, CompletedAt: time.Now(),
 			DurationMs: stepDuration.Milliseconds(), RetriesUsed: retriesUsed,
 		}
@@ -219,7 +219,7 @@ func (e *Engine) runSteps(
 		_ = e.stateStore.SaveCheckpoint(*runState)
 
 		e.printer.StepSuccess(step.Name, stepDuration, 0, 0, 0, 0)
-		logWriter.Log(state.LogStepEnd, step.Name, state.StepEndData{
+		logWriter.Log(run.LogStepEnd, step.Name, run.StepEndData{
 			Status: "success", DurationMs: stepDuration.Milliseconds(),
 		})
 	}
@@ -228,7 +228,7 @@ func (e *Engine) runSteps(
 }
 
 // buildPrevOutputs converts cumulative context store entries to StepOutput slice.
-func buildPrevOutputs(ctxStore *contextstore.Store) []StepOutput {
+func buildPrevOutputs(ctxStore *run.ContextStore) []StepOutput {
 	prev := ctxStore.PreviousOutputs()
 	outputs := make([]StepOutput, len(prev))
 	for i, p := range prev {
@@ -266,19 +266,19 @@ func (e *Engine) executeWithRetries(ctx context.Context, step Step, exec StepExe
 	return nil, maxAttempts - 1, lastErr
 }
 
-func (e *Engine) logWorkflowEnd(lw *state.LogWriter, runState *state.RunState, startTime time.Time) {
+func (e *Engine) logWorkflowEnd(lw *run.LogWriter, runState *run.RunState, startTime time.Time) {
 	var completed, failed, skipped int
 	for _, r := range runState.StepResults {
 		switch r.Status {
-		case state.StepSuccess:
+		case run.StepSuccess:
 			completed++
-		case state.StepFailed:
+		case run.StepFailed:
 			failed++
-		case state.StepSkipped:
+		case run.StepSkipped:
 			skipped++
 		}
 	}
-	lw.Log(state.LogPipelineEnd, "", state.PipelineEndData{
+	lw.Log(run.LogWorkflowEnd, "", run.WorkflowEndData{
 		Status:         string(runState.Status),
 		DurationMs:     time.Since(startTime).Milliseconds(),
 		StepsCompleted: completed,
@@ -310,7 +310,7 @@ func stepType(step Step) string {
 	return "script"
 }
 
-func totalTokens(results []state.StepResult) int {
+func totalTokens(results []run.StepResult) int {
 	total := 0
 	for _, r := range results {
 		total += r.TokensInput + r.TokensOutput
