@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
 // Registry manages available tools and produces constrained dispatchers
 // for individual agent configurations.
 type Registry struct {
-	tools    map[string]Tool
-	repoRoot string
+	tools      map[string]Tool
+	repoRoot   string
+	triggerRef *trigger.TriggerData
 }
 
 // NewRegistry creates a tool registry with all built-in tools registered.
@@ -36,7 +39,18 @@ func NewRegistry(repoRoot string, env map[string]string) *Registry {
 	r.register(NewGitDiffTool(repoRoot))
 	r.register(NewGitBlameTool(repoRoot))
 
+	r.triggerRef = &trigger.TriggerData{}
+	r.register(NewPostPRCommentTool(r.triggerRef))
+	r.register(NewPostReviewCommentTool(r.triggerRef))
+	r.register(NewAddCheckStatusTool(r.triggerRef))
+
 	return r
+}
+
+// SetTrigger injects trigger data for output routing tools.
+// Called when the workflow starts and trigger data is available.
+func (r *Registry) SetTrigger(t trigger.TriggerData) {
+	*r.triggerRef = t
 }
 
 func (r *Registry) register(t Tool) {

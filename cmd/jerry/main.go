@@ -111,9 +111,9 @@ func buildApp(printer *output.Printer) *cli.App {
 		config.DefaultStepTimeoutValue,
 	)
 
-	// Wire the context store to the script executor when engine creates it.
 	engine.OnStoreCreated = func(store *jerryrun.ContextStore) {
 		scriptExec.SetStore(store)
+		toolRegistry.SetTrigger(store.Trigger())
 	}
 
 	app.Engine = engine
