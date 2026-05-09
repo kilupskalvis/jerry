@@ -86,6 +86,13 @@ func (p *Printer) StepOutput(line string) {
 	}
 }
 
+// ToolCall prints a tool invocation during agent execution.
+func (p *Printer) ToolCall(name string) {
+	if p.verbosity >= VerbosityDefault {
+		fmt.Fprintf(p.stderr, "    -> %s\n", name)
+	}
+}
+
 // Warning prints a warning message.
 func (p *Printer) Warning(format string, args ...any) {
 	// Warnings shown at default and verbose levels.

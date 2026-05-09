@@ -27,6 +27,7 @@ type Agent struct {
 	model        string
 	maxTurns     int
 	logger       *slog.Logger
+	onToolCall   func(toolName string)
 }
 
 // Option configures an Agent.
@@ -55,6 +56,11 @@ func WithMaxTurns(n int) Option {
 // WithLogger sets a structured logger for the agent.
 func WithLogger(logger *slog.Logger) Option {
 	return func(a *Agent) { a.logger = logger }
+}
+
+// WithOnToolCall sets a callback invoked before each tool execution.
+func WithOnToolCall(fn func(toolName string)) Option {
+	return func(a *Agent) { a.onToolCall = fn }
 }
 
 // NewAgent creates an Agent with the given provider and options.
@@ -153,6 +159,9 @@ func (a *Agent) executeTools(ctx context.Context, calls []llm.ToolCall, toolMap 
 			continue
 		}
 
+		if a.onToolCall != nil {
+			a.onToolCall(call.Name)
+		}
 		output, err := t.Execute(ctx, call.Input)
 		if err != nil {
 			results = append(results, llm.ToolResult{

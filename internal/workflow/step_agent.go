@@ -9,6 +9,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/agent"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/tool"
 )
 
@@ -18,16 +19,18 @@ var _ StepExecutor = (*AgentExecutor)(nil)
 type AgentExecutor struct {
 	loader       *agent.Loader
 	registry     *tool.Registry
+	printer      *output.Printer
 	anthropicKey string
 	openaiKey    string
 
 	ProviderOverride llm.Provider
 }
 
-func NewAgentExecutor(loader *agent.Loader, registry *tool.Registry, anthropicKey, openaiKey string) *AgentExecutor {
+func NewAgentExecutor(loader *agent.Loader, registry *tool.Registry, printer *output.Printer, anthropicKey, openaiKey string) *AgentExecutor {
 	return &AgentExecutor{
 		loader:       loader,
 		registry:     registry,
+		printer:      printer,
 		anthropicKey: anthropicKey,
 		openaiKey:    openaiKey,
 	}
@@ -69,6 +72,11 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 		agent.WithSystemPrompt(systemPrompt),
 		agent.WithMaxTurns(agentCfg.MaxIterations),
 		agent.WithLogger(slog.Default()),
+		agent.WithOnToolCall(func(name string) {
+			if e.printer != nil {
+				e.printer.ToolCall(name)
+			}
+		}),
 	)
 
 	output, runErr := a.Run(ctx, "Begin your task.")

@@ -102,7 +102,7 @@ func buildApp(printer *output.Printer) *cli.App {
 		openaiKey = secretEnv["OPENAI_API_KEY"]
 	}
 
-	agentExec := workflow.NewAgentExecutor(agentLoader, toolRegistry, anthropicKey, openaiKey)
+	agentExec := workflow.NewAgentExecutor(agentLoader, toolRegistry, printer, anthropicKey, openaiKey)
 
 	engine := workflow.NewEngine(
 		[]workflow.StepExecutor{agentExec, scriptExec},
