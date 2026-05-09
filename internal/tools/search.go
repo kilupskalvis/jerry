@@ -5,14 +5,13 @@ package tools
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 const (
@@ -39,35 +38,38 @@ var skipPaths = []string{
 // NewSearchTool creates a search_codebase tool bound to the given repo root.
 func NewSearchTool(repoRoot string) Tool {
 	return Tool{
-		Definition: llm.ToolDef{
-			Name:        "search_codebase",
-			Description: "Search file contents using a regular expression pattern. Returns matching lines as file:line:content.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"query": map[string]any{
-						"type":        "string",
-						"description": "Regular expression pattern to search for",
-					},
-					"glob": map[string]any{
-						"type":        "string",
-						"description": "Optional glob pattern to filter files (e.g., '*.go')",
-					},
+		ToolName:        "search_codebase",
+		ToolDescription: "Search file contents using a regular expression pattern. Returns matching lines as file:line:content.",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Regular expression pattern to search for"
 				},
-				"required": []any{"query"},
+				"glob": {
+					"type": "string",
+					"description": "Optional glob pattern to filter files (e.g., '*.go')"
+				}
 			},
-		},
-		Execute: func(_ context.Context, args map[string]any) (string, error) {
-			query, _ := args["query"].(string)
-			globFilter, _ := args["glob"].(string)
+			"required": ["query"]
+		}`),
+		Execute: func(_ context.Context, input json.RawMessage) (string, error) {
+			var args struct {
+				Query string `json:"query"`
+				Glob  string `json:"glob"`
+			}
+			if err := json.Unmarshal(input, &args); err != nil {
+				return fmt.Sprintf("Error: invalid input: %v", err), nil
+			}
 
-			if query == "" {
+			if args.Query == "" {
 				return "Error: missing required parameter 'query'", nil
 			}
 
-			re, err := regexp.Compile(query)
+			re, err := regexp.Compile(args.Query)
 			if err != nil {
-				return fmt.Sprintf("Error: invalid regex '%s': %s", query, err), nil
+				return fmt.Sprintf("Error: invalid regex '%s': %s", args.Query, err), nil
 			}
 
 			var matches []string
@@ -94,8 +96,8 @@ func NewSearchTool(repoRoot string) Tool {
 				}
 
 				// Apply glob filter if specified.
-				if globFilter != "" {
-					matched, matchErr := filepath.Match(globFilter, d.Name())
+				if args.Glob != "" {
+					matched, matchErr := filepath.Match(args.Glob, d.Name())
 					if matchErr != nil || !matched {
 						return nil
 					}
@@ -145,7 +147,7 @@ func NewSearchTool(repoRoot string) Tool {
 			}
 
 			if len(matches) == 0 {
-				return fmt.Sprintf("No matches found for pattern: %s", query), nil
+				return fmt.Sprintf("No matches found for pattern: %s", args.Query), nil
 			}
 
 			var b strings.Builder

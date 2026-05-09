@@ -7,15 +7,15 @@ import (
 
 	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/pipeline"
 	"github.com/kilupskalvis/jerry/internal/state"
+	"github.com/kilupskalvis/jerry/internal/workflow"
 )
 
 // App holds the dependencies needed by CLI commands.
 // Constructed in main.go and passed to subcommand builders.
 type App struct {
-	Engine      *pipeline.Engine
-	Loader      *pipeline.Loader
+	Engine      *workflow.Engine
+	Loader      *workflow.Loader
 	AgentLoader *agent.Loader
 	StateStore  state.StateStore
 	Printer     *output.Printer

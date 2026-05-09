@@ -2,49 +2,51 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // NewWriteFileTool creates a write_file tool bound to the given repo root.
 func NewWriteFileTool(repoRoot string) Tool {
 	return Tool{
-		Definition: llm.ToolDef{
-			Name:        "write_file",
-			Description: "Write content to a file, creating it if it doesn't exist or overwriting if it does. Parent directories are created automatically.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"path": map[string]any{
-						"type":        "string",
-						"description": "Path to the file (relative to repository root)",
-					},
-					"content": map[string]any{
-						"type":        "string",
-						"description": "Content to write to the file",
-					},
+		ToolName:        "write_file",
+		ToolDescription: "Write content to a file, creating it if it doesn't exist or overwriting if it does. Parent directories are created automatically.",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "Path to the file (relative to repository root)"
 				},
-				"required": []any{"path", "content"},
+				"content": {
+					"type": "string",
+					"description": "Content to write to the file"
+				}
 			},
-		},
-		Execute: func(_ context.Context, args map[string]any) (string, error) {
-			path, _ := args["path"].(string)
-			content, _ := args["content"].(string)
+			"required": ["path", "content"]
+		}`),
+		Execute: func(_ context.Context, input json.RawMessage) (string, error) {
+			var args struct {
+				Path    string `json:"path"`
+				Content string `json:"content"`
+			}
+			if err := json.Unmarshal(input, &args); err != nil {
+				return fmt.Sprintf("Error: invalid input: %v", err), nil
+			}
 
-			if path == "" {
+			if args.Path == "" {
 				return "Error: missing required parameter 'path'", nil
 			}
 
-			absPath, pathErr := resolvePath(repoRoot, path)
+			absPath, pathErr := resolvePath(repoRoot, args.Path)
 			if pathErr != "" {
 				return pathErr, nil
 			}
 
-			if IsSensitivePath(path) {
-				return fmt.Sprintf("Error: access denied — '%s' is a sensitive file (may contain secrets)", path), nil
+			if IsSensitivePath(args.Path) {
+				return fmt.Sprintf("Error: access denied — '%s' is a sensitive file (may contain secrets)", args.Path), nil
 			}
 
 			// Create parent directories.
@@ -55,16 +57,16 @@ func NewWriteFileTool(repoRoot string) Tool {
 
 			// Atomic write: write to temp file, then rename.
 			tmp := absPath + ".jerry.tmp"
-			if writeErr := os.WriteFile(tmp, []byte(content), 0o644); writeErr != nil {
-				return fmt.Sprintf("Error: cannot write to '%s': %s", path, writeErr), nil
+			if writeErr := os.WriteFile(tmp, []byte(args.Content), 0o644); writeErr != nil {
+				return fmt.Sprintf("Error: cannot write to '%s': %s", args.Path, writeErr), nil
 			}
 
 			if renameErr := os.Rename(tmp, absPath); renameErr != nil {
 				_ = os.Remove(tmp)
-				return fmt.Sprintf("Error: cannot write to '%s': %s", path, renameErr), nil
+				return fmt.Sprintf("Error: cannot write to '%s': %s", args.Path, renameErr), nil
 			}
 
-			return fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path), nil
+			return fmt.Sprintf("Successfully wrote %d bytes to %s", len(args.Content), args.Path), nil
 		},
 	}
 }

@@ -4,147 +4,110 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
-	"github.com/kilupskalvis/jerry/internal/llm"
-	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/pipeline"
 	"github.com/kilupskalvis/jerry/internal/tools"
+	"github.com/kilupskalvis/jerry/internal/workflow"
 )
 
-// Compile-time interface compliance assertion.
-var _ pipeline.StepExecutor = (*Executor)(nil)
+var _ workflow.StepExecutor = (*Executor)(nil)
 
-// Executor runs agent steps in the pipeline. It loads the agent definition,
-// resolves the LLM client per-agent (based on model/provider), runs the
-// agentic loop, and parses the output.
+// Executor runs agent steps in the workflow.
 type Executor struct {
 	loader       *Loader
 	registry     *tools.Registry
 	anthropicKey string
 	openaiKey    string
-	printer      *output.Printer
 
-	// ClientOverride, if set, is used instead of resolving a client per-agent.
-	// Used in tests to inject a mock LLM client.
-	ClientOverride llm.Client
+	ProviderOverride Provider
 }
 
-// NewExecutor creates an agent executor with the given API keys.
-// The LLM client is resolved per-execution based on each agent's model field.
-func NewExecutor(loader *Loader, registry *tools.Registry, anthropicKey, openaiKey string, printer *output.Printer) *Executor {
+func NewExecutor(loader *Loader, registry *tools.Registry, anthropicKey, openaiKey string) *Executor {
 	return &Executor{
 		loader:       loader,
 		registry:     registry,
 		anthropicKey: anthropicKey,
 		openaiKey:    openaiKey,
-		printer:      printer,
 	}
 }
 
-// CanExecute returns true if the step has an Agent field set.
-func (e *Executor) CanExecute(step pipeline.Step) bool {
+func (e *Executor) CanExecute(step workflow.Step) bool {
 	return step.Agent != ""
 }
 
-// Execute loads the agent definition, resolves the LLM client and tools,
-// runs the agentic loop, parses the output, and returns a StepOutput.
-func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
+func (e *Executor) Execute(ctx context.Context, step workflow.Step, prevOutputs []workflow.StepOutput) (*workflow.StepOutput, error) {
 	start := time.Now()
 
-	agentCfg, loadErr := e.loader.Load(step.Agent)
-	if loadErr != nil {
-		return nil, loadErr
+	agentCfg, err := e.loader.Load(step.Agent)
+	if err != nil {
+		return nil, err
 	}
 
-	// Resolve LLM client for this agent's model.
-	client := e.ClientOverride
-	if client == nil {
-		var clientErr error
-		client, clientErr = llm.NewClientForModel(agentCfg.Model, agentCfg.Provider, e.anthropicKey, e.openaiKey)
-		if clientErr != nil {
+	provider := e.ProviderOverride
+	if provider == nil {
+		var provErr error
+		provider, provErr = NewProviderForModel(agentCfg.Model, agentCfg.Provider, e.anthropicKey, e.openaiKey)
+		if provErr != nil {
 			return nil, jerrerr.Wrap(jerrerr.CodeLLMAuthFailed,
-				fmt.Sprintf("agent %q", agentCfg.Name), clientErr)
+				fmt.Sprintf("agent %q", agentCfg.Name), provErr)
 		}
 	}
 
-	// Resolve tools: convert agent.ToolAccess → tools.ToolAccess.
 	toolAccess := make([]tools.ToolAccess, len(agentCfg.Tools))
 	for i, ta := range agentCfg.Tools {
-		toolAccess[i] = tools.ToolAccess{
-			Name:        ta.Name,
-			Constraints: ta.Constraints,
-		}
+		toolAccess[i] = tools.ToolAccess{Name: ta.Name, Constraints: ta.Constraints}
 	}
 
-	toolDefs, dispatch, resolveErr := e.registry.Resolve(toolAccess)
+	resolvedTools, resolveErr := e.registry.Resolve(toolAccess)
 	if resolveErr != nil {
 		return nil, jerrerr.Wrap(jerrerr.CodeToolNotFound,
-			fmt.Sprintf("agent %q: tool resolution failed", agentCfg.Name), resolveErr)
+			fmt.Sprintf("agent %q", agentCfg.Name), resolveErr)
 	}
 
-	// Build pipeline context scoped by context_access.
-	contextData := store.GetKeys(agentCfg.ContextAccess)
+	systemPrompt := buildSystemPrompt(agentCfg.Instructions, prevOutputs)
 
-	// Trigger is always available to agents regardless of context_access.
-	fullContext := store.Get()
-	contextData["trigger"] = fullContext.Trigger
+	a := NewAgent(provider,
+		WithTools(wrapRegistryTools(resolvedTools)...),
+		WithModel(agentCfg.Model),
+		WithSystemPrompt(systemPrompt),
+		WithMaxTurns(agentCfg.MaxIterations),
+		WithLogger(slog.Default()),
+	)
 
-	compactor := llm.NewCompactor(client)
-	agentLoop := NewLoop(client, compactor, e.printer)
-	loopResult, loopErr := agentLoop.Run(ctx, *agentCfg, toolDefs, dispatch, contextData)
-	if loopErr != nil {
-		return nil, loopErr
+	output, runErr := a.Run(ctx, "Begin your task.")
+	if runErr != nil {
+		return nil, runErr
 	}
 
-	parsedOutput := parseAgentOutput(ctx, agentLoop, loopResult, agentCfg, toolDefs, dispatch, e.printer)
-
-	return &pipeline.StepOutput{
-		Data:              parsedOutput,
-		Stdout:            loopResult.RawOutput,
-		Duration:          time.Since(start),
-		OutputKeyOverride: agentCfg.OutputKey,
-		Iterations:        loopResult.Iterations,
-		ToolCalls:         loopResult.ToolCalls,
-		TokensInput:       loopResult.TotalUsage.InputTokens,
-		TokensOutput:      loopResult.TotalUsage.OutputTokens,
+	return &workflow.StepOutput{
+		StepName: step.Name,
+		Data:     output,
+		Duration: time.Since(start),
 	}, nil
 }
 
-// parseAgentOutput parses the agent's raw output as JSON, retrying once with a
-// correction prompt if the initial parse fails. Returns nil (not an error) if
-// both attempts fail — the pipeline continues with raw text in Stdout.
-func parseAgentOutput(
-	ctx context.Context,
-	agentLoop *Loop,
-	loopResult *LoopResult,
-	agentCfg *AgentConfig,
-	toolDefs []llm.ToolDef,
-	dispatch func(context.Context, llm.ToolCall) (string, error),
-	printer *output.Printer,
-) map[string]any {
-	parsed, parseErr := ParseOutput(loopResult.RawOutput, agentCfg.OutputSchema)
-	if parseErr == nil {
-		return parsed
+func buildSystemPrompt(instructions string, prevOutputs []workflow.StepOutput) string {
+	if len(prevOutputs) == 0 {
+		return instructions
 	}
 
-	correctionPrompt := fmt.Sprintf(
-		"Your response was not valid JSON matching the required schema. "+
-			"Error: %s\n\nPlease respond with ONLY a JSON object matching the schema. "+
-			"No markdown fences, no explanation — raw JSON only.", parseErr)
-
-	retryResult, retryErr := agentLoop.RunRetry(ctx, loopResult, toolDefs, dispatch, correctionPrompt)
-	if retryErr != nil {
-		printer.Warning("agent %q: output retry failed: %s", agentCfg.Name, retryErr)
-		return nil
+	var prompt string
+	prompt += "## Previous Steps\n\n"
+	for _, prev := range prevOutputs {
+		prompt += "### " + prev.StepName + "\n\n"
+		prompt += prev.Data + "\n\n"
 	}
+	prompt += "---\n\n"
+	prompt += instructions
+	return prompt
+}
 
-	parsed, parseErr = ParseOutput(retryResult.RawOutput, agentCfg.OutputSchema)
-	if parseErr != nil {
-		printer.Warning("agent %q: output is not valid JSON after retry, storing raw text", agentCfg.Name)
-		return nil
+func wrapRegistryTools(registryTools []tools.Tool) []Tool {
+	result := make([]Tool, len(registryTools))
+	for i, t := range registryTools {
+		result[i] = NewToolFunc(t.ToolName, t.ToolDescription, t.Schema, t.Execute)
 	}
-
-	return parsed
+	return result
 }

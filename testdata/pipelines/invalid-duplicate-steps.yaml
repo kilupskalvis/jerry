@@ -1,6 +1,0 @@
-name: duplicate
-steps:
-  - name: same
-    script: echo one
-  - name: same
-    script: echo two

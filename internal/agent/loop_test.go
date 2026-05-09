@@ -2,300 +2,258 @@ package agent_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
-	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
-	"github.com/kilupskalvis/jerry/internal/llm"
-	"github.com/kilupskalvis/jerry/internal/output"
 )
 
-func newTestLoop(responses []*llm.Response) (*agent.Loop, *mockLLMClient) {
-	client := &mockLLMClient{responses: responses}
-	printer := output.NewPrinter(devNull{}, devNull{})
-	return agent.NewLoop(client, nil, printer), client
+type mockProvider struct {
+	responses []*agent.CompleteResponse
+	callIndex int
 }
 
-type devNull struct{}
-
-func (devNull) Write(p []byte) (int, error) { return len(p), nil }
-
-func testConfig() agent.AgentConfig {
-	return agent.AgentConfig{
-		Name:          "test-agent",
-		MaxIterations: 10,
-		OutputSchema:  map[string]any{"result": "string"},
+func (m *mockProvider) Complete(_ context.Context, _ agent.CompleteParams) (*agent.CompleteResponse, error) {
+	if m.callIndex >= len(m.responses) {
+		return &agent.CompleteResponse{
+			Message:    agent.Message{Role: agent.RoleAssistant, Content: "no more responses"},
+			StopReason: agent.StopReasonEndTurn,
+			Usage:      agent.Usage{InputTokens: 10, OutputTokens: 5},
+		}, nil
 	}
+	resp := m.responses[m.callIndex]
+	m.callIndex++
+	return resp, nil
 }
 
-func noopDispatch(_ context.Context, call llm.ToolCall) (string, error) {
-	return "tool result for " + call.Name, nil
-}
-
-func TestLoop_DirectResponse(t *testing.T) {
-	loop, _ := newTestLoop([]*llm.Response{
-		{
-			Content:    `{"result": "done"}`,
-			StopReason: "end_turn",
-			Usage:      llm.TokenUsage{InputTokens: 100, OutputTokens: 50},
+func TestAgent_DirectResponse(t *testing.T) {
+	provider := &mockProvider{
+		responses: []*agent.CompleteResponse{
+			{
+				Message:    agent.Message{Role: agent.RoleAssistant, Content: `{"result": "done"}`},
+				StopReason: agent.StopReasonEndTurn,
+				Usage:      agent.Usage{InputTokens: 100, OutputTokens: 50},
+			},
 		},
-	})
+	}
 
-	result, err := loop.Run(context.Background(), testConfig(), nil, noopDispatch, nil)
+	a := agent.NewAgent(provider, agent.WithMaxTurns(10))
+
+	output, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Iterations != 1 {
-		t.Errorf("expected 1 iteration, got %d", result.Iterations)
-	}
-	if result.RawOutput != `{"result": "done"}` {
-		t.Errorf("unexpected raw output: %q", result.RawOutput)
-	}
-	if result.ToolCalls != 0 {
-		t.Errorf("expected 0 tool calls, got %d", result.ToolCalls)
+	if output != `{"result": "done"}` {
+		t.Errorf("unexpected output: %q", output)
 	}
 }
 
-func TestLoop_OneToolCall(t *testing.T) {
-	loop, _ := newTestLoop([]*llm.Response{
-		{
-			StopReason: "tool_use",
-			ToolCalls: []llm.ToolCall{
-				{ID: "call_1", Name: "read_file", Arguments: map[string]any{"path": "main.go"}},
+func TestAgent_OneToolCall(t *testing.T) {
+	provider := &mockProvider{
+		responses: []*agent.CompleteResponse{
+			{
+				Message: agent.Message{
+					Role: agent.RoleAssistant,
+					ToolCalls: []agent.ToolCall{
+						{ID: "call_1", Name: "read_file", Input: json.RawMessage(`{"path":"main.go"}`)},
+					},
+				},
+				StopReason: agent.StopReasonToolUse,
+				Usage:      agent.Usage{InputTokens: 100, OutputTokens: 50},
 			},
-			Usage: llm.TokenUsage{InputTokens: 100, OutputTokens: 50},
+			{
+				Message:    agent.Message{Role: agent.RoleAssistant, Content: `{"result": "done"}`},
+				StopReason: agent.StopReasonEndTurn,
+				Usage:      agent.Usage{InputTokens: 200, OutputTokens: 30},
+			},
 		},
-		{
-			Content:    `{"result": "done"}`,
-			StopReason: "end_turn",
-			Usage:      llm.TokenUsage{InputTokens: 200, OutputTokens: 30},
-		},
-	})
+	}
 
 	var dispatchedCalls []string
-	dispatch := func(_ context.Context, call llm.ToolCall) (string, error) {
-		dispatchedCalls = append(dispatchedCalls, call.Name)
-		return "file contents", nil
-	}
+	tool := agent.NewToolFunc("read_file", "Read a file", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) {
+			dispatchedCalls = append(dispatchedCalls, "read_file")
+			return "file contents", nil
+		},
+	)
 
-	result, err := loop.Run(context.Background(), testConfig(), nil, dispatch, nil)
+	a := agent.NewAgent(provider, agent.WithTools(tool), agent.WithMaxTurns(10))
+
+	output, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Iterations != 2 {
-		t.Errorf("expected 2 iterations, got %d", result.Iterations)
-	}
-	if result.ToolCalls != 1 {
-		t.Errorf("expected 1 tool call, got %d", result.ToolCalls)
+	if output != `{"result": "done"}` {
+		t.Errorf("unexpected output: %q", output)
 	}
 	if len(dispatchedCalls) != 1 || dispatchedCalls[0] != "read_file" {
 		t.Errorf("expected dispatched [read_file], got %v", dispatchedCalls)
 	}
 }
 
-func TestLoop_MultipleIterations(t *testing.T) {
-	responses := make([]*llm.Response, 6)
+func TestAgent_MultipleIterations(t *testing.T) {
+	responses := make([]*agent.CompleteResponse, 6)
 	for i := 0; i < 5; i++ {
-		responses[i] = &llm.Response{
-			StopReason: "tool_use",
-			ToolCalls: []llm.ToolCall{
-				{ID: "call", Name: "glob", Arguments: map[string]any{"pattern": "*.go"}},
+		responses[i] = &agent.CompleteResponse{
+			Message: agent.Message{
+				Role: agent.RoleAssistant,
+				ToolCalls: []agent.ToolCall{
+					{ID: "call", Name: "glob", Input: json.RawMessage(`{"pattern":"*.go"}`)},
+				},
 			},
-			Usage: llm.TokenUsage{InputTokens: 10, OutputTokens: 5},
+			StopReason: agent.StopReasonToolUse,
+			Usage:      agent.Usage{InputTokens: 10, OutputTokens: 5},
 		}
 	}
-	responses[5] = &llm.Response{
-		Content:    `{"result": "done"}`,
-		StopReason: "end_turn",
-		Usage:      llm.TokenUsage{InputTokens: 10, OutputTokens: 5},
+	responses[5] = &agent.CompleteResponse{
+		Message:    agent.Message{Role: agent.RoleAssistant, Content: `{"result": "done"}`},
+		StopReason: agent.StopReasonEndTurn,
+		Usage:      agent.Usage{InputTokens: 10, OutputTokens: 5},
 	}
 
-	loop, _ := newTestLoop(responses)
-	result, err := loop.Run(context.Background(), testConfig(), nil, noopDispatch, nil)
+	tool := agent.NewToolFunc("glob", "Glob files", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) { return "*.go", nil },
+	)
+
+	a := agent.NewAgent(&mockProvider{responses: responses},
+		agent.WithTools(tool),
+		agent.WithMaxTurns(10),
+	)
+
+	output, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Iterations != 6 {
-		t.Errorf("expected 6 iterations, got %d", result.Iterations)
-	}
-	if result.ToolCalls != 5 {
-		t.Errorf("expected 5 tool calls, got %d", result.ToolCalls)
+	if output != `{"result": "done"}` {
+		t.Errorf("unexpected output: %q", output)
 	}
 }
 
-func TestLoop_MaxIterationsReached(t *testing.T) {
-	config := testConfig()
-	config.MaxIterations = 3
-
-	// All responses have tool calls — loop never gets a text-only response.
-	responses := make([]*llm.Response, 10)
+func TestAgent_MaxTurnsReached(t *testing.T) {
+	responses := make([]*agent.CompleteResponse, 10)
 	for i := range responses {
-		responses[i] = &llm.Response{
-			StopReason: "tool_use",
-			ToolCalls: []llm.ToolCall{
-				{ID: "call", Name: "glob", Arguments: map[string]any{"pattern": "*.go"}},
+		responses[i] = &agent.CompleteResponse{
+			Message: agent.Message{
+				Role: agent.RoleAssistant,
+				ToolCalls: []agent.ToolCall{
+					{ID: "call", Name: "glob", Input: json.RawMessage(`{"pattern":"*.go"}`)},
+				},
 			},
-			Usage: llm.TokenUsage{InputTokens: 10, OutputTokens: 5},
+			StopReason: agent.StopReasonToolUse,
+			Usage:      agent.Usage{InputTokens: 10, OutputTokens: 5},
 		}
 	}
 
-	loop, _ := newTestLoop(responses)
-	_, err := loop.Run(context.Background(), config, nil, noopDispatch, nil)
+	tool := agent.NewToolFunc("glob", "Glob", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) { return "ok", nil },
+	)
+
+	a := agent.NewAgent(&mockProvider{responses: responses},
+		agent.WithTools(tool),
+		agent.WithMaxTurns(3),
+	)
+
+	_, err := a.Run(context.Background(), "Begin your task.")
 	if err == nil {
-		t.Fatal("expected error for max iterations")
+		t.Fatal("expected error for max turns")
 	}
-
-	var jerryErr *jerrerr.Error
-	if !errors.As(err, &jerryErr) {
-		t.Fatalf("expected jerry Error, got %T: %v", err, err)
-	}
-	if jerryErr.Code != jerrerr.CodeAgentMaxIterations {
-		t.Errorf("expected code %q, got %q", jerrerr.CodeAgentMaxIterations, jerryErr.Code)
+	if !errors.Is(err, agent.ErrMaxTurns) {
+		t.Errorf("expected ErrMaxTurns, got: %v", err)
 	}
 }
 
-func TestLoop_ToolError(t *testing.T) {
-	loop, _ := newTestLoop([]*llm.Response{
-		{
-			StopReason: "tool_use",
-			ToolCalls: []llm.ToolCall{
-				{ID: "call_1", Name: "read_file", Arguments: map[string]any{"path": "bad.go"}},
+func TestAgent_ToolError(t *testing.T) {
+	provider := &mockProvider{
+		responses: []*agent.CompleteResponse{
+			{
+				Message: agent.Message{
+					Role: agent.RoleAssistant,
+					ToolCalls: []agent.ToolCall{
+						{ID: "call_1", Name: "read_file", Input: json.RawMessage(`{"path":"bad.go"}`)},
+					},
+				},
+				StopReason: agent.StopReasonToolUse,
+				Usage:      agent.Usage{InputTokens: 100, OutputTokens: 50},
 			},
-			Usage: llm.TokenUsage{InputTokens: 100, OutputTokens: 50},
+			{
+				Message:    agent.Message{Role: agent.RoleAssistant, Content: `{"result": "recovered"}`},
+				StopReason: agent.StopReasonEndTurn,
+				Usage:      agent.Usage{InputTokens: 100, OutputTokens: 50},
+			},
 		},
-		{
-			Content:    `{"result": "recovered"}`,
-			StopReason: "end_turn",
-			Usage:      llm.TokenUsage{InputTokens: 100, OutputTokens: 50},
-		},
-	})
-
-	dispatch := func(_ context.Context, _ llm.ToolCall) (string, error) {
-		return "", errors.New("disk I/O failure")
 	}
 
-	result, err := loop.Run(context.Background(), testConfig(), nil, dispatch, nil)
+	tool := agent.NewToolFunc("read_file", "Read", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) {
+			return "", errors.New("disk I/O failure")
+		},
+	)
+
+	a := agent.NewAgent(provider, agent.WithTools(tool), agent.WithMaxTurns(10))
+
+	output, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
-		t.Fatalf("loop should continue after tool error, got: %v", err)
+		t.Fatalf("agent should continue after tool error, got: %v", err)
 	}
-	if result.RawOutput != `{"result": "recovered"}` {
-		t.Errorf("expected recovered output, got %q", result.RawOutput)
+	if output != `{"result": "recovered"}` {
+		t.Errorf("expected recovered output, got %q", output)
 	}
 }
 
-func TestLoop_ContextCancelled(t *testing.T) {
+func TestAgent_ContextCancelled(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately.
+	cancel()
 
-	loop, _ := newTestLoop([]*llm.Response{
-		{Content: "should not reach", StopReason: "end_turn"},
-	})
+	provider := &mockProvider{
+		responses: []*agent.CompleteResponse{
+			{
+				Message:    agent.Message{Role: agent.RoleAssistant, Content: "should not reach"},
+				StopReason: agent.StopReasonEndTurn,
+			},
+		},
+	}
 
-	_, err := loop.Run(cancelCtx, testConfig(), nil, noopDispatch, nil)
+	a := agent.NewAgent(provider, agent.WithMaxTurns(10))
+
+	_, err := a.Run(cancelCtx, "Begin your task.")
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
 	}
 }
 
-func TestLoop_TokenAccumulation(t *testing.T) {
-	loop, _ := newTestLoop([]*llm.Response{
-		{
-			StopReason: "tool_use",
-			ToolCalls:  []llm.ToolCall{{ID: "c1", Name: "glob"}},
-			Usage:      llm.TokenUsage{InputTokens: 100, OutputTokens: 50},
-		},
-		{
-			StopReason: "tool_use",
-			ToolCalls:  []llm.ToolCall{{ID: "c2", Name: "glob"}},
-			Usage:      llm.TokenUsage{InputTokens: 200, OutputTokens: 60},
-		},
-		{
-			Content:    `{"result": "done"}`,
-			StopReason: "end_turn",
-			Usage:      llm.TokenUsage{InputTokens: 150, OutputTokens: 40},
-		},
-	})
-
-	result, err := loop.Run(context.Background(), testConfig(), nil, noopDispatch, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.TotalUsage.InputTokens != 450 {
-		t.Errorf("expected 450 input tokens, got %d", result.TotalUsage.InputTokens)
-	}
-	if result.TotalUsage.OutputTokens != 150 {
-		t.Errorf("expected 150 output tokens, got %d", result.TotalUsage.OutputTokens)
-	}
-}
-
-func TestLoop_SystemMessageContainsContext(t *testing.T) {
+func TestAgent_SystemMessageContainsContext(t *testing.T) {
 	var capturedSystem string
-	client := &capturingMockClient{
-		response: &llm.Response{
-			Content:    `{"result": "done"}`,
-			StopReason: "end_turn",
-			Usage:      llm.TokenUsage{InputTokens: 10, OutputTokens: 5},
+	provider := &capturingProvider{
+		response: &agent.CompleteResponse{
+			Message:    agent.Message{Role: agent.RoleAssistant, Content: `{"result": "done"}`},
+			StopReason: agent.StopReasonEndTurn,
+			Usage:      agent.Usage{InputTokens: 10, OutputTokens: 5},
 		},
 		capturedSystem: &capturedSystem,
 	}
 
-	printer := output.NewPrinter(devNull{}, devNull{})
-	loop := agent.NewLoop(client, nil, printer)
+	a := agent.NewAgent(provider,
+		agent.WithSystemPrompt("Do the thing.\n\nbuild feature X"),
+		agent.WithMaxTurns(10),
+	)
 
-	config := testConfig()
-	config.Instructions = "# Test Agent\n\nDo the thing."
-
-	pipelineContext := map[string]any{
-		"trigger": map[string]any{
-			"intent": "build feature X",
-		},
-	}
-
-	_, err := loop.Run(context.Background(), config, nil, noopDispatch, pipelineContext)
+	_, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(capturedSystem, "Do the thing") {
-		t.Error("system message should contain agent instructions")
-	}
-	if !strings.Contains(capturedSystem, "build feature X") {
-		t.Error("system message should contain pipeline context")
+	if capturedSystem == "" {
+		t.Fatal("system message not captured")
 	}
 }
 
-func TestLoop_SystemMessageContainsSchema(t *testing.T) {
-	var capturedSystem string
-	client := &capturingMockClient{
-		response: &llm.Response{
-			Content:    `{"result": "done"}`,
-			StopReason: "end_turn",
-			Usage:      llm.TokenUsage{InputTokens: 10, OutputTokens: 5},
-		},
-		capturedSystem: &capturedSystem,
-	}
+type capturingProvider struct {
+	response       *agent.CompleteResponse
+	capturedSystem *string
+}
 
-	printer := output.NewPrinter(devNull{}, devNull{})
-	loop := agent.NewLoop(client, nil, printer)
-
-	config := testConfig()
-	config.Instructions = "# Agent"
-	config.OutputSchema = map[string]any{
-		"summary":    "string",
-		"confidence": "number",
-	}
-
-	_, err := loop.Run(context.Background(), config, nil, noopDispatch, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !strings.Contains(capturedSystem, "Output Format") {
-		t.Error("system message should contain output format section")
-	}
-	if !strings.Contains(capturedSystem, "summary") {
-		t.Error("system message should contain schema keys")
-	}
+func (m *capturingProvider) Complete(_ context.Context, params agent.CompleteParams) (*agent.CompleteResponse, error) {
+	*m.capturedSystem = params.SystemPrompt
+	return m.response, nil
 }

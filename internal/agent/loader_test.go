@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
-	"github.com/kilupskalvis/jerry/internal/config"
 )
 
 var testKnownTools = []string{"read_file", "write_file", "glob", "search_codebase", "run_command", "list_directory"}
@@ -41,7 +40,7 @@ tools:
 You are a test agent.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -55,9 +54,6 @@ You are a test agent.
 	}
 	if len(agentCfg.Tools) != 2 {
 		t.Errorf("expected 2 tools, got %d", len(agentCfg.Tools))
-	}
-	if agentCfg.OutputKey != "result" {
-		t.Errorf("expected output_key 'result', got %q", agentCfg.OutputKey)
 	}
 	if !strings.Contains(agentCfg.Instructions, "You are a test agent") {
 		t.Errorf("instructions should contain agent body, got %q", agentCfg.Instructions)
@@ -81,7 +77,7 @@ output_schema:
 Pure reasoning, no tools.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -114,7 +110,7 @@ tools:
 Write only to src/ and tests/.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -150,7 +146,7 @@ output_schema:
 Test default values.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -179,7 +175,7 @@ output_schema:
 Agent without model in frontmatter.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "claude-haiku-4-5", nil)
+	loader := agent.NewLoader(testKnownTools, "claude-haiku-4-5")
 	agentCfg, err := loader.Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -193,7 +189,7 @@ func TestLoad_InvalidNoFrontmatter(t *testing.T) {
 	dir := t.TempDir()
 	path := writeAgentFile(t, dir, "no-front.md", "# Just markdown\n\nNo frontmatter here.")
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	_, err := loader.Load(path)
 	if err == nil {
 		t.Fatal("expected error for missing frontmatter")
@@ -210,7 +206,7 @@ name: [invalid yaml
 # Bad YAML
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	_, err := loader.Load(path)
 	if err == nil {
 		t.Fatal("expected error for bad YAML")
@@ -233,7 +229,7 @@ output_schema:
 Missing name field.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	_, err := loader.Load(path)
 	if err == nil {
 		t.Fatal("expected error for missing name")
@@ -262,7 +258,7 @@ tools:
 References a tool that doesn't exist.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	_, err := loader.Load(path)
 	if err == nil {
 		t.Fatal("expected error for unknown tool")
@@ -285,7 +281,7 @@ output_schema:
 ---
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil)
+	loader := agent.NewLoader(testKnownTools, "")
 	_, err := loader.Load(path)
 	if err == nil {
 		t.Fatal("expected error for empty instructions")
@@ -311,83 +307,12 @@ output_schema:
 No model and no default.
 `)
 
-	loader := agent.NewLoader(testKnownTools, "", nil) // empty default
+	loader := agent.NewLoader(testKnownTools, "") // empty default
 	_, err := loader.Load(path)
 	if err == nil {
 		t.Fatal("expected error for missing model with no default")
 	}
 	if !strings.Contains(err.Error(), "model") {
 		t.Errorf("error should mention 'model', got: %v", err)
-	}
-}
-
-func TestLoad_ConfigResolution_ModelFromFileConfig(t *testing.T) {
-	agentContent := `---
-name: no-model-agent
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  summary: string
----
-
-# Agent without model
-
-Instructions here.
-`
-	tmpDir := t.TempDir()
-	agentPath := filepath.Join(tmpDir, "agent.md")
-	if err := os.WriteFile(agentPath, []byte(agentContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	fileCfg := &config.FileConfig{
-		Defaults: config.DefaultsConfig{
-			Model: "gpt-4o",
-		},
-	}
-	loader := agent.NewLoader([]string{"read_file"}, "", fileCfg)
-	cfg, err := loader.Load(agentPath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Model != "gpt-4o" {
-		t.Errorf("model = %q, want %q (from FileConfig)", cfg.Model, "gpt-4o")
-	}
-}
-
-func TestLoad_ConfigResolution_FrontmatterOverridesFileConfig(t *testing.T) {
-	agentContent := `---
-name: explicit-model-agent
-model: claude-opus-4-6
-context_access:
-  - trigger
-output_key: result
-output_schema:
-  summary: string
----
-
-# Agent with explicit model
-
-Instructions here.
-`
-	tmpDir := t.TempDir()
-	agentPath := filepath.Join(tmpDir, "agent.md")
-	if err := os.WriteFile(agentPath, []byte(agentContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	fileCfg := &config.FileConfig{
-		Defaults: config.DefaultsConfig{
-			Model: "gpt-4o",
-		},
-	}
-	loader := agent.NewLoader([]string{}, "", fileCfg)
-	cfg, err := loader.Load(agentPath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Model != "claude-opus-4-6" {
-		t.Errorf("model = %q, want %q (frontmatter takes precedence)", cfg.Model, "claude-opus-4-6")
 	}
 }

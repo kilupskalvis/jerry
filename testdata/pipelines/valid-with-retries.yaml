@@ -1,6 +1,0 @@
-name: retries
-steps:
-  - name: flaky
-    script: exit 1
-    retries: 2
-    retry_backoff: exponential

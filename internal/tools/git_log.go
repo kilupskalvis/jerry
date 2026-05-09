@@ -2,9 +2,8 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-
-	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxGitLogCount is the maximum number of commits returned by git_log.
@@ -13,27 +12,33 @@ const MaxGitLogCount = 50
 // NewGitLogTool creates a git_log tool bound to the given repo root.
 func NewGitLogTool(repoRoot string) Tool {
 	return Tool{
-		Definition: llm.ToolDef{
-			Name:        "git_log",
-			Description: "View recent git commits.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"count": map[string]any{
-						"type":        "integer",
-						"description": "Number of commits to show (default: 10, max: 50)",
-					},
-					"path": map[string]any{
-						"type":        "string",
-						"description": "Optional file path to filter commits (relative to repo root)",
-					},
+		ToolName:        "git_log",
+		ToolDescription: "View recent git commits.",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"count": {
+					"type": "integer",
+					"description": "Number of commits to show (default: 10, max: 50)"
 				},
-			},
-		},
-		Execute: func(ctx context.Context, args map[string]any) (string, error) {
+				"path": {
+					"type": "string",
+					"description": "Optional file path to filter commits (relative to repo root)"
+				}
+			}
+		}`),
+		Execute: func(ctx context.Context, input json.RawMessage) (string, error) {
+			var args struct {
+				Count *int   `json:"count"`
+				Path  string `json:"path"`
+			}
+			if err := json.Unmarshal(input, &args); err != nil {
+				return fmt.Sprintf("Error: invalid input: %v", err), nil
+			}
+
 			count := 10
-			if c, ok := args["count"].(float64); ok {
-				count = int(c)
+			if args.Count != nil {
+				count = *args.Count
 			}
 			if count < 1 {
 				count = 1
@@ -42,14 +47,13 @@ func NewGitLogTool(repoRoot string) Tool {
 				count = MaxGitLogCount
 			}
 
-			path, _ := args["path"].(string)
-			if violation := validateGitPath(path, repoRoot); violation != "" {
+			if violation := validateGitPath(args.Path, repoRoot); violation != "" {
 				return violation, nil
 			}
 
 			gitArgs := []string{"log", "--oneline", "--no-decorate", "-n", fmt.Sprintf("%d", count)}
-			if path != "" {
-				gitArgs = append(gitArgs, "--", path)
+			if args.Path != "" {
+				gitArgs = append(gitArgs, "--", args.Path)
 			}
 
 			result, gitErr := runGit(ctx, repoRoot, gitArgs...)

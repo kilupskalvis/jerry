@@ -13,14 +13,13 @@ linters:
     - gocritic
     - nilerr
     - errorlint
-    - prealloc
+    - bodyclose
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - errcheck
           - unparam
-          - prealloc
       - path: internal/output/printer\.go
         linters:
           - errcheck

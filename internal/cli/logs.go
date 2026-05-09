@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -63,19 +62,13 @@ func showOverview(app *App) error {
 		jerryDir := app.Loader.JerryDir()
 		fmt.Fprintf(os.Stderr, "Jerry project: %s\n", jerryDir)
 
-		pipelineNames := listFilesWithExt(filepath.Join(jerryDir, "pipelines"), ".yaml", ".yml")
-		if len(pipelineNames) > 0 {
-			fmt.Fprintf(os.Stderr, "Pipelines: %d (%s)\n", len(pipelineNames), strings.Join(pipelineNames, ", "))
+		workflowNames := app.Loader.ListWorkflows()
+		if len(workflowNames) > 0 {
+			fmt.Fprintf(os.Stderr, "Workflows: %d (%s)\n", len(workflowNames), strings.Join(workflowNames, ", "))
 		} else {
-			fmt.Fprintln(os.Stderr, "Pipelines: none")
+			fmt.Fprintln(os.Stderr, "Workflows: none")
 		}
 
-		agentNames := listFilesWithExt(filepath.Join(jerryDir, "agents"), ".md")
-		if len(agentNames) > 0 {
-			fmt.Fprintf(os.Stderr, "Agents: %d (%s)\n", len(agentNames), strings.Join(agentNames, ", "))
-		} else {
-			fmt.Fprintln(os.Stderr, "Agents: none")
-		}
 		fmt.Fprintln(os.Stderr)
 	}
 
@@ -112,7 +105,7 @@ func showOverview(app *App) error {
 		}
 		ago := time.Since(s.StartedAt).Truncate(time.Second)
 		fmt.Fprintf(os.Stderr, "  %-18s %-16s %s  %d steps  %s ago\n",
-			s.RunID, s.PipelineName, status, s.StepCount, ago)
+			s.RunID, s.WorkflowName, status, s.StepCount, ago)
 	}
 	return nil
 }
@@ -166,7 +159,7 @@ func showRunDetail(app *App, runID, stepFilter string, showTools, showLLM, showJ
 // Summary field — this function is completely tool-agnostic.
 func showRunOverview(runState *state.RunState, entries []state.LogEntry) error {
 	fmt.Fprintf(os.Stderr, "Run: %s\n", runState.RunID)
-	fmt.Fprintf(os.Stderr, "Pipeline: %s\n", runState.PipelineName)
+	fmt.Fprintf(os.Stderr, "Workflow: %s\n", runState.WorkflowName)
 	fmt.Fprintf(os.Stderr, "Status: %s\n", runState.Status)
 	fmt.Fprintf(os.Stderr, "Started: %s\n", runState.StartedAt.Format("2006-01-02 15:04:05"))
 	if runState.CompletedAt != nil {
@@ -428,26 +421,4 @@ func formatLogDuration(d time.Duration) string {
 	minutes := int(d.Minutes())
 	seconds := int(d.Seconds()) % 60
 	return fmt.Sprintf("%dm %ds", minutes, seconds)
-}
-
-func listFilesWithExt(dir string, exts ...string) []string {
-	entries, readErr := os.ReadDir(dir)
-	if readErr != nil {
-		return nil
-	}
-
-	var names []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		for _, ext := range exts {
-			if strings.HasSuffix(entry.Name(), ext) {
-				name := strings.TrimSuffix(entry.Name(), ext)
-				names = append(names, name)
-				break
-			}
-		}
-	}
-	return names
 }

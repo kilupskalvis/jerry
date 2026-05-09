@@ -74,7 +74,6 @@ func runInit(targetPath, ciPlatform string) error {
 		filepath.Join(jerryDir, "pipelines", "example.yaml"):  examplePipelineYAML,
 		filepath.Join(jerryDir, "scripts", "echo-context.sh"): echoContextScript,
 		filepath.Join(jerryDir, ".gitignore"):                 jerryGitignore,
-		filepath.Join(jerryDir, "config.yaml"):                defaultConfigYAML,
 	}
 	for path, content := range staticFiles {
 		perm := os.FileMode(0o644)
@@ -153,15 +152,6 @@ cat "$JERRY_CONTEXT_FILE"
 echo ""
 echo "Run ID:    $JERRY_RUN_ID"
 echo "Step Name: $JERRY_STEP_NAME"
-`
-
-const defaultConfigYAML = `# Jerry configuration — defaults for all agents and pipelines.
-# Agent frontmatter values take precedence over these defaults.
-#
-# defaults:
-#   model: claude-sonnet-4-6
-#   timeout: 600s
-#   max_iterations: 50
 `
 
 func generateCIConfig(targetPath, platform string) error {

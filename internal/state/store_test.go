@@ -16,8 +16,8 @@ func newTestRunState(runID string) state.RunState {
 	now := time.Now().Truncate(time.Millisecond) // truncate for JSON roundtrip
 	return state.RunState{
 		RunID:        runID,
-		PipelineName: "test-pipeline",
-		PipelineFile: ".jerry/pipelines/test.yaml",
+		WorkflowName: "test-workflow",
+		WorkflowFile: ".jerry/test/workflow.yaml",
 		Status:       state.StatusRunning,
 		StartedAt:    now,
 		CurrentStep:  0,
@@ -31,7 +31,7 @@ func newTestRunState(runID string) state.RunState {
 				Source: "cli",
 				Intent: "test",
 			},
-			Data: map[string]any{},
+			Steps: nil,
 		},
 	}
 }
@@ -184,8 +184,8 @@ func TestFileStore_LoadRun(t *testing.T) {
 	if loaded.RunID != original.RunID {
 		t.Errorf("RunID = %q, want %q", loaded.RunID, original.RunID)
 	}
-	if loaded.PipelineName != original.PipelineName {
-		t.Errorf("PipelineName = %q, want %q", loaded.PipelineName, original.PipelineName)
+	if loaded.WorkflowName != original.WorkflowName {
+		t.Errorf("PipelineName = %q, want %q", loaded.WorkflowName, original.WorkflowName)
 	}
 	if loaded.Status != original.Status {
 		t.Errorf("Status = %q, want %q", loaded.Status, original.Status)

@@ -10,8 +10,8 @@
 </td></tr></table>
 
 <p align="center">
-<b>Orchestrator for composable AI code generation pipelines</b><br>
-Define agents in Markdown, wire them into YAML pipelines, run on any LLM.
+<b>Turn your CI into an autonomous development platform</b><br>
+Define AI agents in Markdown, wire them into workflows, run them as a CI step. No new infrastructure.
 </p>
 
 <p align="center">
@@ -20,31 +20,38 @@ Define agents in Markdown, wire them into YAML pipelines, run on any LLM.
 <a href="LICENSE"><img src="https://img.shields.io/github/license/kilupskalvis/jerry" alt="License"></a>
 </p>
 
-## The Problem
+## The Idea
 
-AI code generation tools — Devin, SWE-agent, OpenHands, Factory — are monolithic. Each one builds the full stack: codebase analysis, planning, code generation, validation, and publishing, all tightly coupled into a single product. This means:
+You already have an orchestrator. GitHub Actions, GitLab CI, Jenkins — they have triggers, runners, secrets management, permissions, artifact storage, and job coordination. You don't need another one.
 
-- **Vendor lock-in.** Switching how code generation works means replacing the entire tool.
-- **No customization.** A fintech team and a game studio have different conventions, but every agent works the same way for everyone.
-- **Wasted ecosystem effort.** If someone builds a great codebase analyzer, it only works inside their tool. Nobody else benefits.
+What you need is a way to make a CI step say: "an AI agent understands this codebase, plans changes, writes code, and runs the tests" — without deploying a separate platform, standing up a queue, or running an agent server.
 
-## The Solution
-
-Jerry orchestrates AI code generation into composable pipelines. Teams define pipelines in YAML, configure agents in Markdown, and compose steps from any source. Swap the analyzer, swap the generator, swap the model — without replacing anything else.
+Jerry is a **CLI binary that runs as a single CI step.** Your CI defines _when_ to run. Jerry defines _what the AI does._
 
 ```yaml
-# .jerry/pipelines/feature.yaml
-name: feature
-steps:
-  - name: plan
-    agent: ./agents/plan.md           # Analyze codebase and plan changes
-  - name: generate
-    agent: ./agents/generate.md       # Implement the plan
-  - name: validate
-    script: go test ./...             # Run tests
+# .github/workflows/feature.yml — CI defines the trigger
+on:
+  issues:
+    types: [labeled]
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: jerry run feature --trigger-file "$GITHUB_EVENT_PATH"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-This is not another AI coding agent. It is the orchestration layer that agents run on — like GitHub Actions is for CI/CD.
+```yaml
+# .jerry/feature/workflow.yaml — Jerry defines the work
+steps:
+  - agent: plan              # Analyze codebase and plan changes
+  - agent: generate          # Implement the plan
+  - run: go test ./...       # Run tests
+```
+
+**No new infrastructure.** The workflow definition, agent instructions, and tool constraints all live in the repo — versioned, reviewed in PRs, and evolving alongside the code they operate on. The same `.jerry/` directory works on GitHub, GitLab, or locally from the terminal.
 
 ## Installation
 
@@ -67,15 +74,25 @@ go build -o jerry ./cmd/jerry
 ```bash
 jerry init                                          # Scaffold project
 export ANTHROPIC_API_KEY=sk-ant-...                 # Set API key
-jerry run feature "Add a GET /health endpoint"      # Generate code
+jerry run example "Add a GET /health endpoint"      # Generate code
 jerry logs                                          # See what happened
 ```
 
 ## How It Works
 
-**Pipelines** are YAML files that define a sequence of steps. Each step is either an agent (autonomous AI) or a script (deterministic shell command).
+Jerry sits between your CI trigger and the actual code changes. When a CI event fires (issue labeled, PR opened, push, manual dispatch), Jerry receives the webhook payload, normalizes it into a trigger (intent + metadata), and runs a workflow of steps against your codebase.
 
-**Agents** are Markdown files with YAML frontmatter. The frontmatter declares the model, tools, and output schema. The body contains the agent's instructions — written in plain English, version-controlled like code, reviewable in PRs.
+**Workflows** are YAML files that define a sequence of steps. Each step is either an agent (autonomous AI) or a shell command. Each workflow is a self-contained directory under `.jerry/`:
+
+```
+.jerry/
+  feature/
+    workflow.yaml         # Step sequence
+    plan.md               # Planning agent
+    generate.md           # Code generation agent
+```
+
+**Agents** are Markdown files with YAML frontmatter. The frontmatter declares the model and tools. The body contains the agent's instructions — written in plain English, version-controlled like code, reviewable in PRs.
 
 ```markdown
 ---
@@ -86,18 +103,6 @@ tools:
   - write_file
   - run_command:
       allow: [go test, go build]
-context_access:
-  - trigger
-  - codebase
-  - plan
-output_key: generation
-output_schema:
-  artifacts:
-    type: array
-    items:
-      path: string
-      action: string
-  tests_passed: boolean
 ---
 
 # Code Generator
@@ -107,40 +112,39 @@ then write new code that follows the same conventions exactly.
 After writing all files, run the build and test suite.
 ```
 
-**Steps communicate through a shared context object.** Each step reads from keys written by previous steps and writes to its own `output_key`. No step talks to another directly — the context is the only interface:
+**Context flows automatically between steps.** Each step's output is available to every subsequent step — no manual wiring. The agent's system prompt is constructed with previous step outputs injected before the agent's instructions:
 
 ```
-trigger → plan agent → generate agent → validate script
-           reads:        reads:           reads:
-           trigger       trigger          generation
-           writes:       plan
-           plan          writes:
-                         generation
+Step 1 (plan):   sees trigger
+Step 2 (generate): sees trigger + plan output       ← automatic
+Step 3 (run):      sees trigger + plan + generate   ← automatic
 ```
 
-**The runtime** handles orchestration, tool execution, retries, state persistence, context window management, and structured logging. It supports Anthropic (Claude) and OpenAI (GPT) via their official SDKs, with automatic provider selection based on the model name.
+**The trigger system** normalizes GitHub and GitLab webhook payloads automatically. A GitHub issue becomes `{type: "ticket", intent: "Add dark mode support", source: "github"}`. A GitLab MR becomes `{type: "pull_request", intent: "Fix auth timeout", source: "gitlab"}`. Your CI passes the event JSON, Jerry extracts what the agent needs to know.
+
+**The runtime** handles tool execution, retries, state persistence, context window management, and structured logging. It supports Anthropic (Claude) and OpenAI (GPT) via their official SDKs, with automatic provider selection based on the model name.
 
 ## Core Agents
 
-`jerry init` ships two agents:
+`jerry init` ships two agents in an example workflow:
 
-| Agent | Purpose | Tools | Iteration Budget |
-|-------|---------|-------|-----------------|
-| `plan.md` | Explore the codebase and produce an ordered implementation plan | read_file, search_codebase, glob, list_directory, git_log | 30 |
-| `generate.md` | Implement the plan, run build and tests, fix failures | read_file, write_file, glob, search_codebase, run_command, list_directory, git_log | 50 |
+| Agent | Purpose | Tools |
+|-------|---------|-------|
+| `plan.md` | Explore the codebase and produce an ordered implementation plan | read_file, search_codebase, glob, list_directory, git_log |
+| `generate.md` | Implement the plan, run build and tests, fix failures | read_file, write_file, glob, search_codebase, run_command, list_directory, git_log |
 
-These are starting points. Add your team's conventions to the Markdown body, split into more steps, or replace with your own agents. See [docs/customizing-agents.md](docs/customizing-agents.md).
+These are starting points. Add your team's conventions to the Markdown body, split into more steps, or replace with your own agents.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `jerry init` | Scaffold `.jerry/` with agents, pipelines, and config |
+| `jerry init` | Scaffold `.jerry/` with an example workflow |
 | `jerry init --ci github` | Also generate GitHub Actions workflow |
-| `jerry run <pipeline> [intent]` | Execute a pipeline |
-| `jerry run <pipeline> --dry-run` | Preview and validate without executing |
+| `jerry run <workflow> [intent]` | Execute a workflow |
+| `jerry run <workflow> --dry-run` | Preview and validate without executing |
 | `jerry run --resume <run-id>` | Resume a failed run from the last checkpoint |
-| `jerry validate [pipeline]` | Validate pipelines and agent definitions |
+| `jerry validate [workflow]` | Validate workflows and agent definitions |
 | `jerry logs` | Show project overview and recent runs |
 | `jerry logs <run-id>` | Run details with step breakdown |
 | `jerry logs <run-id> --step <name>` | Tool calls for a specific step |
@@ -182,25 +186,14 @@ tools:
 
 ## Configuration
 
-### `.jerry/config.yaml`
-
-Project-wide defaults. Agent frontmatter takes precedence.
-
-```yaml
-defaults:
-  model: claude-sonnet-4-6
-  timeout: 600s
-  max_iterations: 50
-```
-
 ### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | API key for Claude models |
 | `OPENAI_API_KEY` | API key for GPT and O-series models |
-| `JERRY_DEFAULT_MODEL` | Override default model |
-| `JERRY_SECRET_*` | Passed to script step environments |
+| `JERRY_DEFAULT_MODEL` | Fallback model when agent doesn't specify one |
+| `JERRY_SECRET_*` | Passed to shell step environments |
 
 A `.env` file in the repository root is loaded automatically. Process environment takes precedence.
 
@@ -215,23 +208,31 @@ model: ft:gpt-4o:my-org:custom-model
 
 ## CI Integration
 
+Jerry plugs into the CI you already run. It consumes the same webhook payloads your CI already provides — no adapter services, no webhook receivers, no additional infrastructure.
+
 ### GitHub Actions
 
 ```bash
 jerry init --ci github
 ```
 
-Generates a workflow that runs the feature pipeline when issues are labeled `jerry`. Or use the action directly in any workflow:
+Generates a workflow that runs when issues are labeled `jerry`:
 
 ```yaml
-- uses: jerry-protocol/runner@v1
-  with:
-    pipeline: feature
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-```
+on:
+  issues:
+    types: [labeled]
 
-The action handles checkout, install, pipeline execution, and PR creation — one step, no boilerplate.
+jobs:
+  jerry:
+    if: contains(github.event.issue.labels.*.name, 'jerry')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: jerry run feature --trigger-file "$GITHUB_EVENT_PATH"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
 
 ### GitLab CI
 
@@ -244,24 +245,27 @@ Generates a GitLab CI job triggered via the pipeline API or web UI.
 ## Runtime Features
 
 - **Context window management**: automatic compaction when conversations exceed the model's context limit
-- **Resumable pipelines**: state checkpointed after every step, resume from the failure point with `jerry run --resume <run-id>`
+- **Resumable workflows**: state checkpointed after every step, resume from the failure point with `jerry run --resume <run-id>`
 - **Structured logging**: every LLM call, tool call, and decision logged to JSONL with timestamps and token counts
-- **Output validation**: agent output validated against JSON Schema translated from the simplified frontmatter notation
-- **Retry and fallback**: configurable per-step retry with fixed or exponential backoff, optional fallback steps
+- **Retry**: configurable per-step retry with fixed backoff
 - **Sensitive file protection**: agents are blocked from reading `.env` and other secret-bearing files
+- **Provider-agnostic**: swap between Anthropic and OpenAI per agent via the `model` field
 
 ## Project Structure
 
 ```
 .jerry/
-  pipelines/            # Pipeline definitions (YAML)
-  agents/               # Agent definitions (Markdown)
-  scripts/              # Shell scripts for deterministic steps
-  config.yaml           # Project defaults
-  runs/                 # Execution state and logs (gitignored)
+  feature/                # One workflow
+    workflow.yaml         # Step sequence
+    plan.md               # Agent definition
+    generate.md           # Agent definition
+  hotfix/                 # Another workflow
+    workflow.yaml
+    quick-fix.md
+  runs/                   # Execution state and logs (gitignored)
     <run-id>/
-      state.json        # Context snapshot for resume
-      log.jsonl         # Structured event log
+      state.json          # Context snapshot for resume
+      log.jsonl           # Structured event log
 ```
 
 ## Development
@@ -271,6 +275,7 @@ go test ./...           # Run tests
 go test -race ./...     # Run with race detector
 go build ./cmd/jerry    # Build
 golangci-lint run       # Lint
+lefthook install        # Install git hooks
 ```
 
 ## License

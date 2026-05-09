@@ -1,4 +1,0 @@
-name: empty-script
-steps:
-  - name: blank
-    script: "   "

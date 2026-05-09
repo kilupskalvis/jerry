@@ -106,9 +106,13 @@ func (s *FileStateStore) ListRuns() ([]RunSummary, error) {
 			continue // skip corrupt/unreadable runs
 		}
 
+		name := loaded.WorkflowName
+		if name == "" {
+			name = loaded.PipelineName
+		}
 		summaries = append(summaries, RunSummary{
 			RunID:        loaded.RunID,
-			PipelineName: loaded.PipelineName,
+			WorkflowName: name,
 			Status:       loaded.Status,
 			StartedAt:    loaded.StartedAt,
 			StepCount:    loaded.TotalSteps,

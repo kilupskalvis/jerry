@@ -1,6 +1,0 @@
-name: bad-fallback-script
-steps:
-  - name: step
-    script: echo hello
-    fallback:
-      script: "  "

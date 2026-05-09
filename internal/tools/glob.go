@@ -4,14 +4,13 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-
-	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxGlobResults is the maximum file paths returned from a single glob.
@@ -20,30 +19,34 @@ const MaxGlobResults = 200
 // NewGlobTool creates a glob tool bound to the given repo root.
 func NewGlobTool(repoRoot string) Tool {
 	return Tool{
-		Definition: llm.ToolDef{
-			Name:        "glob",
-			Description: "Find files matching a glob pattern. Supports ** for recursive matching (e.g., '**/*.go').",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"pattern": map[string]any{
-						"type":        "string",
-						"description": "Glob pattern to match (e.g., '**/*.go', 'src/**/*.ts')",
-					},
-				},
-				"required": []any{"pattern"},
+		ToolName:        "glob",
+		ToolDescription: "Find files matching a glob pattern. Supports ** for recursive matching (e.g., '**/*.go').",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"pattern": {
+					"type": "string",
+					"description": "Glob pattern to match (e.g., '**/*.go', 'src/**/*.ts')"
+				}
 			},
-		},
-		Execute: func(_ context.Context, args map[string]any) (string, error) {
-			pattern, _ := args["pattern"].(string)
-			if pattern == "" {
+			"required": ["pattern"]
+		}`),
+		Execute: func(_ context.Context, input json.RawMessage) (string, error) {
+			var args struct {
+				Pattern string `json:"pattern"`
+			}
+			if err := json.Unmarshal(input, &args); err != nil {
+				return fmt.Sprintf("Error: invalid input: %v", err), nil
+			}
+
+			if args.Pattern == "" {
 				return "Error: missing required parameter 'pattern'", nil
 			}
 
 			fsys := os.DirFS(repoRoot)
-			matches, err := doublestar.Glob(fsys, pattern, doublestar.WithNoFollow())
+			matches, err := doublestar.Glob(fsys, args.Pattern, doublestar.WithNoFollow())
 			if err != nil {
-				return fmt.Sprintf("Error: invalid glob pattern '%s': %s", pattern, err), nil
+				return fmt.Sprintf("Error: invalid glob pattern '%s': %s", args.Pattern, err), nil
 			}
 
 			// Filter out directories and sensitive files — only return safe files.
@@ -63,7 +66,7 @@ func NewGlobTool(repoRoot string) Tool {
 			}
 
 			if len(files) == 0 {
-				return fmt.Sprintf("No files matched pattern: %s", pattern), nil
+				return fmt.Sprintf("No files matched pattern: %s", args.Pattern), nil
 			}
 
 			totalCount := len(files)

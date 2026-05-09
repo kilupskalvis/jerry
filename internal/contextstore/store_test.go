@@ -19,7 +19,7 @@ func newTestStore() *contextstore.Store {
 
 func TestNewStore(t *testing.T) {
 	store := newTestStore()
-	snapshot := store.Get()
+	snapshot := store.Snapshot()
 
 	if snapshot.ProtocolVersion != "1.0" {
 		t.Errorf("ProtocolVersion = %q, want %q", snapshot.ProtocolVersion, "1.0")
@@ -33,147 +33,95 @@ func TestNewStore(t *testing.T) {
 	if snapshot.Trigger.Intent != "test intent" {
 		t.Errorf("Trigger.Intent = %q, want %q", snapshot.Trigger.Intent, "test intent")
 	}
-	if snapshot.Data == nil {
-		t.Error("Data should be initialized (not nil)")
-	}
-	if len(snapshot.Data) != 0 {
-		t.Errorf("Data should be empty, got %d entries", len(snapshot.Data))
+	if len(snapshot.Steps) != 0 {
+		t.Errorf("Steps should be empty, got %d", len(snapshot.Steps))
 	}
 }
 
-func TestStore_SetAndGet(t *testing.T) {
+func TestStore_Append(t *testing.T) {
 	store := newTestStore()
 
-	err := store.Set("codebase", map[string]any{"language": "go"})
-	if err != nil {
-		t.Fatalf("Set returned unexpected error: %v", err)
-	}
+	store.Append("plan", `{"summary": "build health endpoint"}`)
+	store.Append("generate", `{"artifacts": ["main.go"]}`)
 
-	snapshot := store.Get()
-	codebase, ok := snapshot.Data["codebase"]
-	if !ok {
-		t.Fatal("Data should contain 'codebase' key")
+	outputs := store.PreviousOutputs()
+	if len(outputs) != 2 {
+		t.Fatalf("expected 2 outputs, got %d", len(outputs))
 	}
-
-	cbMap, ok := codebase.(map[string]any)
-	if !ok {
-		t.Fatalf("codebase should be a map, got %T", codebase)
+	if outputs[0].Name != "plan" {
+		t.Errorf("first output name = %q, want %q", outputs[0].Name, "plan")
 	}
-	if cbMap["language"] != "go" {
-		t.Errorf("codebase.language = %q, want %q", cbMap["language"], "go")
+	if outputs[1].Name != "generate" {
+		t.Errorf("second output name = %q, want %q", outputs[1].Name, "generate")
 	}
 }
 
-func TestStore_ReservedKey_Trigger(t *testing.T) {
+func TestStore_PreviousOutputs_Empty(t *testing.T) {
 	store := newTestStore()
-	err := store.Set("trigger", "overwrite")
-	if err == nil {
-		t.Fatal("expected error when writing to reserved key 'trigger'")
+	outputs := store.PreviousOutputs()
+	if len(outputs) != 0 {
+		t.Errorf("expected 0 outputs, got %d", len(outputs))
 	}
 }
 
-func TestStore_ReservedKey_RunID(t *testing.T) {
+func TestStore_PreviousOutputs_IsCopy(t *testing.T) {
 	store := newTestStore()
-	err := store.Set("run_id", "overwrite")
-	if err == nil {
-		t.Fatal("expected error when writing to reserved key 'run_id'")
-	}
-}
+	store.Append("plan", "output")
 
-func TestStore_ReservedKey_ProtocolVersion(t *testing.T) {
-	store := newTestStore()
-	err := store.Set("protocol_version", "overwrite")
-	if err == nil {
-		t.Fatal("expected error when writing to reserved key 'protocol_version'")
-	}
-}
+	outputs := store.PreviousOutputs()
+	outputs[0].Name = "mutated"
 
-func TestStore_GetKeys(t *testing.T) {
-	store := newTestStore()
-	_ = store.Set("alpha", "a")
-	_ = store.Set("beta", "b")
-	_ = store.Set("gamma", "c")
-
-	result := store.GetKeys([]string{"alpha", "gamma"})
-
-	if len(result) != 2 {
-		t.Fatalf("GetKeys returned %d keys, want 2", len(result))
-	}
-	if result["alpha"] != "a" {
-		t.Errorf("alpha = %v, want %q", result["alpha"], "a")
-	}
-	if result["gamma"] != "c" {
-		t.Errorf("gamma = %v, want %q", result["gamma"], "c")
-	}
-	if _, ok := result["beta"]; ok {
-		t.Error("beta should not be in result")
-	}
-}
-
-func TestStore_GetKeys_MissingKey(t *testing.T) {
-	store := newTestStore()
-	_ = store.Set("alpha", "a")
-
-	result := store.GetKeys([]string{"alpha", "nonexistent"})
-
-	if len(result) != 1 {
-		t.Fatalf("GetKeys returned %d keys, want 1", len(result))
-	}
-	if _, ok := result["nonexistent"]; ok {
-		t.Error("nonexistent key should be omitted from result")
-	}
-}
-
-func TestStore_FullReplacement(t *testing.T) {
-	store := newTestStore()
-	_ = store.Set("data", map[string]any{"version": 1})
-	_ = store.Set("data", map[string]any{"version": 2})
-
-	snapshot := store.Get()
-	dataMap, ok := snapshot.Data["data"].(map[string]any)
-	if !ok {
-		t.Fatal("data should be a map")
-	}
-	// Should be version 2, not merged with version 1
-	if v, _ := dataMap["version"].(float64); v != 2 {
-		t.Errorf("version = %v, want 2 (full replacement, not merge)", dataMap["version"])
-	}
-}
-
-func TestStore_DeepCopy(t *testing.T) {
-	store := newTestStore()
-	_ = store.Set("items", map[string]any{"count": float64(1)})
-
-	// Get a snapshot and mutate it
-	snapshot := store.Get()
-	items := snapshot.Data["items"].(map[string]any)
-	items["count"] = float64(999)
-
-	// Original should be unchanged
-	original := store.Get()
-	originalItems := original.Data["items"].(map[string]any)
-	if originalItems["count"] != float64(1) {
-		t.Errorf("internal state was mutated via Get() return value: count = %v, want 1",
-			originalItems["count"])
+	original := store.PreviousOutputs()
+	if original[0].Name != "plan" {
+		t.Errorf("internal state was mutated via PreviousOutputs(): name = %q, want %q",
+			original[0].Name, "plan")
 	}
 }
 
 func TestStore_Snapshot(t *testing.T) {
 	store := newTestStore()
-	_ = store.Set("key", "value")
+	store.Append("plan", "plan output")
 
 	snapshot := store.Snapshot()
 	if snapshot.RunID != "run_test123" {
 		t.Errorf("Snapshot RunID = %q, want %q", snapshot.RunID, "run_test123")
 	}
-	if snapshot.Data["key"] != "value" {
-		t.Errorf("Snapshot Data[key] = %v, want %q", snapshot.Data["key"], "value")
+	if len(snapshot.Steps) != 1 {
+		t.Fatalf("Snapshot Steps = %d, want 1", len(snapshot.Steps))
+	}
+	if snapshot.Steps[0].Name != "plan" {
+		t.Errorf("Snapshot Steps[0].Name = %q, want %q", snapshot.Steps[0].Name, "plan")
+	}
+}
+
+func TestStore_RestoreFromSnapshot(t *testing.T) {
+	original := newTestStore()
+	original.Append("plan", "plan output")
+	original.Append("generate", "generate output")
+
+	snapshot := original.Snapshot()
+	restored := contextstore.RestoreFromSnapshot(snapshot)
+
+	outputs := restored.PreviousOutputs()
+	if len(outputs) != 2 {
+		t.Fatalf("restored should have 2 outputs, got %d", len(outputs))
+	}
+	if outputs[0].Name != "plan" {
+		t.Errorf("restored[0].Name = %q, want %q", outputs[0].Name, "plan")
+	}
+}
+
+func TestStore_Trigger(t *testing.T) {
+	store := newTestStore()
+	trigger := store.Trigger()
+	if trigger.Intent != "test intent" {
+		t.Errorf("Trigger.Intent = %q, want %q", trigger.Intent, "test intent")
 	}
 }
 
 func TestStore_WriteContextFile(t *testing.T) {
 	store := newTestStore()
-	_ = store.Set("test", "data")
+	store.Append("plan", "plan data")
 
 	path, cleanup, err := store.WriteContextFile()
 	if err != nil {
@@ -181,13 +129,11 @@ func TestStore_WriteContextFile(t *testing.T) {
 	}
 	defer cleanup()
 
-	// File should exist
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("failed to read context file: %v", err)
 	}
 
-	// Should be valid JSON
 	var parsed contextstore.Context
 	if err := json.Unmarshal(content, &parsed); err != nil {
 		t.Fatalf("context file is not valid JSON: %v", err)
@@ -196,8 +142,11 @@ func TestStore_WriteContextFile(t *testing.T) {
 	if parsed.RunID != "run_test123" {
 		t.Errorf("parsed RunID = %q, want %q", parsed.RunID, "run_test123")
 	}
-	if parsed.Data["test"] != "data" {
-		t.Errorf("parsed Data[test] = %v, want %q", parsed.Data["test"], "data")
+	if len(parsed.Steps) != 1 {
+		t.Fatalf("parsed Steps = %d, want 1", len(parsed.Steps))
+	}
+	if parsed.Steps[0].Output != "plan data" {
+		t.Errorf("parsed Steps[0].Output = %q, want %q", parsed.Steps[0].Output, "plan data")
 	}
 }
 
@@ -211,7 +160,7 @@ func TestStore_WriteContextFile_Cleanup(t *testing.T) {
 	cleanup()
 
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("context file should be removed after cleanup, but still exists at %q", path)
+		t.Errorf("context file should be removed after cleanup")
 	}
 }
 
@@ -219,22 +168,19 @@ func TestStore_ConcurrentAccess(t *testing.T) {
 	store := newTestStore()
 	var wg sync.WaitGroup
 
-	// 10 goroutines writing concurrently
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			key := "key"
-			_ = store.Set(key, n)
-			_ = store.Get()
-			_ = store.GetKeys([]string{key})
+			store.Append("step", "output")
+			_ = store.PreviousOutputs()
+			_ = store.Snapshot()
 		}(i)
 	}
 
 	wg.Wait()
 
-	// Should not panic or corrupt — just verify we can still read
-	snapshot := store.Get()
+	snapshot := store.Snapshot()
 	if snapshot.RunID != "run_test123" {
 		t.Errorf("RunID corrupted after concurrent access: %q", snapshot.RunID)
 	}

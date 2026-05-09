@@ -1,6 +1,0 @@
-name: bad-backoff
-steps:
-  - name: step
-    script: echo hello
-    retries: 1
-    retry_backoff: random

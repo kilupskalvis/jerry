@@ -28,8 +28,10 @@ const (
 // RunState holds the persistent state of a pipeline run.
 type RunState struct {
 	RunID        string               `json:"run_id"`
-	PipelineName string               `json:"pipeline_name"`
-	PipelineFile string               `json:"pipeline_file"`
+	WorkflowName string               `json:"workflow_name"`
+	WorkflowFile string               `json:"workflow_file"`
+	PipelineName string               `json:"pipeline_name,omitempty"`
+	PipelineFile string               `json:"pipeline_file,omitempty"`
 	Status       RunStatus            `json:"status"`
 	StartedAt    time.Time            `json:"started_at"`
 	CompletedAt  *time.Time           `json:"completed_at,omitempty"`
@@ -65,7 +67,7 @@ type ErrorDetail struct {
 // RunSummary is a lightweight view of a run for listing purposes.
 type RunSummary struct {
 	RunID        string    `json:"run_id"`
-	PipelineName string    `json:"pipeline_name"`
+	WorkflowName string    `json:"workflow_name"`
 	Status       RunStatus `json:"status"`
 	StartedAt    time.Time `json:"started_at"`
 	StepCount    int       `json:"step_count"`

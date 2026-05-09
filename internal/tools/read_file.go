@@ -4,65 +4,66 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxFileReadSize is the maximum bytes read from a single file.
-// Larger files are truncated with a note.
 const MaxFileReadSize = 1 * 1024 * 1024 // 1MB
 
 // NewReadFileTool creates a read_file tool bound to the given repo root.
 func NewReadFileTool(repoRoot string) Tool {
 	return Tool{
-		Definition: llm.ToolDef{
-			Name:        "read_file",
-			Description: "Read the contents of a file at the given path. Returns file contents with line numbers prepended.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"path": map[string]any{
-						"type":        "string",
-						"description": "Path to the file (relative to repository root)",
-					},
-				},
-				"required": []any{"path"},
+		ToolName:        "read_file",
+		ToolDescription: "Read the contents of a file at the given path. Returns file contents with line numbers prepended.",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "Path to the file (relative to repository root)"
+				}
 			},
-		},
-		Execute: func(_ context.Context, args map[string]any) (string, error) {
-			path, _ := args["path"].(string)
-			if path == "" {
+			"required": ["path"]
+		}`),
+		Execute: func(_ context.Context, input json.RawMessage) (string, error) {
+			var args struct {
+				Path string `json:"path"`
+			}
+			if err := json.Unmarshal(input, &args); err != nil {
+				return fmt.Sprintf("Error: invalid input: %v", err), nil
+			}
+			if args.Path == "" {
 				return "Error: missing required parameter 'path'", nil
 			}
 
-			absPath, pathErr := resolvePath(repoRoot, path)
+			absPath, pathErr := resolvePath(repoRoot, args.Path)
 			if pathErr != "" {
 				return pathErr, nil
 			}
 
-			if IsSensitivePath(path) {
-				return fmt.Sprintf("Error: access denied — '%s' is a sensitive file (may contain secrets)", path), nil
+			if IsSensitivePath(args.Path) {
+				return fmt.Sprintf("Error: access denied — '%s' is a sensitive file (may contain secrets)", args.Path), nil
 			}
 
 			info, err := os.Stat(absPath)
 			if err != nil {
 				if os.IsNotExist(err) {
-					return fmt.Sprintf("Error: file not found: %s", path), nil
+					return fmt.Sprintf("Error: file not found: %s", args.Path), nil
 				}
-				return fmt.Sprintf("Error: cannot access '%s': %s", path, err), nil
+				return fmt.Sprintf("Error: cannot access '%s': %s", args.Path, err), nil
 			}
 
 			if info.IsDir() {
-				return fmt.Sprintf("Error: '%s' is a directory, use list_directory instead", path), nil
+				return fmt.Sprintf("Error: '%s' is a directory, use list_directory instead", args.Path), nil
 			}
 
 			data, err := os.ReadFile(absPath)
 			if err != nil {
-				return fmt.Sprintf("Error: cannot read '%s': %s", path, err), nil
+				return fmt.Sprintf("Error: cannot read '%s': %s", args.Path, err), nil
 			}
 
 			truncated := false
@@ -88,8 +89,7 @@ func NewReadFileTool(repoRoot string) Tool {
 }
 
 // resolvePath resolves a relative path against the repo root and validates
-// it does not escape the root. Returns the absolute path and an empty error
-// string on success, or an empty path and error message on failure.
+// it does not escape the root.
 func resolvePath(repoRoot, path string) (string, string) {
 	absPath := filepath.Join(repoRoot, path)
 	absPath, err := filepath.Abs(absPath)
@@ -97,8 +97,6 @@ func resolvePath(repoRoot, path string) (string, string) {
 		return "", fmt.Sprintf("Error: invalid path '%s': %s", path, err)
 	}
 
-	// Ensure the resolved path is within the repo root.
-	// Use filepath.Rel to handle symlinks and edge cases.
 	absRoot, _ := filepath.Abs(repoRoot)
 	if !strings.HasPrefix(absPath, absRoot+string(filepath.Separator)) && absPath != absRoot {
 		return "", fmt.Sprintf("Error: path '%s' escapes repository root", path)

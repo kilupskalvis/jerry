@@ -10,7 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/kilupskalvis/jerry/internal/config"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
 
@@ -18,25 +17,19 @@ import (
 type Loader struct {
 	knownTools   map[string]struct{}
 	defaultModel string
-	fileConfig   *config.FileConfig
 }
 
 // NewLoader creates an agent loader.
 // knownTools is the list of tool names the runtime supports (from Registry.KnownToolNames).
 // defaultModel is the fallback model when an agent doesn't specify one (may be empty).
-// fileConfig provides defaults from .jerry/config.yaml (may be nil).
-func NewLoader(knownTools []string, defaultModel string, fileConfig *config.FileConfig) *Loader {
+func NewLoader(knownTools []string, defaultModel string) *Loader {
 	known := make(map[string]struct{}, len(knownTools))
 	for _, name := range knownTools {
 		known[name] = struct{}{}
 	}
-	if fileConfig == nil {
-		fileConfig = &config.FileConfig{}
-	}
 	return &Loader{
 		knownTools:   known,
 		defaultModel: defaultModel,
-		fileConfig:   fileConfig,
 	}
 }
 
@@ -121,34 +114,20 @@ func splitFrontmatter(content string) (frontmatter, body string, err error) {
 	return frontmatter, body, nil
 }
 
-// applyDefaults fills in missing optional fields using three-tier resolution:
-// agent frontmatter → .jerry/config.yaml → hardcoded fallback.
+// applyDefaults fills in missing optional fields.
+// Resolution: agent frontmatter → defaultModel env var → hardcoded fallback.
 func (l *Loader) applyDefaults(agentCfg *AgentConfig) {
-	// Model: frontmatter → config.yaml → defaultModel (env var).
-	if agentCfg.Model == "" {
-		agentCfg.Model = l.fileConfig.Defaults.Model
-	}
 	if agentCfg.Model == "" {
 		agentCfg.Model = l.defaultModel
 	}
 
-	// MaxIterations: frontmatter → config.yaml → 50.
-	if agentCfg.MaxIterations == 0 {
-		agentCfg.MaxIterations = l.fileConfig.Defaults.MaxIterations
-	}
 	if agentCfg.MaxIterations == 0 {
 		agentCfg.MaxIterations = DefaultMaxIterations
 	}
 
-	// Temperature: frontmatter → 0.0.
 	if agentCfg.Temperature == nil {
 		temp := DefaultTemperature
 		agentCfg.Temperature = &temp
-	}
-
-	// Timeout: frontmatter → config.yaml → 0 (engine applies its default).
-	if agentCfg.Timeout.Duration == 0 {
-		agentCfg.Timeout = l.fileConfig.Defaults.Timeout
 	}
 }
 
@@ -159,19 +138,7 @@ func (l *Loader) validate(agentCfg *AgentConfig) error {
 	}
 
 	if agentCfg.Model == "" {
-		return fmt.Errorf("agent %q: no model specified and no global default configured", agentCfg.Name)
-	}
-
-	if len(agentCfg.ContextAccess) == 0 {
-		return fmt.Errorf("agent %q: missing required field 'context_access'", agentCfg.Name)
-	}
-
-	if agentCfg.OutputKey == "" {
-		return fmt.Errorf("agent %q: missing required field 'output_key'", agentCfg.Name)
-	}
-
-	if agentCfg.OutputSchema == nil {
-		return fmt.Errorf("agent %q: missing required field 'output_schema'", agentCfg.Name)
+		return fmt.Errorf("agent %q: no model specified and no default configured (set JERRY_DEFAULT_MODEL)", agentCfg.Name)
 	}
 
 	if agentCfg.Instructions == "" {

@@ -1,0 +1,8 @@
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: "*.go"
+      run: test -z "$(gofmt -l {staged_files})" || (gofmt -l {staged_files} && exit 1)
+    lint:
+      run: golangci-lint run --new-from-rev=HEAD ./...

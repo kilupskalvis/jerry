@@ -15,22 +15,30 @@ func setupGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
+	gitEnv := []string{
+		"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com",
+		"GIT_CONFIG_NOSYSTEM=1",
+		"HOME=" + dir,
+	}
+	for _, e := range os.Environ() {
+		if k, _, _ := strings.Cut(e, "="); k != "HOME" && k != "GIT_CONFIG_NOSYSTEM" {
+			gitEnv = append(gitEnv, e)
+		}
+	}
+
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
-			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com",
-		)
+		cmd.Env = gitEnv
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("command %v failed: %v\n%s", args, err, out)
 		}
 	}
 
-	run("git", "init")
-	run("git", "checkout", "-b", "main")
+	run("git", "init", "-b", "main")
 
 	if err := os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -44,7 +52,7 @@ func setupGitRepo(t *testing.T) string {
 func TestGitLog_Success(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitLogTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -56,7 +64,7 @@ func TestGitLog_Success(t *testing.T) {
 func TestGitLog_WithPath(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitLogTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "hello.go"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "hello.go"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +76,7 @@ func TestGitLog_WithPath(t *testing.T) {
 func TestGitLog_CountClamping(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitLogTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{"count": float64(100)})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"count": 100}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -79,7 +87,7 @@ func TestGitLog_CountClamping(t *testing.T) {
 
 func TestGitLog_NotARepo(t *testing.T) {
 	tool := tools.NewGitLogTool(t.TempDir())
-	result, err := tool.Execute(context.Background(), map[string]any{})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{}))
 	if err != nil {
 		t.Fatalf("unexpected Go error: %v", err)
 	}
@@ -92,7 +100,7 @@ func TestGitLog_NotARepo(t *testing.T) {
 func TestGitDiff_NoChanges(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitDiffTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -107,7 +115,7 @@ func TestGitDiff_WithChanges(t *testing.T) {
 		[]byte("package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n"), 0o644)
 
 	tool := tools.NewGitDiffTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +130,7 @@ func TestGitDiff_WithRef(t *testing.T) {
 		[]byte("package main\n\nfunc main() { /* changed */ }\n"), 0o644)
 
 	tool := tools.NewGitDiffTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{"ref": "HEAD"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"ref": "HEAD"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,7 +142,7 @@ func TestGitDiff_WithRef(t *testing.T) {
 func TestGitBlame_Success(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitBlameTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "hello.go"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "hello.go"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,9 +154,9 @@ func TestGitBlame_Success(t *testing.T) {
 func TestGitBlame_LineRange(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitBlameTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{
-		"path": "hello.go", "start_line": float64(1), "end_line": float64(1),
-	})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{
+		"path": "hello.go", "start_line": 1, "end_line": 1,
+	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -160,7 +168,7 @@ func TestGitBlame_LineRange(t *testing.T) {
 func TestGitBlame_PathTraversal(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitBlameTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "../../etc/passwd"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "../../etc/passwd"}))
 	if err != nil {
 		t.Fatalf("unexpected Go error: %v", err)
 	}
@@ -172,7 +180,7 @@ func TestGitBlame_PathTraversal(t *testing.T) {
 func TestGitBlame_MissingPath(t *testing.T) {
 	repoRoot := setupGitRepo(t)
 	tool := tools.NewGitBlameTool(repoRoot)
-	result, err := tool.Execute(context.Background(), map[string]any{})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{}))
 	if err != nil {
 		t.Fatalf("unexpected Go error: %v", err)
 	}

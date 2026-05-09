@@ -2,6 +2,7 @@ package tools_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,16 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 }
 
+// mustJSON marshals a map to json.RawMessage for tool Execute calls.
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("failed to marshal JSON: %v", err)
+	}
+	return data
+}
+
 // --- read_file tests ---
 
 func TestReadFile_Success(t *testing.T) {
@@ -34,7 +45,7 @@ func TestReadFile_Success(t *testing.T) {
 	writeFile(t, root, "hello.txt", "line one\nline two\nline three")
 
 	tool := tools.NewReadFileTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "hello.txt"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "hello.txt"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -51,7 +62,7 @@ func TestReadFile_NotFound(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewReadFileTool(root)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "nonexistent.go"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "nonexistent.go"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,7 +76,7 @@ func TestReadFile_Directory(t *testing.T) {
 	os.MkdirAll(filepath.Join(root, "subdir"), 0o755)
 
 	tool := tools.NewReadFileTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "subdir"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "subdir"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +92,7 @@ func TestReadFile_TooLarge(t *testing.T) {
 	writeFile(t, root, "large.txt", large)
 
 	tool := tools.NewReadFileTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "large.txt"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "large.txt"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -94,7 +105,7 @@ func TestReadFile_PathEscape(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewReadFileTool(root)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "../../etc/passwd"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "../../etc/passwd"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +123,7 @@ func TestListDir_Success(t *testing.T) {
 	writeFile(t, root, "readme.md", "# readme")
 
 	tool := tools.NewListDirectoryTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "."})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "."}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +141,7 @@ func TestListDir_NotDirectory(t *testing.T) {
 	writeFile(t, root, "file.txt", "content")
 
 	tool := tools.NewListDirectoryTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "file.txt"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "file.txt"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,7 +154,7 @@ func TestListDir_PathEscape(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewListDirectoryTool(root)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "../../"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "../../"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -160,7 +171,7 @@ func TestListDir_SortOrder(t *testing.T) {
 	writeFile(t, root, "afile.go", "")
 
 	tool := tools.NewListDirectoryTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"path": "."})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"path": "."}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -187,10 +198,10 @@ func TestWriteFile_Success(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewWriteFileTool(root)
 
-	result, err := tool.Execute(context.Background(), map[string]any{
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{
 		"path":    "output.txt",
 		"content": "hello world",
-	})
+	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,10 +222,10 @@ func TestWriteFile_CreatesDirectories(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewWriteFileTool(root)
 
-	_, err := tool.Execute(context.Background(), map[string]any{
+	_, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{
 		"path":    "deep/nested/dir/file.go",
 		"content": "package deep",
-	})
+	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -232,10 +243,10 @@ func TestWriteFile_PathEscape(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewWriteFileTool(root)
 
-	result, err := tool.Execute(context.Background(), map[string]any{
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{
 		"path":    "../../evil.txt",
 		"content": "bad",
-	})
+	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -253,7 +264,7 @@ func TestGlob_Matches(t *testing.T) {
 	writeFile(t, root, "readme.md", "# readme")
 
 	tool := tools.NewGlobTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"pattern": "*.go"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"pattern": "*.go"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -272,7 +283,7 @@ func TestGlob_NoMatches(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewGlobTool(root)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"pattern": "*.xyz"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"pattern": "*.xyz"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -288,7 +299,7 @@ func TestGlob_DoublestarPattern(t *testing.T) {
 	writeFile(t, root, "test.txt", "test")
 
 	tool := tools.NewGlobTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"pattern": "**/*.go"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"pattern": "**/*.go"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -310,7 +321,7 @@ func TestSearch_Matches(t *testing.T) {
 	writeFile(t, root, "main.go", "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}")
 
 	tool := tools.NewSearchTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"query": "func main"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"query": "func main"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -324,7 +335,7 @@ func TestSearch_NoMatches(t *testing.T) {
 	writeFile(t, root, "main.go", "package main")
 
 	tool := tools.NewSearchTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"query": "nonexistent_function"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"query": "nonexistent_function"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -337,7 +348,7 @@ func TestSearch_InvalidRegex(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewSearchTool(root)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"query": "[invalid"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"query": "[invalid"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -353,7 +364,7 @@ func TestSearch_SkipsBinaryFiles(t *testing.T) {
 	writeFile(t, root, "text.txt", "hello world")
 
 	tool := tools.NewSearchTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{"query": "hello"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"query": "hello"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -371,10 +382,10 @@ func TestSearch_WithGlobFilter(t *testing.T) {
 	writeFile(t, root, "main.py", "def hello():")
 
 	tool := tools.NewSearchTool(root)
-	result, err := tool.Execute(context.Background(), map[string]any{
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{
 		"query": "hello",
 		"glob":  "*.go",
-	})
+	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -392,7 +403,7 @@ func TestRunCommand_Success(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewRunCommandTool(root, nil)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"command": "echo hello"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"command": "echo hello"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -405,7 +416,7 @@ func TestRunCommand_Failure(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewRunCommandTool(root, nil)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"command": "exit 1"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"command": "exit 1"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -421,7 +432,7 @@ func TestRunCommand_WorkingDirectory(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewRunCommandTool(root, nil)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"command": "pwd"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"command": "pwd"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -439,7 +450,7 @@ func TestRunCommand_NoOutput(t *testing.T) {
 	root := setupRepoRoot(t)
 	tool := tools.NewRunCommandTool(root, nil)
 
-	result, err := tool.Execute(context.Background(), map[string]any{"command": "true"})
+	result, err := tool.Execute(context.Background(), mustJSON(t, map[string]any{"command": "true"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -573,15 +584,12 @@ func TestResolve_AllTools(t *testing.T) {
 		{Name: "list_directory"},
 	}
 
-	defs, dispatch, err := reg.Resolve(allTools)
+	resolved, err := reg.Resolve(allTools)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(defs) != 6 {
-		t.Errorf("expected 6 defs, got %d", len(defs))
-	}
-	if dispatch == nil {
-		t.Fatal("dispatch should not be nil")
+	if len(resolved) != 6 {
+		t.Errorf("expected 6 tools, got %d", len(resolved))
 	}
 }
 
@@ -589,15 +597,15 @@ func TestResolve_SubsetTools(t *testing.T) {
 	root := setupRepoRoot(t)
 	reg := tools.NewRegistry(root, nil)
 
-	defs, _, err := reg.Resolve([]tools.ToolAccess{
+	resolved, err := reg.Resolve([]tools.ToolAccess{
 		{Name: "read_file"},
 		{Name: "glob"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(defs) != 2 {
-		t.Errorf("expected 2 defs, got %d", len(defs))
+	if len(resolved) != 2 {
+		t.Errorf("expected 2 tools, got %d", len(resolved))
 	}
 }
 
@@ -605,7 +613,7 @@ func TestResolve_UnknownTool(t *testing.T) {
 	root := setupRepoRoot(t)
 	reg := tools.NewRegistry(root, nil)
 
-	_, _, err := reg.Resolve([]tools.ToolAccess{{Name: "nonexistent"}})
+	_, err := reg.Resolve([]tools.ToolAccess{{Name: "nonexistent"}})
 	if err == nil {
 		t.Fatal("expected error for unknown tool")
 	}

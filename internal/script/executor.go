@@ -4,7 +4,6 @@ package script
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,24 +12,23 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kilupskalvis/jerry/internal/contextstore"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
-	"github.com/kilupskalvis/jerry/internal/pipeline"
+	"github.com/kilupskalvis/jerry/internal/workflow"
 )
 
-// GracePeriod is the time to wait after SIGTERM before sending SIGKILL.
 const GracePeriod = 5 * time.Second
 
-// Compile-time interface compliance assertion.
-var _ pipeline.StepExecutor = (*Executor)(nil)
+var _ workflow.StepExecutor = (*Executor)(nil)
 
 // Executor runs shell commands for script steps.
 type Executor struct {
 	repoRoot string
 	env      map[string]string
+	store    *contextstore.Store
 }
 
-// NewExecutor creates a script executor rooted at the given directory
-// with the provided base environment variables.
+// NewExecutor creates a script executor rooted at the given directory.
 func NewExecutor(repoRoot string, env map[string]string) *Executor {
 	return &Executor{
 		repoRoot: repoRoot,
@@ -38,31 +36,43 @@ func NewExecutor(repoRoot string, env map[string]string) *Executor {
 	}
 }
 
-// CanExecute returns true if the step has a Script field set.
-func (e *Executor) CanExecute(step pipeline.Step) bool {
-	return step.Script != ""
+// SetStore sets the context store for writing context files.
+func (e *Executor) SetStore(store *contextstore.Store) {
+	e.store = store
 }
 
-// Execute runs the script and returns the output.
+func (e *Executor) CanExecute(step workflow.Step) bool {
+	return step.Run != ""
+}
+
+// Execute runs the shell command and returns its stdout as output.
 // @lattice:boundary shell
-func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeline.ContextReader) (*pipeline.StepOutput, error) {
+func (e *Executor) Execute(ctx context.Context, step workflow.Step, prevOutputs []workflow.StepOutput) (*workflow.StepOutput, error) {
 	startTime := time.Now()
 
-	// Create context file for the script
-	contextFilePath, cleanup, contextErr := store.WriteContextFile()
-	if contextErr != nil {
-		return nil, jerrerr.Wrap(jerrerr.CodeScriptFailed,
-			fmt.Sprintf("step %q: failed to write context file", step.Name), contextErr)
+	var contextFilePath string
+	var cleanup func()
+	if e.store != nil {
+		var contextErr error
+		contextFilePath, cleanup, contextErr = e.store.WriteContextFile()
+		if contextErr != nil {
+			return nil, jerrerr.Wrap(jerrerr.CodeScriptFailed,
+				fmt.Sprintf("step %q: failed to write context file", step.Name), contextErr)
+		}
+		defer cleanup()
 	}
-	defer cleanup()
 
-	// Use manual process group kill instead of exec.CommandContext (which sends SIGKILL directly).
-	cmd := exec.Command("/bin/sh", "-c", step.Script)
+	cmd := exec.Command("/bin/sh", "-c", step.Run)
 	cmd.Dir = e.repoRoot
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	fullCtx := store.Get()
-	cmd.Env = e.buildEnvironment(fullCtx.RunID, fullCtx.Trigger.Intent, step.Name, contextFilePath)
+	var runID, intent string
+	if e.store != nil {
+		snapshot := e.store.Snapshot()
+		runID = snapshot.RunID
+		intent = snapshot.Trigger.Intent
+	}
+	cmd.Env = e.buildEnvironment(runID, intent, step.Name, contextFilePath)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -81,12 +91,9 @@ func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeli
 	var runErr error
 	select {
 	case runErr = <-waitDone:
-		// Command completed (success or failure)
 	case <-ctx.Done():
-		// Context cancelled (timeout or Ctrl+C) — kill process group
 		e.killProcessGroup(cmd)
-		<-waitDone // Wait for Wait() to return after kill
-
+		<-waitDone
 		duration := time.Since(startTime)
 		return nil, jerrerr.New(jerrerr.CodeScriptTimeout,
 			fmt.Sprintf("step %q: script timed out after %s", step.Name, duration.Truncate(time.Millisecond)))
@@ -94,51 +101,28 @@ func (e *Executor) Execute(ctx context.Context, step pipeline.Step, store pipeli
 
 	duration := time.Since(startTime)
 	stdout := stdoutBuf.String()
-	stderr := stderrBuf.String()
 
-	// Handle non-zero exit code
 	if runErr != nil {
 		exitCode := -1
 		exitErr := &exec.ExitError{}
 		if errors.As(runErr, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
-
 		return nil, &jerrerr.Error{
-			Code: jerrerr.CodeScriptFailed,
-			Message: fmt.Sprintf("step %q: script exited with code %d",
-				step.Name, exitCode),
-			Step:  step.Name,
-			Cause: runErr,
+			Code:    jerrerr.CodeScriptFailed,
+			Message: fmt.Sprintf("step %q: script exited with code %d", step.Name, exitCode),
+			Step:    step.Name,
+			Cause:   runErr,
 		}
 	}
 
-	// Parse output
-	output := &pipeline.StepOutput{
-		Stdout:   stdout,
-		Stderr:   stderr,
-		ExitCode: 0,
+	return &workflow.StepOutput{
+		StepName: step.Name,
+		Data:     strings.TrimSpace(stdout),
 		Duration: duration,
-	}
-
-	// If output_key is set, try to parse stdout as a JSON object.
-	if step.OutputKey != "" {
-		trimmedStdout := strings.TrimSpace(stdout)
-		if trimmedStdout != "" {
-			var parsed map[string]any
-			if jsonErr := json.Unmarshal([]byte(trimmedStdout), &parsed); jsonErr == nil {
-				output.Data = parsed
-			}
-			// If parsing fails (invalid JSON or not an object), Data stays nil.
-			// The step still succeeds — we just can't merge output into context.
-		}
-	}
-
-	return output, nil
+	}, nil
 }
 
-// buildEnvironment constructs a clean environment for the script.
-// Only includes PATH, HOME, JERRY_* variables, and JERRY_SECRET_* from config.
 func (e *Executor) buildEnvironment(runID, intent, stepName, contextFilePath string) []string {
 	envVars := []string{
 		"PATH=" + os.Getenv("PATH"),
@@ -149,7 +133,6 @@ func (e *Executor) buildEnvironment(runID, intent, stepName, contextFilePath str
 		"JERRY_CONTEXT_FILE=" + contextFilePath,
 	}
 
-	// Add JERRY_SECRET_* vars from config
 	for key, value := range e.env {
 		if strings.HasPrefix(key, "JERRY_SECRET_") {
 			envVars = append(envVars, key+"="+value)
@@ -159,8 +142,6 @@ func (e *Executor) buildEnvironment(runID, intent, stepName, contextFilePath str
 	return envVars
 }
 
-// killProcessGroup sends SIGTERM to the process group, waits for GracePeriod,
-// then sends SIGKILL if the process is still running.
 func (e *Executor) killProcessGroup(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
@@ -171,10 +152,8 @@ func (e *Executor) killProcessGroup(cmd *exec.Cmd) {
 		return
 	}
 
-	// Send SIGTERM to the entire process group
 	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 
-	// Wait briefly, then force kill
 	done := make(chan struct{})
 	go func() {
 		_, _ = cmd.Process.Wait()
@@ -183,9 +162,7 @@ func (e *Executor) killProcessGroup(cmd *exec.Cmd) {
 
 	select {
 	case <-done:
-		// Process exited gracefully
 	case <-time.After(GracePeriod):
-		// Force kill
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 	}
 }

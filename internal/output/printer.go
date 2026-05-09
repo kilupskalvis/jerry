@@ -86,28 +86,6 @@ func (p *Printer) StepOutput(line string) {
 	}
 }
 
-// ToolProgress prints a tool call summary during agent execution.
-func (p *Printer) ToolProgress(iteration int, toolName, summary string) {
-	if p.verbosity >= VerbosityDefault {
-		fmt.Fprintf(p.stderr, "      iter %d: %s %s\n", iteration, toolName, summary)
-	}
-}
-
-// ToolProgressVerbose prints detailed tool call info (verbose mode only).
-func (p *Printer) ToolProgressVerbose(iteration int, toolName string, args map[string]any, resultPreview string, durationMs int64) {
-	if p.verbosity >= VerbosityVerbose {
-		fmt.Fprintf(p.stderr, "      iter %d: %s args=%v → %d bytes (%dms)\n",
-			iteration, toolName, args, len(resultPreview), durationMs)
-		if resultPreview != "" {
-			preview := resultPreview
-			if len(preview) > 200 {
-				preview = preview[:200] + "..."
-			}
-			fmt.Fprintf(p.stderr, "        [preview]: %s\n", preview)
-		}
-	}
-}
-
 // Warning prints a warning message.
 func (p *Printer) Warning(format string, args ...any) {
 	// Warnings shown at default and verbose levels.
@@ -144,11 +122,6 @@ func (p *Printer) ValidationResult(file string, valid bool, detail string) {
 	} else {
 		fmt.Fprintf(p.stderr, "  ✗ %s — %s\n", file, detail)
 	}
-}
-
-// Stdout writes directly to stdout (for structured/piped output).
-func (p *Printer) Stdout(format string, args ...any) {
-	fmt.Fprintf(p.stdout, format, args...)
 }
 
 func formatDuration(d time.Duration) string {

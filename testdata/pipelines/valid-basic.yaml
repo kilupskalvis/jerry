@@ -1,8 +1,0 @@
-name: basic
-description: "Basic test pipeline"
-steps:
-  - name: step-one
-    script: echo "hello"
-  - name: step-two
-    script: echo '{"key":"value"}'
-    output_key: result

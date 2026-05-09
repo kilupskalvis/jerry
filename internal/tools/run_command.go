@@ -3,14 +3,13 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
 	"time"
-
-	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 const (
@@ -26,33 +25,38 @@ const (
 // env is a pre-built slice of "KEY=VALUE" strings for the command's environment.
 func NewRunCommandTool(repoRoot string, env []string) Tool {
 	return Tool{
-		Definition: llm.ToolDef{
-			Name:        "run_command",
-			Description: "Execute a shell command and return its output. Commands run in /bin/sh with a clean environment.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"command": map[string]any{
-						"type":        "string",
-						"description": "Shell command to execute",
-					},
-					"cwd": map[string]any{
-						"type":        "string",
-						"description": "Working directory relative to repository root (default: repository root)",
-					},
+		ToolName:        "run_command",
+		ToolDescription: "Execute a shell command and return its output. Commands run in /bin/sh with a clean environment.",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"command": {
+					"type": "string",
+					"description": "Shell command to execute"
 				},
-				"required": []any{"command"},
+				"cwd": {
+					"type": "string",
+					"description": "Working directory relative to repository root (default: repository root)"
+				}
 			},
-		},
-		Execute: func(ctx context.Context, args map[string]any) (string, error) {
-			command, _ := args["command"].(string)
-			if command == "" {
+			"required": ["command"]
+		}`),
+		Execute: func(ctx context.Context, input json.RawMessage) (string, error) {
+			var args struct {
+				Command string `json:"command"`
+				Cwd     string `json:"cwd"`
+			}
+			if err := json.Unmarshal(input, &args); err != nil {
+				return fmt.Sprintf("Error: invalid input: %v", err), nil
+			}
+
+			if args.Command == "" {
 				return "Error: missing required parameter 'command'", nil
 			}
 
 			workDir := repoRoot
-			if cwd, ok := args["cwd"].(string); ok && cwd != "" {
-				resolved, pathErr := resolvePath(repoRoot, cwd)
+			if args.Cwd != "" {
+				resolved, pathErr := resolvePath(repoRoot, args.Cwd)
 				if pathErr != "" {
 					return pathErr, nil
 				}
@@ -64,7 +68,7 @@ func NewRunCommandTool(repoRoot string, env []string) Tool {
 			timeoutCtx, cancel := context.WithTimeout(ctx, ToolCommandTimeout)
 			defer cancel()
 
-			cmd := exec.Command("/bin/sh", "-c", command)
+			cmd := exec.Command("/bin/sh", "-c", args.Command)
 			cmd.Dir = workDir
 			cmd.Env = cmdEnv
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

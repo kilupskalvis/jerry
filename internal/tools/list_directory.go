@@ -4,12 +4,11 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
-
-	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
 // MaxListDirEntries is the maximum entries returned from list_directory.
@@ -18,27 +17,31 @@ const MaxListDirEntries = 200
 // NewListDirectoryTool creates a list_directory tool bound to the given repo root.
 func NewListDirectoryTool(repoRoot string) Tool {
 	return Tool{
-		Definition: llm.ToolDef{
-			Name:        "list_directory",
-			Description: "List the contents of a directory. Shows entries as [dir] or [file] with directories listed first.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"path": map[string]any{
-						"type":        "string",
-						"description": "Path to the directory (relative to repository root)",
-					},
-				},
-				"required": []any{"path"},
+		ToolName:        "list_directory",
+		ToolDescription: "List the contents of a directory. Shows entries as [dir] or [file] with directories listed first.",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "Path to the directory (relative to repository root)"
+				}
 			},
-		},
-		Execute: func(_ context.Context, args map[string]any) (string, error) {
-			path, _ := args["path"].(string)
-			if path == "" {
-				path = "."
+			"required": ["path"]
+		}`),
+		Execute: func(_ context.Context, input json.RawMessage) (string, error) {
+			var args struct {
+				Path string `json:"path"`
+			}
+			if err := json.Unmarshal(input, &args); err != nil {
+				return fmt.Sprintf("Error: invalid input: %v", err), nil
 			}
 
-			absPath, pathErr := resolvePath(repoRoot, path)
+			if args.Path == "" {
+				args.Path = "."
+			}
+
+			absPath, pathErr := resolvePath(repoRoot, args.Path)
 			if pathErr != "" {
 				return pathErr, nil
 			}
@@ -46,18 +49,18 @@ func NewListDirectoryTool(repoRoot string) Tool {
 			info, err := os.Stat(absPath)
 			if err != nil {
 				if os.IsNotExist(err) {
-					return fmt.Sprintf("Error: directory not found: %s", path), nil
+					return fmt.Sprintf("Error: directory not found: %s", args.Path), nil
 				}
-				return fmt.Sprintf("Error: cannot access '%s': %s", path, err), nil
+				return fmt.Sprintf("Error: cannot access '%s': %s", args.Path, err), nil
 			}
 
 			if !info.IsDir() {
-				return fmt.Sprintf("Error: '%s' is not a directory", path), nil
+				return fmt.Sprintf("Error: '%s' is not a directory", args.Path), nil
 			}
 
 			entries, err := os.ReadDir(absPath)
 			if err != nil {
-				return fmt.Sprintf("Error: cannot read directory '%s': %s", path, err), nil
+				return fmt.Sprintf("Error: cannot read directory '%s': %s", args.Path, err), nil
 			}
 
 			// Separate directories and files, sort each alphabetically.

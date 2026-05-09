@@ -1,6 +1,0 @@
-name: fallback
-steps:
-  - name: risky
-    script: exit 1
-    fallback:
-      script: echo "fallback executed"
