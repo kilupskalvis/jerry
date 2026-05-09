@@ -15,6 +15,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/cli"
 	"github.com/kilupskalvis/jerry/internal/config"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
 	jerryrun "github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/tool"
@@ -93,16 +94,11 @@ func buildApp(printer *output.Printer) *cli.App {
 	toolRegistry := tool.NewRegistry(repoRoot, secretEnv)
 	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), defaultModel)
 
-	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
-	if anthropicKey == "" {
-		anthropicKey = secretEnv["ANTHROPIC_API_KEY"]
-	}
-	openaiKey := os.Getenv("OPENAI_API_KEY")
-	if openaiKey == "" {
-		openaiKey = secretEnv["OPENAI_API_KEY"]
-	}
+	resolver := llm.NewProviderResolver()
+	resolver.SetKey("anthropic", envOrSecret("ANTHROPIC_API_KEY", secretEnv))
+	resolver.SetKey("openai", envOrSecret("OPENAI_API_KEY", secretEnv))
 
-	agentExec := workflow.NewAgentExecutor(agentLoader, toolRegistry, printer, anthropicKey, openaiKey)
+	agentExec := workflow.NewAgentExecutor(agentLoader, toolRegistry, printer, resolver)
 
 	engine := workflow.NewEngine(
 		[]workflow.StepExecutor{agentExec, scriptExec},
@@ -122,4 +118,11 @@ func buildApp(printer *output.Printer) *cli.App {
 	app.StateStore = stateStore
 
 	return app
+}
+
+func envOrSecret(key string, secrets map[string]string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return secrets[key]
 }

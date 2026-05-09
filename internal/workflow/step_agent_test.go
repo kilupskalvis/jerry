@@ -32,7 +32,7 @@ func (m *mockProvider) Complete(_ context.Context, _ llm.CompleteParams) (*llm.C
 }
 
 func newTestAgentExecutor(loader *agent.Loader, reg *tool.Registry, mock llm.Provider) *workflow.AgentExecutor {
-	exec := workflow.NewAgentExecutor(loader, reg, nil, "", "")
+	exec := workflow.NewAgentExecutor(loader, reg, nil, nil)
 	exec.ProviderOverride = mock
 	return exec
 }
@@ -56,7 +56,7 @@ You are a test agent. Return a JSON summary.
 }
 
 func TestAgentExecutor_CanExecute_True(t *testing.T) {
-	exec := workflow.NewAgentExecutor(nil, nil, nil, "", "")
+	exec := workflow.NewAgentExecutor(nil, nil, nil, nil)
 	step := workflow.Step{Name: "gen", Agent: "./agents/generate.md"}
 	if !exec.CanExecute(step) {
 		t.Error("should return true for steps with Agent set")
@@ -64,7 +64,7 @@ func TestAgentExecutor_CanExecute_True(t *testing.T) {
 }
 
 func TestAgentExecutor_CanExecute_False(t *testing.T) {
-	exec := workflow.NewAgentExecutor(nil, nil, nil, "", "")
+	exec := workflow.NewAgentExecutor(nil, nil, nil, nil)
 	step := workflow.Step{Name: "test", Run: "echo hi"}
 	if exec.CanExecute(step) {
 		t.Error("should return false for steps with Script set")
@@ -72,7 +72,7 @@ func TestAgentExecutor_CanExecute_False(t *testing.T) {
 }
 
 func TestAgentExecutor_CanExecute_Empty(t *testing.T) {
-	exec := workflow.NewAgentExecutor(nil, nil, nil, "", "")
+	exec := workflow.NewAgentExecutor(nil, nil, nil, nil)
 	step := workflow.Step{Name: "empty"}
 	if exec.CanExecute(step) {
 		t.Error("should return false for empty steps")
@@ -80,7 +80,7 @@ func TestAgentExecutor_CanExecute_Empty(t *testing.T) {
 }
 
 func TestAgentExecutor_Execute_NilClient(t *testing.T) {
-	exec := workflow.NewAgentExecutor(nil, nil, nil, "", "")
+	exec := workflow.NewAgentExecutor(nil, nil, nil, nil)
 	step := workflow.Step{Name: "gen", Agent: "./agents/test.md"}
 
 	_, err := exec.Execute(context.Background(), step, nil)

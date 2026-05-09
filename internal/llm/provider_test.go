@@ -6,8 +6,15 @@ import (
 	"github.com/kilupskalvis/jerry/internal/llm"
 )
 
-func TestNewProviderForModel_Claude(t *testing.T) {
-	provider, err := llm.NewProviderForModel("claude-sonnet-4-6", "", "ant-key", "")
+func newResolver(anthropicKey, openaiKey string) *llm.ProviderResolver {
+	r := llm.NewProviderResolver()
+	r.SetKey("anthropic", anthropicKey)
+	r.SetKey("openai", openaiKey)
+	return r
+}
+
+func TestForModel_Claude(t *testing.T) {
+	provider, err := newResolver("ant-key", "").ForModel("claude-sonnet-4-6", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -16,8 +23,8 @@ func TestNewProviderForModel_Claude(t *testing.T) {
 	}
 }
 
-func TestNewProviderForModel_GPT(t *testing.T) {
-	provider, err := llm.NewProviderForModel("gpt-4o", "", "", "oai-key")
+func TestForModel_GPT(t *testing.T) {
+	provider, err := newResolver("", "oai-key").ForModel("gpt-4o", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -26,8 +33,8 @@ func TestNewProviderForModel_GPT(t *testing.T) {
 	}
 }
 
-func TestNewProviderForModel_O1(t *testing.T) {
-	provider, err := llm.NewProviderForModel("o1-preview", "", "", "oai-key")
+func TestForModel_O1(t *testing.T) {
+	provider, err := newResolver("", "oai-key").ForModel("o1-preview", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -36,8 +43,8 @@ func TestNewProviderForModel_O1(t *testing.T) {
 	}
 }
 
-func TestNewProviderForModel_O3(t *testing.T) {
-	provider, err := llm.NewProviderForModel("o3-mini", "", "", "oai-key")
+func TestForModel_O3(t *testing.T) {
+	provider, err := newResolver("", "oai-key").ForModel("o3-mini", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,15 +53,15 @@ func TestNewProviderForModel_O3(t *testing.T) {
 	}
 }
 
-func TestNewProviderForModel_Unknown(t *testing.T) {
-	_, err := llm.NewProviderForModel("llama-3", "", "", "")
+func TestForModel_Unknown(t *testing.T) {
+	_, err := newResolver("", "").ForModel("llama-3", "")
 	if err == nil {
 		t.Fatal("expected error for unknown model")
 	}
 }
 
-func TestNewProviderForModel_UnknownWithProvider(t *testing.T) {
-	provider, err := llm.NewProviderForModel("my-fine-tuned", "openai", "", "oai-key")
+func TestForModel_ExplicitProvider(t *testing.T) {
+	provider, err := newResolver("", "oai-key").ForModel("my-fine-tuned", "openai")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,15 +70,15 @@ func TestNewProviderForModel_UnknownWithProvider(t *testing.T) {
 	}
 }
 
-func TestNewProviderForModel_MissingAnthropicKey(t *testing.T) {
-	_, err := llm.NewProviderForModel("claude-sonnet-4-6", "", "", "")
+func TestForModel_MissingAnthropicKey(t *testing.T) {
+	_, err := newResolver("", "").ForModel("claude-sonnet-4-6", "")
 	if err == nil {
 		t.Fatal("expected error for missing ANTHROPIC_API_KEY")
 	}
 }
 
-func TestNewProviderForModel_MissingOpenAIKey(t *testing.T) {
-	_, err := llm.NewProviderForModel("gpt-4o", "", "", "")
+func TestForModel_MissingOpenAIKey(t *testing.T) {
+	_, err := newResolver("", "").ForModel("gpt-4o", "")
 	if err == nil {
 		t.Fatal("expected error for missing OPENAI_API_KEY")
 	}

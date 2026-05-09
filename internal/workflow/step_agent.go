@@ -17,22 +17,20 @@ var _ StepExecutor = (*AgentExecutor)(nil)
 
 // AgentExecutor runs agent steps in the workflow.
 type AgentExecutor struct {
-	loader       *agent.Loader
-	registry     *tool.Registry
-	printer      *output.Printer
-	anthropicKey string
-	openaiKey    string
+	loader   *agent.Loader
+	registry *tool.Registry
+	printer  *output.Printer
+	resolver *llm.ProviderResolver
 
 	ProviderOverride llm.Provider
 }
 
-func NewAgentExecutor(loader *agent.Loader, registry *tool.Registry, printer *output.Printer, anthropicKey, openaiKey string) *AgentExecutor {
+func NewAgentExecutor(loader *agent.Loader, registry *tool.Registry, printer *output.Printer, resolver *llm.ProviderResolver) *AgentExecutor {
 	return &AgentExecutor{
-		loader:       loader,
-		registry:     registry,
-		printer:      printer,
-		anthropicKey: anthropicKey,
-		openaiKey:    openaiKey,
+		loader:   loader,
+		registry: registry,
+		printer:  printer,
+		resolver: resolver,
 	}
 }
 
@@ -51,7 +49,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 	provider := e.ProviderOverride
 	if provider == nil {
 		var provErr error
-		provider, provErr = llm.NewProviderForModel(agentCfg.Model, agentCfg.Provider, e.anthropicKey, e.openaiKey)
+		provider, provErr = e.resolver.ForModel(agentCfg.Model, agentCfg.Provider)
 		if provErr != nil {
 			return nil, jerrerr.Wrap(jerrerr.CodeLLMAuthFailed,
 				fmt.Sprintf("agent %q", agentCfg.Name), provErr)
