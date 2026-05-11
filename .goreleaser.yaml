@@ -36,12 +36,3 @@ changelog:
       - "^chore:"
       - "^test:"
 
-brews:
-  - repository:
-      owner: kilupskalvis
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: "https://github.com/kilupskalvis/jerry"
-    description: "The agent runtime for CI/CD"
-    install: |
-      bin.install "jerry"
