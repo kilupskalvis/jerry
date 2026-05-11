@@ -53,6 +53,10 @@ func (p *AnthropicProvider) Complete(ctx context.Context, params CompleteParams)
 		Messages:  toAnthropicMessages(params.Messages),
 	}
 
+	if params.Temperature != nil {
+		apiParams.Temperature = anthropic.Float(*params.Temperature)
+	}
+
 	if params.SystemPrompt != "" {
 		apiParams.System = []anthropic.TextBlockParam{{
 			Text:         params.SystemPrompt,

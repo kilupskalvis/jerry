@@ -93,6 +93,49 @@ func (p *Printer) ToolCall(name string) {
 	}
 }
 
+// ToolCallVerbose prints a tool invocation with its arguments.
+func (p *Printer) ToolCallVerbose(name, args string) {
+	if p.verbosity >= VerbosityVerbose {
+		fmt.Fprintf(p.stderr, "    -> %s(%s)\n", name, args)
+	} else if p.verbosity >= VerbosityDefault {
+		fmt.Fprintf(p.stderr, "    -> %s\n", name)
+	}
+}
+
+// ToolResult prints the result of a tool execution (verbose only).
+func (p *Printer) ToolResult(name, result string, isError bool) {
+	if p.verbosity >= VerbosityVerbose {
+		truncated := result
+		if len(truncated) > 500 {
+			truncated = truncated[:500] + "..."
+		}
+		if isError {
+			fmt.Fprintf(p.stderr, "    <- %s ERROR: %s\n", name, truncated)
+		} else {
+			fmt.Fprintf(p.stderr, "    <- %s: %s\n", name, truncated)
+		}
+	}
+}
+
+// AgentTurn prints a summary of each LLM turn (verbose only).
+func (p *Printer) AgentTurn(turn int, stopReason string, toolCalls, inputTokens, outputTokens int) {
+	if p.verbosity >= VerbosityVerbose {
+		fmt.Fprintf(p.stderr, "    [turn %d] stop=%s tools=%d tokens=%d/%d\n",
+			turn, stopReason, toolCalls, inputTokens, outputTokens)
+	}
+}
+
+// AgentResponse prints the agent's final text response (verbose only).
+func (p *Printer) AgentResponse(text string) {
+	if p.verbosity >= VerbosityVerbose {
+		truncated := text
+		if len(truncated) > 1000 {
+			truncated = truncated[:1000] + "..."
+		}
+		fmt.Fprintf(p.stderr, "    [response] %s\n", truncated)
+	}
+}
+
 // Warning prints a warning message.
 func (p *Printer) Warning(format string, args ...any) {
 	// Warnings shown at default and verbose levels.

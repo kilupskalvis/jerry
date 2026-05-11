@@ -92,7 +92,11 @@ func buildApp(printer *output.Printer) *cli.App {
 	scriptExec := workflow.NewScriptExecutor(repoRoot, secretEnv)
 
 	toolRegistry := tool.NewRegistry(repoRoot, secretEnv)
-	agentLoader := agent.NewLoader(toolRegistry.KnownToolNames(), defaultModel)
+	toolsDir := filepath.Join(jerryDir, "tools")
+	if loadErr := toolRegistry.LoadCustomTools(toolsDir, repoRoot, envSliceFromMap(secretEnv)); loadErr != nil {
+		printer.Warning("failed to load custom tools: %s", loadErr)
+	}
+	agentLoader := agent.NewLoader(defaultModel)
 
 	resolver := llm.NewProviderResolver()
 	resolver.SetKey("anthropic", envOrSecret("ANTHROPIC_API_KEY", secretEnv))
@@ -108,6 +112,7 @@ func buildApp(printer *output.Printer) *cli.App {
 	)
 
 	engine.OnStoreCreated = func(store *jerryrun.ContextStore) {
+		agentExec.SetStore(store)
 		scriptExec.SetStore(store)
 		toolRegistry.SetTrigger(store.Trigger())
 	}
@@ -118,6 +123,14 @@ func buildApp(printer *output.Printer) *cli.App {
 	app.StateStore = stateStore
 
 	return app
+}
+
+func envSliceFromMap(m map[string]string) []string {
+	s := make([]string, 0, len(m))
+	for k, v := range m {
+		s = append(s, k+"="+v)
+	}
+	return s
 }
 
 func envOrSecret(key string, secrets map[string]string) string {

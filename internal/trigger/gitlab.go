@@ -2,6 +2,8 @@
 
 package trigger
 
+import "fmt"
+
 // NormalizeGitLabEvent converts a GitLab webhook payload into TriggerData.
 func NormalizeGitLabEvent(objectKind string, payload map[string]any) (*TriggerData, error) {
 	t := &TriggerData{
@@ -9,32 +11,40 @@ func NormalizeGitLabEvent(objectKind string, payload map[string]any) (*TriggerDa
 		RawPayload: payload,
 	}
 
+	extractGitLabAuthor(t, payload)
+
 	switch objectKind {
 	case "issue":
 		t.Type = "ticket"
-		if attrs, ok := payload["object_attributes"].(map[string]any); ok {
-			t.Intent, _ = attrs["title"].(string)
-			if n, ok := attrs["iid"].(float64); ok {
-				t.Number = int(n)
-			}
-			t.URL, _ = attrs["url"].(string)
+		attrs, ok := payload["object_attributes"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("GitLab issue event missing 'object_attributes' field")
 		}
+		t.Intent, _ = attrs["title"].(string)
+		if n, ok := attrs["iid"].(float64); ok {
+			t.Number = int(n)
+		}
+		t.URL, _ = attrs["url"].(string)
 		extractGitLabRepo(t, payload)
 	case "merge_request":
 		t.Type = "pull_request"
-		if attrs, ok := payload["object_attributes"].(map[string]any); ok {
-			t.Intent, _ = attrs["title"].(string)
-			if n, ok := attrs["iid"].(float64); ok {
-				t.Number = int(n)
-			}
-			t.URL, _ = attrs["url"].(string)
-			if lastCommit, ok := attrs["last_commit"].(map[string]any); ok {
-				t.HeadSHA, _ = lastCommit["id"].(string)
-			}
+		attrs, ok := payload["object_attributes"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("GitLab merge request event missing 'object_attributes' field")
+		}
+		t.Intent, _ = attrs["title"].(string)
+		if n, ok := attrs["iid"].(float64); ok {
+			t.Number = int(n)
+		}
+		t.URL, _ = attrs["url"].(string)
+		if lastCommit, ok := attrs["last_commit"].(map[string]any); ok {
+			t.HeadSHA, _ = lastCommit["id"].(string)
 		}
 		extractGitLabRepo(t, payload)
 	case "push":
 		t.Type = "push"
+		t.HeadSHA, _ = payload["checkout_sha"].(string)
+		extractGitLabRepo(t, payload)
 		if commits, ok := payload["commits"].([]any); ok && len(commits) > 0 {
 			if last, ok := commits[len(commits)-1].(map[string]any); ok {
 				t.Intent, _ = last["message"].(string)
@@ -45,6 +55,18 @@ func NormalizeGitLabEvent(objectKind string, payload map[string]any) (*TriggerDa
 	}
 
 	return t, nil
+}
+
+func extractGitLabAuthor(t *TriggerData, payload map[string]any) {
+	if user, ok := payload["user"].(map[string]any); ok {
+		if username, ok := user["username"].(string); ok {
+			t.Author = username
+			return
+		}
+	}
+	if username, ok := payload["user_username"].(string); ok {
+		t.Author = username
+	}
 }
 
 func extractGitLabRepo(t *TriggerData, payload map[string]any) {

@@ -1,108 +1,129 @@
 package tool
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
-// Registry manages available tools and produces constrained dispatchers
-// for individual agent configurations.
-type Registry struct {
-	tools      map[string]Tool
-	repoRoot   string
-	triggerRef *trigger.TriggerData
+type githubCfg struct {
+	BaseURL string
+	Token   string
 }
 
-// NewRegistry creates a tool registry with all built-in tools registered.
-func NewRegistry(repoRoot string, env map[string]string) *Registry {
-	r := &Registry{
-		tools:    make(map[string]Tool),
-		repoRoot: repoRoot,
-	}
+// Registry manages built-in, CI, and custom tools.
+type Registry struct {
+	baseTools  []Tool
+	ciTools    map[string]Tool
+	custom     map[string]Tool
+	triggerRef *trigger.TriggerData
+	ghCfg      *githubCfg
+}
 
-	envSlice := make([]string, 0, len(env))
-	for k, v := range env {
+// NewRegistry creates a registry with always-on base tools and CI tools.
+func NewRegistry(repoRoot string, secretEnv map[string]string) *Registry {
+	envSlice := make([]string, 0, len(secretEnv))
+	for k, v := range secretEnv {
 		envSlice = append(envSlice, k+"="+v)
 	}
 
-	r.register(NewReadFileTool(repoRoot))
-	r.register(NewWriteFileTool(repoRoot))
-	r.register(NewGlobTool(repoRoot))
-	r.register(NewSearchTool(repoRoot))
-	r.register(NewRunCommandTool(repoRoot, envSlice))
-	r.register(NewListDirectoryTool(repoRoot))
-	r.register(NewGitLogTool(repoRoot))
-	r.register(NewGitDiffTool(repoRoot))
-	r.register(NewGitBlameTool(repoRoot))
+	r := &Registry{
+		ciTools: make(map[string]Tool),
+		custom:  make(map[string]Tool),
+		ghCfg:   &githubCfg{},
+	}
+
+	r.baseTools = []Tool{
+		NewBashTool(repoRoot, envSlice),
+		NewReadFileTool(repoRoot),
+		NewWriteFileTool(repoRoot),
+	}
 
 	r.triggerRef = &trigger.TriggerData{}
-	r.register(NewPostPRCommentTool(r.triggerRef))
-	r.register(NewPostReviewCommentTool(r.triggerRef))
-	r.register(NewAddCheckStatusTool(r.triggerRef))
+	r.registerCI(NewPostPRCommentTool(r.triggerRef, r.ghCfg))
+	r.registerCI(NewPostReviewCommentTool(r.triggerRef, r.ghCfg))
+	r.registerCI(NewAddCheckStatusTool(r.triggerRef, r.ghCfg))
 
 	return r
 }
 
+func (r *Registry) registerCI(t Tool) {
+	r.ciTools[t.Name()] = t
+}
+
 // SetTrigger injects trigger data for output routing tools.
-// Called when the workflow starts and trigger data is available.
 func (r *Registry) SetTrigger(t trigger.TriggerData) {
 	*r.triggerRef = t
 }
 
-func (r *Registry) register(t Tool) {
-	r.tools[t.Name()] = t
+// SetGitHubConfig injects GitHub API base URL and token.
+func (r *Registry) SetGitHubConfig(baseURL, token string) {
+	r.ghCfg.BaseURL = baseURL
+	r.ghCfg.Token = token
 }
 
-// KnownToolNames returns the names of all registered tools.
-func (r *Registry) KnownToolNames() []string {
-	names := make([]string, 0, len(r.tools))
-	for name := range r.tools {
-		names = append(names, name)
+// LoadCustomTools discovers and registers custom tools from a directory.
+func (r *Registry) LoadCustomTools(toolsDir, repoRoot string, secretEnv []string) error {
+	tools, err := LoadCustomTools(toolsDir, repoRoot, secretEnv)
+	if err != nil {
+		return err
 	}
-	return names
+	for _, t := range tools {
+		r.custom[t.Name()] = t
+	}
+	return nil
 }
 
-// Resolve returns the tools for the given tool access declarations, with
-// constraints applied as wrappers.
+// BaseTools returns the always-on tools injected into every agent.
+func (r *Registry) BaseTools() []Tool {
+	result := make([]Tool, len(r.baseTools))
+	copy(result, r.baseTools)
+	return result
+}
+
+// Resolve resolves opt-in tool declarations (CI + custom tools).
+// Names matching base tools are silently skipped to avoid duplicates.
 func (r *Registry) Resolve(toolAccess []ToolAccess) ([]Tool, error) {
+	baseNames := make(map[string]struct{}, len(r.baseTools))
+	for _, t := range r.baseTools {
+		baseNames[t.Name()] = struct{}{}
+	}
+
 	resolved := make([]Tool, 0, len(toolAccess))
-
 	for _, ta := range toolAccess {
-		t, ok := r.tools[ta.Name]
-		if !ok {
-			known := r.KnownToolNames()
-			return nil, fmt.Errorf("unknown tool %q (available: %s)",
-				ta.Name, strings.Join(known, ", "))
+		if _, isBase := baseNames[ta.Name]; isBase {
+			continue
 		}
 
-		if ta.Constraints != nil {
-			resolved = append(resolved, wrapWithConstraints(t, ta.Constraints, r.repoRoot))
-		} else {
+		if t, ok := r.ciTools[ta.Name]; ok {
 			resolved = append(resolved, t)
+			continue
 		}
+
+		if t, ok := r.custom[ta.Name]; ok {
+			resolved = append(resolved, t)
+			continue
+		}
+
+		return nil, fmt.Errorf("unknown tool %q (available: %s)",
+			ta.Name, strings.Join(r.KnownToolNames(), ", "))
 	}
 
 	return resolved, nil
 }
 
-func wrapWithConstraints(inner Tool, constraints map[string]any, repoRoot string) Tool {
-	return NewToolFunc(
-		inner.Name(),
-		inner.Description(),
-		inner.Schema(),
-		func(ctx context.Context, input json.RawMessage) (string, error) {
-			var args map[string]any
-			if err := json.Unmarshal(input, &args); err != nil {
-				return fmt.Sprintf("Error: invalid input JSON: %v", err), nil
-			}
-			if violation := ValidateConstraints(inner.Name(), args, constraints, repoRoot); violation != "" {
-				return violation, nil
-			}
-			return inner.Execute(ctx, input)
-		},
-	)
+// KnownToolNames returns names of all registered tools.
+func (r *Registry) KnownToolNames() []string {
+	names := make([]string, 0, len(r.baseTools)+len(r.ciTools)+len(r.custom))
+	for _, t := range r.baseTools {
+		names = append(names, t.Name())
+	}
+	for name := range r.ciTools {
+		names = append(names, name)
+	}
+	for name := range r.custom {
+		names = append(names, name)
+	}
+	return names
 }

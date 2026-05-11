@@ -72,9 +72,9 @@ func (e *ScriptExecutor) Execute(ctx context.Context, step Step, prevOutputs []S
 	}
 	cmd.Env = e.buildEnvironment(runID, intent, step.Name, contextFilePath)
 
-	var stdoutBuf, stderrBuf bytes.Buffer
+	var stdoutBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	cmd.Stderr = os.Stderr
 
 	if startErr := cmd.Start(); startErr != nil {
 		return nil, jerrerr.Wrap(jerrerr.CodeScriptFailed,

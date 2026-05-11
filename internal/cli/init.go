@@ -24,7 +24,7 @@ func newInitCmd() *cobra.Command {
 		Short: "Initialize a new .jerry/ directory",
 		Long:  "Scaffolds a .jerry/ directory with an example review workflow.",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runInit(targetPath)
+			return Scaffold(targetPath)
 		},
 	}
 
@@ -33,8 +33,9 @@ func newInitCmd() *cobra.Command {
 	return cmd
 }
 
+// Scaffold creates a .jerry/ directory with an example review workflow.
 // @lattice:flow init
-func runInit(targetPath string) error {
+func Scaffold(targetPath string) error {
 	if targetPath == "" {
 		cwd, cwdErr := os.Getwd()
 		if cwdErr != nil {

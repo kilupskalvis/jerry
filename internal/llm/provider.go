@@ -26,6 +26,8 @@ type CompleteParams struct {
 	Tools []ToolDefinition
 	// MaxTokens caps the response length. Zero uses the provider's default.
 	MaxTokens int
+	// Temperature controls randomness. Nil uses the provider's default.
+	Temperature *float64
 }
 
 // ToolDefinition is the LLM-facing metadata for a tool, without execution capability.

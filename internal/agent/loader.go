@@ -15,22 +15,13 @@ import (
 
 // Loader parses agent markdown definition files into AgentConfig.
 type Loader struct {
-	knownTools   map[string]struct{}
 	defaultModel string
 }
 
 // NewLoader creates an agent loader.
-// knownTools is the list of tool names the runtime supports (from Registry.KnownToolNames).
 // defaultModel is the fallback model when an agent doesn't specify one (may be empty).
-func NewLoader(knownTools []string, defaultModel string) *Loader {
-	known := make(map[string]struct{}, len(knownTools))
-	for _, name := range knownTools {
-		known[name] = struct{}{}
-	}
-	return &Loader{
-		knownTools:   known,
-		defaultModel: defaultModel,
-	}
+func NewLoader(defaultModel string) *Loader {
+	return &Loader{defaultModel: defaultModel}
 }
 
 // Load reads and validates an agent markdown file, returning the parsed config.
@@ -143,18 +134,6 @@ func (l *Loader) validate(agentCfg *AgentConfig) error {
 
 	if agentCfg.Instructions == "" {
 		return fmt.Errorf("agent %q: agent has no instructions (empty markdown body)", agentCfg.Name)
-	}
-
-	// Validate tool references.
-	for _, ta := range agentCfg.Tools {
-		if _, ok := l.knownTools[ta.Name]; !ok {
-			known := make([]string, 0, len(l.knownTools))
-			for name := range l.knownTools {
-				known = append(known, name)
-			}
-			return fmt.Errorf("agent %q: unknown tool %q (available: %s)",
-				agentCfg.Name, ta.Name, strings.Join(known, ", "))
-		}
 	}
 
 	// Validate temperature range.

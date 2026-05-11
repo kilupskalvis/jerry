@@ -82,6 +82,12 @@ func parse(data []byte) (*TriggerData, error) {
 		return NormalizeGitLabEvent(objectKind, raw)
 	}
 
+	if _, hasRef := raw["ref"]; hasRef {
+		if _, hasHeadCommit := raw["head_commit"]; hasHeadCommit {
+			return NormalizeGitHubEvent("push", raw)
+		}
+	}
+
 	return &TriggerData{
 		Type:       "webhook",
 		Source:     "unknown",

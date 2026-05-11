@@ -8,7 +8,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
-func NewPostReviewCommentTool(triggerRef *trigger.TriggerData) Tool {
+func NewPostReviewCommentTool(triggerRef *trigger.TriggerData, cfg *githubCfg) Tool {
 	return NewToolFunc(
 		"post_review_comment",
 		"Post an inline review comment on a specific file and line in a pull request.",
@@ -43,7 +43,7 @@ func NewPostReviewCommentTool(triggerRef *trigger.TriggerData) Tool {
 				return "Error: path, line, and body are all required", nil
 			}
 
-			gh, err := resolveGitHubContext(triggerRef)
+			gh, err := resolveGitHubContext(triggerRef, cfg)
 			if err != nil {
 				return fmt.Sprintf("Error: %v", err), nil
 			}
@@ -55,8 +55,8 @@ func NewPostReviewCommentTool(triggerRef *trigger.TriggerData) Tool {
 				return "Error: cannot determine commit SHA from trigger", nil
 			}
 
-			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d/comments",
-				gh.Owner, gh.Repo, triggerRef.Number)
+			url := fmt.Sprintf("%s/repos/%s/%s/pulls/%d/comments",
+				gh.BaseURL, gh.Owner, gh.Repo, triggerRef.Number)
 
 			payload := map[string]any{
 				"body":      args.Body,

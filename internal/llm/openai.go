@@ -42,6 +42,10 @@ func (p *OpenAIProvider) Complete(ctx context.Context, params CompleteParams) (*
 		Messages: toOpenAIMessages(params.Messages, params.SystemPrompt),
 	}
 
+	if params.Temperature != nil {
+		apiParams.Temperature = openai.Float(*params.Temperature)
+	}
+
 	if params.MaxTokens > 0 {
 		apiParams.MaxCompletionTokens = openai.Int(int64(params.MaxTokens))
 	}

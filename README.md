@@ -148,7 +148,7 @@ Jerry supports any task where an AI agent adds value in a CI pipeline:
 | `jerry run <workflow> --dry-run` | Validate and preview without executing |
 | `jerry validate [workflow]` | Validate workflows and agent definitions |
 | `jerry logs` | Show recent local runs |
-| `jerry version` | Show Jerry version |
+| `jerry --version` | Show Jerry version |
 
 Global flags: `--verbose`, `--quiet`.
 
@@ -176,7 +176,6 @@ Agents declare which tools they can use. The runtime enforces access.
 |------|-------------|
 | `post_pr_comment` | Post a comment on the triggering PR |
 | `post_review_comment` | Post an inline review comment |
-| `create_issue` | Create a new issue |
 | `add_check_status` | Report a status check result |
 
 ### Tool Constraints

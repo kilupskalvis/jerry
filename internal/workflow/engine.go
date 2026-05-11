@@ -13,7 +13,10 @@ import (
 	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
-const DefaultRetryBaseDelay = 2 * time.Second
+const (
+	DefaultRetryBaseDelay = 2 * time.Second
+	MaxRetryDelay         = 30 * time.Second
+)
 
 // Engine orchestrates the execution of a workflow.
 type Engine struct {
@@ -249,10 +252,14 @@ func (e *Engine) executeWithRetries(ctx context.Context, step Step, exec StepExe
 		lastErr = execErr
 
 		if attempt < maxAttempts {
+			delay := DefaultRetryBaseDelay * (1 << (attempt - 1))
+			if delay > MaxRetryDelay {
+				delay = MaxRetryDelay
+			}
 			e.printer.Warning("step %q failed (attempt %d/%d), retrying in %s...",
-				step.Name, attempt, maxAttempts, DefaultRetryBaseDelay)
+				step.Name, attempt, maxAttempts, delay)
 
-			timer := time.NewTimer(DefaultRetryBaseDelay)
+			timer := time.NewTimer(delay)
 			select {
 			case <-timer.C:
 				continue

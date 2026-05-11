@@ -142,11 +142,11 @@ func dryRunWorkflow(app *App, workflowName, intent string) error {
 		if step.Agent != "" {
 			fmt.Fprintf(os.Stderr, "  %d. %-16s agent   %s\n", i+1, step.Name, step.Agent)
 		} else if step.Run != "" {
-			run := step.Run
-			if len(run) > 60 {
-				run = run[:60] + "..."
+			preview := step.Run
+			if len(preview) > 60 {
+				preview = preview[:60] + "..."
 			}
-			fmt.Fprintf(os.Stderr, "  %d. %-16s run     %s\n", i+1, step.Name, run)
+			fmt.Fprintf(os.Stderr, "  %d. %-16s run     %s\n", i+1, step.Name, preview)
 		}
 	}
 

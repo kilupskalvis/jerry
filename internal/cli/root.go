@@ -1,5 +1,5 @@
 // Package cli defines the command-line interface for Jerry.
-// Commands: init, run, logs. Dependencies are injected via the App struct.
+// Commands: init, run, validate, logs. Dependencies are injected via the App struct.
 package cli
 
 import (

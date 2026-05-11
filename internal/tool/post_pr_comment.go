@@ -8,7 +8,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
-func NewPostPRCommentTool(triggerRef *trigger.TriggerData) Tool {
+func NewPostPRCommentTool(triggerRef *trigger.TriggerData, cfg *githubCfg) Tool {
 	return NewToolFunc(
 		"post_pr_comment",
 		"Post a comment on the triggering pull request or issue.",
@@ -33,7 +33,7 @@ func NewPostPRCommentTool(triggerRef *trigger.TriggerData) Tool {
 				return "Error: body is required", nil
 			}
 
-			gh, err := resolveGitHubContext(triggerRef)
+			gh, err := resolveGitHubContext(triggerRef, cfg)
 			if err != nil {
 				return fmt.Sprintf("Error: %v", err), nil
 			}
@@ -42,8 +42,8 @@ func NewPostPRCommentTool(triggerRef *trigger.TriggerData) Tool {
 				return "Error: cannot determine PR/issue number from trigger", nil
 			}
 
-			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments",
-				gh.Owner, gh.Repo, triggerRef.Number)
+			url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments",
+				gh.BaseURL, gh.Owner, gh.Repo, triggerRef.Number)
 
 			_, apiErr := githubAPI("POST", url, gh.Token, map[string]string{"body": args.Body})
 			if apiErr != nil {

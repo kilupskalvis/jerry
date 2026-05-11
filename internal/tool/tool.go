@@ -40,28 +40,14 @@ func (t *ToolFunc) Execute(ctx context.Context, input json.RawMessage) (string, 
 
 // ToolAccess represents a tool declaration from an agent's frontmatter.
 type ToolAccess struct {
-	Name        string
-	Constraints map[string]any
+	Name string
 }
 
-// UnmarshalYAML handles both string ("read_file") and map (read_file: {restrict_to: [src/]}) forms.
+// UnmarshalYAML handles string tool names in agent frontmatter.
 func (t *ToolAccess) UnmarshalYAML(value *yaml.Node) error {
-	switch value.Kind {
-	case yaml.ScalarNode:
-		t.Name = value.Value
-		return nil
-	case yaml.MappingNode:
-		if len(value.Content) != 2 {
-			return fmt.Errorf("tool access map must have exactly one key, got %d pairs", len(value.Content)/2)
-		}
-		t.Name = value.Content[0].Value
-		var constraints map[string]any
-		if err := value.Content[1].Decode(&constraints); err != nil {
-			return fmt.Errorf("cannot parse constraints for tool %q: %w", t.Name, err)
-		}
-		t.Constraints = constraints
-		return nil
-	default:
-		return fmt.Errorf("tool access must be a string or map, got %v", value.Kind)
+	if value.Kind != yaml.ScalarNode {
+		return fmt.Errorf("tool declaration must be a string, got %v", value.Kind)
 	}
+	t.Name = value.Value
+	return nil
 }

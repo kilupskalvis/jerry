@@ -45,10 +45,6 @@ func NewWriteFileTool(repoRoot string) Tool {
 				return pathErr, nil
 			}
 
-			if IsSensitivePath(args.Path) {
-				return fmt.Sprintf("Error: access denied — '%s' is a sensitive file (may contain secrets)", args.Path), nil
-			}
-
 			// Create parent directories.
 			dir := filepath.Dir(absPath)
 			if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {

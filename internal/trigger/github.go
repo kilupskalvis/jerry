@@ -23,7 +23,10 @@ func NormalizeGitHubEvent(eventType string, payload map[string]any) (*TriggerDat
 		t.Type = "push"
 		if headCommit, ok := payload["head_commit"].(map[string]any); ok {
 			t.Intent, _ = headCommit["message"].(string)
+			t.HeadSHA, _ = headCommit["id"].(string)
 		}
+		t.Author = extractNestedString(payload, "sender", "login")
+		extractGitHubRepo(t, payload)
 		return t, nil
 	default:
 		t.Type = "webhook"

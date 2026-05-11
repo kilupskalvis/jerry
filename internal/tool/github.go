@@ -13,13 +13,17 @@ import (
 )
 
 type githubContext struct {
-	Owner string
-	Repo  string
-	Token string
+	Owner   string
+	Repo    string
+	Token   string
+	BaseURL string
 }
 
-func resolveGitHubContext(t *trigger.TriggerData) (*githubContext, error) {
-	token := os.Getenv("GITHUB_TOKEN")
+func resolveGitHubContext(t *trigger.TriggerData, cfg *githubCfg) (*githubContext, error) {
+	token := cfg.Token
+	if token == "" {
+		token = os.Getenv("GITHUB_TOKEN")
+	}
 	if token == "" {
 		return nil, fmt.Errorf("GITHUB_TOKEN environment variable is required for GitHub operations")
 	}
@@ -42,7 +46,12 @@ func resolveGitHubContext(t *trigger.TriggerData) (*githubContext, error) {
 		return nil, fmt.Errorf("cannot determine repository — set GITHUB_REPOSITORY or use a GitHub trigger")
 	}
 
-	return &githubContext{Owner: owner, Repo: repo, Token: token}, nil
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.github.com"
+	}
+
+	return &githubContext{Owner: owner, Repo: repo, Token: token, BaseURL: baseURL}, nil
 }
 
 func githubAPI(method, url, token string, body any) (string, error) {

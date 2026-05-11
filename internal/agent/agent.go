@@ -19,6 +19,14 @@ const defaultMaxTurns = 10
 // ErrMaxTurns is returned when the agent exceeds its configured turn limit.
 var ErrMaxTurns = errors.New("agent exceeded maximum turns")
 
+// EventHandler receives detailed execution events from the agent loop.
+type EventHandler struct {
+	OnTurn       func(turn int, stopReason string, toolCalls, inputTokens, outputTokens int)
+	OnToolCall   func(name, args string)
+	OnToolResult func(name, result string, isError bool)
+	OnResponse   func(text string)
+}
+
 // Agent orchestrates a tool-using LLM interaction loop.
 type Agent struct {
 	provider     llm.Provider
@@ -26,8 +34,10 @@ type Agent struct {
 	systemPrompt string
 	model        string
 	maxTurns     int
+	temperature  *float64
 	logger       *slog.Logger
 	onToolCall   func(toolName string)
+	events       *EventHandler
 }
 
 // Option configures an Agent.
@@ -53,6 +63,11 @@ func WithMaxTurns(n int) Option {
 	return func(a *Agent) { a.maxTurns = n }
 }
 
+// WithTemperature sets the LLM sampling temperature.
+func WithTemperature(t *float64) Option {
+	return func(a *Agent) { a.temperature = t }
+}
+
 // WithLogger sets a structured logger for the agent.
 func WithLogger(logger *slog.Logger) Option {
 	return func(a *Agent) { a.logger = logger }
@@ -61,6 +76,11 @@ func WithLogger(logger *slog.Logger) Option {
 // WithOnToolCall sets a callback invoked before each tool execution.
 func WithOnToolCall(fn func(toolName string)) Option {
 	return func(a *Agent) { a.onToolCall = fn }
+}
+
+// WithEventHandler sets detailed event callbacks for the agent loop.
+func WithEventHandler(h *EventHandler) Option {
+	return func(a *Agent) { a.events = h }
 }
 
 // NewAgent creates an Agent with the given provider and options.
@@ -96,6 +116,7 @@ func (a *Agent) Run(ctx context.Context, input string) (string, error) {
 			SystemPrompt: a.systemPrompt,
 			Messages:     messages,
 			Tools:        toolDefs,
+			Temperature:  a.temperature,
 		})
 		if err != nil {
 			return "", fmt.Errorf("provider complete (turn %d): %w", turn, err)
@@ -111,8 +132,15 @@ func (a *Agent) Run(ctx context.Context, input string) (string, error) {
 			"cache_creation", resp.Usage.CacheCreationTokens,
 			"cache_read", resp.Usage.CacheReadTokens,
 		)
+		if a.events != nil && a.events.OnTurn != nil {
+			a.events.OnTurn(turn, string(resp.StopReason),
+				len(resp.Message.ToolCalls), resp.Usage.InputTokens, resp.Usage.OutputTokens)
+		}
 
 		if resp.StopReason != llm.StopReasonToolUse || len(resp.Message.ToolCalls) == 0 {
+			if a.events != nil && a.events.OnResponse != nil {
+				a.events.OnResponse(resp.Message.Content)
+			}
 			return resp.Message.Content, nil
 		}
 
@@ -162,17 +190,28 @@ func (a *Agent) executeTools(ctx context.Context, calls []llm.ToolCall, toolMap 
 		if a.onToolCall != nil {
 			a.onToolCall(call.Name)
 		}
+		if a.events != nil && a.events.OnToolCall != nil {
+			a.events.OnToolCall(call.Name, string(call.Input))
+		}
+
 		output, err := t.Execute(ctx, call.Input)
 		if err != nil {
+			errMsg := fmt.Sprintf("tool execution failed: %v", err)
 			results = append(results, llm.ToolResult{
 				CallID:  call.ID,
-				Content: fmt.Sprintf("tool execution failed: %v", err),
+				Content: errMsg,
 				IsError: true,
 			})
+			if a.events != nil && a.events.OnToolResult != nil {
+				a.events.OnToolResult(call.Name, errMsg, true)
+			}
 			a.logger.Warn("tool execution failed", "tool", call.Name, "error", err)
 			continue
 		}
 
+		if a.events != nil && a.events.OnToolResult != nil {
+			a.events.OnToolResult(call.Name, output, false)
+		}
 		results = append(results, llm.ToolResult{
 			CallID:  call.ID,
 			Content: output,

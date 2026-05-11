@@ -8,7 +8,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/trigger"
 )
 
-func NewAddCheckStatusTool(triggerRef *trigger.TriggerData) Tool {
+func NewAddCheckStatusTool(triggerRef *trigger.TriggerData, cfg *githubCfg) Tool {
 	return NewToolFunc(
 		"add_check_status",
 		"Report a status check result (pass/fail) on the current commit.",
@@ -47,7 +47,7 @@ func NewAddCheckStatusTool(triggerRef *trigger.TriggerData) Tool {
 				return "Error: status must be 'success' or 'failure'", nil
 			}
 
-			gh, err := resolveGitHubContext(triggerRef)
+			gh, err := resolveGitHubContext(triggerRef, cfg)
 			if err != nil {
 				return fmt.Sprintf("Error: %v", err), nil
 			}
@@ -57,8 +57,8 @@ func NewAddCheckStatusTool(triggerRef *trigger.TriggerData) Tool {
 			}
 
 			conclusion := args.Status
-			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/check-runs",
-				gh.Owner, gh.Repo)
+			url := fmt.Sprintf("%s/repos/%s/%s/check-runs",
+				gh.BaseURL, gh.Owner, gh.Repo)
 
 			payload := map[string]any{
 				"name":       args.Name,
