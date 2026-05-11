@@ -37,11 +37,11 @@ func newLogsCmd(app *App) *cobra.Command {
 			}
 
 			if showLast {
-				return showLastRun(app)
+				return showLastRun(app, showJSON)
 			}
 
 			if len(args) == 0 {
-				return showOverview(app)
+				return showOverview(app, showJSON)
 			}
 
 			return showRunDetail(app, args[0], stepFilter, showTools, showLLM, showJSON)
@@ -57,7 +57,20 @@ func newLogsCmd(app *App) *cobra.Command {
 	return cmd
 }
 
-func showOverview(app *App) error {
+func showOverview(app *App, showJSON bool) error {
+	summaries, listErr := app.StateStore.ListRuns()
+	if listErr != nil {
+		return listErr
+	}
+
+	if showJSON {
+		for _, s := range summaries {
+			line, _ := json.Marshal(s)
+			fmt.Fprintln(os.Stdout, string(line))
+		}
+		return nil
+	}
+
 	if app.Loader != nil {
 		jerryDir := app.Loader.JerryDir()
 		fmt.Fprintf(os.Stderr, "Jerry project: %s\n", jerryDir)
@@ -70,11 +83,6 @@ func showOverview(app *App) error {
 		}
 
 		fmt.Fprintln(os.Stderr)
-	}
-
-	summaries, listErr := app.StateStore.ListRuns()
-	if listErr != nil {
-		return listErr
 	}
 
 	if len(summaries) == 0 {
@@ -110,7 +118,7 @@ func showOverview(app *App) error {
 	return nil
 }
 
-func showLastRun(app *App) error {
+func showLastRun(app *App, showJSON bool) error {
 	summaries, listErr := app.StateStore.ListRuns()
 	if listErr != nil {
 		return listErr
@@ -119,7 +127,7 @@ func showLastRun(app *App) error {
 		fmt.Fprintln(os.Stderr, "No runs found.")
 		return nil
 	}
-	return showRunDetail(app, summaries[0].RunID, "", false, false, false)
+	return showRunDetail(app, summaries[0].RunID, "", false, false, showJSON)
 }
 
 func showRunDetail(app *App, runID, stepFilter string, showTools, showLLM, showJSON bool) error {
