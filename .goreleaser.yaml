@@ -10,20 +10,14 @@ builds:
     goos:
       - linux
       - darwin
-      - windows
     goarch:
       - amd64
       - arm64
-    ignore:
-      - goos: windows
-        goarch: arm64
 
 archives:
-  - format: tar.gz
-    name_template: "jerry_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
+  - name_template: "jerry_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
 
 checksum:
   name_template: "checksums.txt"
@@ -35,4 +29,3 @@ changelog:
       - "^docs:"
       - "^chore:"
       - "^test:"
-
