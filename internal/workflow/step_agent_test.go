@@ -97,7 +97,7 @@ func TestAgentExecutor_Execute_Success(t *testing.T) {
 	agentPath := setupTestAgent(t, dir)
 
 	reg := tool.NewRegistry(dir, nil)
-	loader := agent.NewLoader(reg.KnownToolNames(), "")
+	loader := agent.NewLoader("")
 
 	mock := &mockProvider{
 		responses: []*llm.CompleteResponse{
