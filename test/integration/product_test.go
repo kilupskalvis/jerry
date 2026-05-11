@@ -15,7 +15,7 @@ func TestGoldenPath_InitThenRun(t *testing.T) {
 
 	repoRoot := t.TempDir()
 
-	if err := cli.Scaffold(repoRoot); err != nil {
+	if err := cli.Scaffold(repoRoot, ""); err != nil {
 		t.Fatalf("scaffold: %v", err)
 	}
 

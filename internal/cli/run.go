@@ -21,6 +21,7 @@ func newRunCmd(app *App) *cobra.Command {
 		dryRun       bool
 		triggerFile  string
 		triggerStdin bool
+		triggerKV    []string
 		resumeRunID  string
 		force        bool
 	)
@@ -43,7 +44,7 @@ func newRunCmd(app *App) *cobra.Command {
 				return dryRunWorkflow(app, args[0], intent)
 			}
 
-			triggerData, resolveErr := resolveTrigger(intent, triggerFile, triggerStdin)
+			triggerData, resolveErr := resolveTrigger(intent, triggerFile, triggerStdin, triggerKV)
 			if resolveErr != nil {
 				return resolveErr
 			}
@@ -56,13 +57,14 @@ func newRunCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview workflow without executing")
 	cmd.Flags().StringVar(&triggerFile, "trigger-file", "", "Path to trigger JSON file")
 	cmd.Flags().BoolVar(&triggerStdin, "trigger-stdin", false, "Read trigger JSON from stdin")
+	cmd.Flags().StringArrayVar(&triggerKV, "trigger", nil, "Set trigger field (e.g., --trigger type=pull_request)")
 	cmd.Flags().StringVar(&resumeRunID, "resume", "", "Resume a failed run by ID")
 	cmd.Flags().BoolVar(&force, "force", false, "Force resume even if status is 'running'")
 
 	return cmd
 }
 
-func resolveTrigger(intent, triggerFile string, triggerStdin bool) (trigger.TriggerData, error) {
+func resolveTrigger(intent, triggerFile string, triggerStdin bool, triggerKV []string) (trigger.TriggerData, error) {
 	sourcesSet := 0
 	if triggerFile != "" {
 		sourcesSet++
@@ -70,24 +72,38 @@ func resolveTrigger(intent, triggerFile string, triggerStdin bool) (trigger.Trig
 	if triggerStdin {
 		sourcesSet++
 	}
+	if len(triggerKV) > 0 {
+		sourcesSet++
+	}
 	if sourcesSet > 1 {
-		return trigger.TriggerData{}, fmt.Errorf("specify only one trigger source (got multiple of --trigger-file, --trigger-stdin)")
+		return trigger.TriggerData{}, fmt.Errorf("specify only one trigger source (--trigger-file, --trigger-stdin, or --trigger)")
 	}
 
-	var t *trigger.TriggerData
-	var err error
 	switch {
 	case triggerFile != "":
-		t, err = trigger.FromFile(triggerFile)
-	case triggerStdin:
-		t, err = trigger.FromReader(os.Stdin)
-	}
-	if t != nil {
+		t, err := trigger.FromFile(triggerFile)
 		if err != nil {
 			return trigger.TriggerData{}, err
 		}
 		if intent != "" {
 			t.Intent = intent
+		}
+		return *t, nil
+
+	case triggerStdin:
+		t, err := trigger.FromReader(os.Stdin)
+		if err != nil {
+			return trigger.TriggerData{}, err
+		}
+		if intent != "" {
+			t.Intent = intent
+		}
+		return *t, nil
+
+	case len(triggerKV) > 0:
+		t, err := trigger.FromKeyValues(triggerKV)
+		if err != nil {
+			return trigger.TriggerData{}, err
 		}
 		return *t, nil
 	}

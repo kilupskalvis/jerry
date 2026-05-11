@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 )
 
 // TriggerData holds information about what initiated the workflow run.
@@ -94,4 +96,48 @@ func parse(data []byte) (*TriggerData, error) {
 		Intent:     "",
 		RawPayload: raw,
 	}, nil
+}
+
+// FromKeyValues builds TriggerData from key=value pairs (e.g., from --trigger flags).
+func FromKeyValues(pairs []string) (*TriggerData, error) {
+	t := &TriggerData{}
+	for _, pair := range pairs {
+		key, value, ok := strings.Cut(pair, "=")
+		if !ok {
+			return nil, fmt.Errorf("invalid trigger flag %q — expected key=value", pair)
+		}
+		switch key {
+		case "type":
+			t.Type = value
+		case "source":
+			t.Source = value
+		case "intent":
+			t.Intent = value
+		case "number":
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, fmt.Errorf("trigger number must be an integer, got %q", value)
+			}
+			t.Number = n
+		case "head_sha":
+			t.HeadSHA = value
+		case "repo_owner":
+			t.RepoOwner = value
+		case "repo_name":
+			t.RepoName = value
+		case "author":
+			t.Author = value
+		case "url":
+			t.URL = value
+		default:
+			return nil, fmt.Errorf("unknown trigger field %q (valid: type, source, intent, number, head_sha, repo_owner, repo_name, author, url)", key)
+		}
+	}
+	if t.Type == "" {
+		t.Type = "manual"
+	}
+	if t.Source == "" {
+		t.Source = "cli"
+	}
+	return t, nil
 }

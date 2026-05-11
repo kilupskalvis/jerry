@@ -1,0 +1,19 @@
+jerry-feature:
+  stage: build
+  script:
+    - curl -sSL https://raw.githubusercontent.com/kilupskalvis/jerry/main/install.sh | sh
+    - git config user.name "jerry[bot]"
+    - git config user.email "jerry[bot]@users.noreply.github.com"
+    - >
+      jerry run feature
+      --trigger type=ticket
+      --trigger source=$JERRY_TICKET_SOURCE
+      --trigger intent="$JERRY_TICKET_INTENT"
+      --trigger repo_owner=$CI_PROJECT_NAMESPACE
+      --trigger repo_name=$CI_PROJECT_NAME
+      --verbose
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+  variables:
+    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
+    GITLAB_TOKEN: $GITLAB_TOKEN

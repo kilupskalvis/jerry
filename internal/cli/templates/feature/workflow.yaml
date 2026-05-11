@@ -1,0 +1,10 @@
+steps:
+  - agent: planner
+  - agent: generator
+  - name: test
+    run: |
+      if [ -f go.mod ]; then go test ./...
+      elif [ -f package.json ]; then npm test
+      elif [ -f requirements.txt ]; then pytest
+      else echo "no test runner detected"; fi
+    timeout: 300s
