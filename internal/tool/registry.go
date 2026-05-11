@@ -44,6 +44,7 @@ func NewRegistry(repoRoot string, secretEnv map[string]string) *Registry {
 	r.registerCI(NewPostPRCommentTool(r.triggerRef, r.ghCfg))
 	r.registerCI(NewPostReviewCommentTool(r.triggerRef, r.ghCfg))
 	r.registerCI(NewAddCheckStatusTool(r.triggerRef, r.ghCfg))
+	r.registerCI(NewCreatePullRequestTool(repoRoot, r.triggerRef, r.ghCfg))
 
 	return r
 }

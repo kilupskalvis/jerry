@@ -1,0 +1,6 @@
+steps:
+  - agent: planner
+  - agent: generator
+  - name: test
+    run: go test ./...
+    timeout: 300s

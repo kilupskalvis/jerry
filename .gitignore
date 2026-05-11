@@ -5,8 +5,8 @@
 # Secrets
 .env
 
-# Local Jerry project (created by jerry init for testing)
-.jerry/
+# Jerry local run state
+.jerry/runs/
 
 # Lattice
 .lattice/
