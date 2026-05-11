@@ -13,12 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-
-      - name: Build Jerry
-        run: go build -o jerry ./cmd/jerry
+      - name: Install Jerry
+        run: curl -sSL https://raw.githubusercontent.com/kilupskalvis/jerry/main/install.sh | sh
 
       - name: Configure git
         run: |
@@ -26,7 +22,7 @@ jobs:
           git config user.email "jerry[bot]@users.noreply.github.com"
 
       - name: Run feature workflow
-        run: ./jerry run feature --trigger-file "$GITHUB_EVENT_PATH" --verbose
+        run: jerry run feature --trigger-file "$GITHUB_EVENT_PATH" --verbose
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
