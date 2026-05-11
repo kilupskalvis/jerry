@@ -10,8 +10,8 @@
 </td></tr></table>
 
 <p align="center">
-<b>AI agents as CI steps.</b><br>
-Define agents in Markdown. They run in your pipeline — reviewing PRs, implementing features, scanning for vulnerabilities — using the CI you already have.
+<b>The agent runtime for CI/CD.</b><br>
+AI agents that live in your repo and run in your pipeline. Review PRs, implement features, scan for vulnerabilities — no new infrastructure.
 </p>
 
 <p align="center">
