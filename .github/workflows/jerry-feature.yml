@@ -13,8 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Jerry
-        run: curl -sSL https://raw.githubusercontent.com/kilupskalvis/jerry/main/install.sh | sh
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Jerry
+        run: go build -o /usr/local/bin/jerry ./cmd/jerry
 
       - name: Configure git
         run: |
