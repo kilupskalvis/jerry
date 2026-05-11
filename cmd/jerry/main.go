@@ -35,6 +35,7 @@ func run() int {
 
 	printer := output.NewPrinter(os.Stdout, os.Stderr)
 	app := buildApp(printer)
+	app.Version = Version
 	rootCmd := cli.NewRootCmd(app)
 	rootCmd.Version = Version
 
