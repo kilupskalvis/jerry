@@ -6,8 +6,11 @@ package output
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
+
+const maxResultLines = 10
 
 // Verbosity controls how much detail is printed during execution.
 type Verbosity int
@@ -68,7 +71,6 @@ func (p *Printer) StepSuccess(name string, duration time.Duration, iterations, t
 
 // StepFailed prints the step failure indicator.
 func (p *Printer) StepFailed(name, message string) {
-	// Always show failures, even in quiet mode.
 	fmt.Fprintf(p.stderr, "  ✗ %s — %s\n", name, message)
 }
 
@@ -105,15 +107,7 @@ func (p *Printer) ToolCallVerbose(name, args string) {
 // ToolResult prints the result of a tool execution (verbose only).
 func (p *Printer) ToolResult(name, result string, isError bool) {
 	if p.verbosity >= VerbosityVerbose {
-		truncated := result
-		if len(truncated) > 500 {
-			truncated = truncated[:500] + "..."
-		}
-		if isError {
-			fmt.Fprintf(p.stderr, "    <- %s ERROR: %s\n", name, truncated)
-		} else {
-			fmt.Fprintf(p.stderr, "    <- %s: %s\n", name, truncated)
-		}
+		p.printResult("    ", name, result, isError)
 	}
 }
 
@@ -128,11 +122,13 @@ func (p *Printer) AgentTurn(turn int, stopReason string, toolCalls, inputTokens,
 // AgentResponse prints the agent's final text response (verbose only).
 func (p *Printer) AgentResponse(text string) {
 	if p.verbosity >= VerbosityVerbose {
-		truncated := text
-		if len(truncated) > 1000 {
-			truncated = truncated[:1000] + "..."
+		lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+		if len(lines) <= 2 {
+			fmt.Fprintf(p.stderr, "    [response] %s\n", strings.Join(lines, " "))
+		} else {
+			fmt.Fprintf(p.stderr, "    [response] (%d lines):\n", len(lines))
+			p.printLines("    ", lines)
 		}
-		fmt.Fprintf(p.stderr, "    [response] %s\n", truncated)
 	}
 }
 
@@ -162,15 +158,7 @@ func (p *Printer) SubagentToolCallVerbose(name, args string) {
 // SubagentToolResult prints a subagent tool result with extra indent.
 func (p *Printer) SubagentToolResult(name, result string, isError bool) {
 	if p.verbosity >= VerbosityVerbose {
-		truncated := result
-		if len(truncated) > 500 {
-			truncated = truncated[:500] + "..."
-		}
-		if isError {
-			fmt.Fprintf(p.stderr, "        <- %s ERROR: %s\n", name, truncated)
-		} else {
-			fmt.Fprintf(p.stderr, "        <- %s: %s\n", name, truncated)
-		}
+		p.printResult("        ", name, result, isError)
 	}
 }
 
@@ -184,7 +172,6 @@ func (p *Printer) SubagentTurn(turn int, stopReason string, toolCalls, inputToke
 
 // Warning prints a warning message.
 func (p *Printer) Warning(format string, args ...any) {
-	// Warnings shown at default and verbose levels.
 	if p.verbosity >= VerbosityDefault {
 		fmt.Fprintf(p.stderr, "jerry: warning: "+format+"\n", args...)
 	}
@@ -214,6 +201,40 @@ func (p *Printer) ValidationResult(file string, valid bool, detail string) {
 		fmt.Fprintf(p.stderr, "  ✓ %s — %s\n", file, detail)
 	} else {
 		fmt.Fprintf(p.stderr, "  ✗ %s — %s\n", file, detail)
+	}
+}
+
+// printResult formats a tool result as an indented block.
+func (p *Printer) printResult(indent, name, result string, isError bool) {
+	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
+	prefix := "<- " + name
+
+	if isError {
+		prefix = "<- " + name + " ERROR"
+	}
+
+	if len(lines) <= 2 {
+		fmt.Fprintf(p.stderr, "%s%s: %s\n", indent, prefix, strings.Join(lines, " "))
+		return
+	}
+
+	fmt.Fprintf(p.stderr, "%s%s (%d lines):\n", indent, prefix, len(lines))
+	p.printLines(indent, lines)
+}
+
+func (p *Printer) printLines(indent string, lines []string) {
+	show := lines
+	truncated := false
+	if len(show) > maxResultLines {
+		show = show[:maxResultLines]
+		truncated = true
+	}
+
+	for _, line := range show {
+		fmt.Fprintf(p.stderr, "%s   %s\n", indent, line)
+	}
+	if truncated {
+		fmt.Fprintf(p.stderr, "%s   ...\n", indent)
 	}
 }
 

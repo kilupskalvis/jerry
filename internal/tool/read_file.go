@@ -11,33 +11,51 @@ import (
 	"strings"
 )
 
-// MaxFileReadSize is the maximum bytes read from a single file.
-const MaxFileReadSize = 1 * 1024 * 1024 // 1MB
+const (
+	MaxFileReadSize  = 1 * 1024 * 1024 // 1MB
+	DefaultReadLimit = 200
+)
 
 // NewReadFileTool creates a read_file tool bound to the given repo root.
 func NewReadFileTool(repoRoot string) Tool {
 	return NewToolFunc(
 		"read_file",
-		"Read the contents of a file at the given path. Returns file contents with line numbers prepended.",
+		"Read the contents of a file at the given path. Returns file contents with line numbers prepended. Use offset and limit to read specific ranges of large files.",
 		json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"path": {
 					"type": "string",
 					"description": "Path to the file (relative to repository root)"
+				},
+				"offset": {
+					"type": "integer",
+					"description": "Line number to start reading from (1-based, default: 1)"
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Maximum number of lines to read (default: 200)"
 				}
 			},
 			"required": ["path"]
 		}`),
 		func(_ context.Context, input json.RawMessage) (string, error) {
 			var args struct {
-				Path string `json:"path"`
+				Path   string `json:"path"`
+				Offset int    `json:"offset"`
+				Limit  int    `json:"limit"`
 			}
 			if err := json.Unmarshal(input, &args); err != nil {
 				return fmt.Sprintf("Error: invalid input: %v", err), nil
 			}
 			if args.Path == "" {
 				return "Error: missing required parameter 'path'", nil
+			}
+			if args.Offset <= 0 {
+				args.Offset = 1
+			}
+			if args.Limit <= 0 {
+				args.Limit = DefaultReadLimit
 			}
 
 			absPath, pathErr := resolvePath(repoRoot, args.Path)
@@ -62,21 +80,34 @@ func NewReadFileTool(repoRoot string) Tool {
 				return fmt.Sprintf("Error: cannot read '%s': %s", args.Path, err), nil
 			}
 
-			truncated := false
 			if len(data) > MaxFileReadSize {
 				data = data[:MaxFileReadSize]
-				truncated = true
 			}
 
-			lines := strings.Split(string(data), "\n")
+			allLines := strings.Split(string(data), "\n")
+			totalLines := len(allLines)
+
+			startIdx := args.Offset - 1
+			if startIdx >= totalLines {
+				return fmt.Sprintf("Error: offset %d exceeds file length (%d lines)", args.Offset, totalLines), nil
+			}
+
+			endIdx := startIdx + args.Limit
+			if endIdx > totalLines {
+				endIdx = totalLines
+			}
+
+			lines := allLines[startIdx:endIdx]
+
 			var b strings.Builder
 			for i, line := range lines {
-				fmt.Fprintf(&b, "%d: %s\n", i+1, line)
+				fmt.Fprintf(&b, "%d: %s\n", startIdx+i+1, line)
 			}
 
 			result := b.String()
-			if truncated {
-				result += "\n[truncated — file exceeds 1MB, showing first 1MB]"
+
+			if startIdx > 0 || endIdx < totalLines {
+				result += fmt.Sprintf("\n[showing lines %d-%d of %d total]", args.Offset, startIdx+len(lines), totalLines)
 			}
 
 			return result, nil
