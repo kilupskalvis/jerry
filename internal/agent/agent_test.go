@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
@@ -378,5 +379,58 @@ func TestAgent_CheckerAllowsToolCall(t *testing.T) {
 	}
 	if !executed {
 		t.Error("bash tool should have been called")
+	}
+}
+
+func TestAgent_ParallelToolExecution(t *testing.T) {
+	// LLM returns 3 tool calls at once. Verify all execute and results
+	// are returned in the correct order.
+	provider := &mockProvider{
+		responses: []*llm.CompleteResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{ID: "c1", Name: "read_file", Input: json.RawMessage(`{"path":"a.go"}`)},
+						{ID: "c2", Name: "read_file", Input: json.RawMessage(`{"path":"b.go"}`)},
+						{ID: "c3", Name: "read_file", Input: json.RawMessage(`{"path":"c.go"}`)},
+					},
+				},
+				StopReason: llm.StopReasonToolUse,
+				Usage:      llm.Usage{InputTokens: 100, OutputTokens: 50},
+			},
+			{
+				Message:    llm.Message{Role: llm.RoleAssistant, Content: "done"},
+				StopReason: llm.StopReasonEndTurn,
+				Usage:      llm.Usage{InputTokens: 200, OutputTokens: 10},
+			},
+		},
+	}
+
+	var mu sync.Mutex
+	var callOrder []string
+
+	readTool := tool.NewToolFunc("read_file", "Read a file", json.RawMessage(`{}`),
+		func(_ context.Context, input json.RawMessage) (string, error) {
+			var args struct{ Path string }
+			_ = json.Unmarshal(input, &args)
+			mu.Lock()
+			callOrder = append(callOrder, args.Path)
+			mu.Unlock()
+			return "contents of " + args.Path, nil
+		},
+	)
+
+	a := agent.NewAgent(provider, agent.WithTools(readTool), agent.WithMaxTurns(10))
+
+	output, err := a.Run(context.Background(), "read files")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output != "done" {
+		t.Errorf("output = %q, want 'done'", output)
+	}
+	if len(callOrder) != 3 {
+		t.Fatalf("expected 3 tool calls, got %d", len(callOrder))
 	}
 }

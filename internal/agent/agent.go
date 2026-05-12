@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/permissions"
@@ -181,15 +182,17 @@ func (a *Agent) buildToolMap() map[string]tool.Tool {
 }
 
 func (a *Agent) executeTools(ctx context.Context, calls []llm.ToolCall, toolMap map[string]tool.Tool) []llm.ToolResult {
-	results := make([]llm.ToolResult, 0, len(calls))
-	for _, call := range calls {
+	results := make([]llm.ToolResult, len(calls))
+	var wg sync.WaitGroup
+
+	for i, call := range calls {
 		t, ok := toolMap[call.Name]
 		if !ok {
-			results = append(results, llm.ToolResult{
+			results[i] = llm.ToolResult{
 				CallID:  call.ID,
 				Content: fmt.Sprintf("unknown tool: %s", call.Name),
 				IsError: true,
-			})
+			}
 			a.logger.Warn("unknown tool requested", "tool", call.Name)
 			continue
 		}
@@ -198,49 +201,60 @@ func (a *Agent) executeTools(ctx context.Context, calls []llm.ToolCall, toolMap 
 			if denial := a.checker.Check(call.Name, call.Input); denial != nil {
 				msg := fmt.Sprintf("Permission denied: %q blocked by guardrail.\nDenied pattern: %q (source: %s)",
 					denial.Input, denial.Pattern, denial.Source)
-				results = append(results, llm.ToolResult{
+				results[i] = llm.ToolResult{
 					CallID:  call.ID,
 					Content: msg,
 					IsError: true,
-				})
-				if a.events != nil && a.events.OnToolResult != nil {
-					a.events.OnToolResult(call.Name, msg, true)
 				}
+				a.emitToolResult(call.Name, msg, true)
 				a.logger.Warn("tool call denied by guardrail",
 					"tool", call.Name, "pattern", denial.Pattern, "source", denial.Source)
 				continue
 			}
 		}
 
-		if a.onToolCall != nil {
-			a.onToolCall(call.Name)
-		}
-		if a.events != nil && a.events.OnToolCall != nil {
-			a.events.OnToolCall(call.Name, string(call.Input))
-		}
+		wg.Add(1)
+		go func(idx int, call llm.ToolCall, t tool.Tool) {
+			defer wg.Done()
 
-		output, err := t.Execute(ctx, call.Input)
-		if err != nil {
-			errMsg := fmt.Sprintf("tool execution failed: %v", err)
-			results = append(results, llm.ToolResult{
-				CallID:  call.ID,
-				Content: errMsg,
-				IsError: true,
-			})
-			if a.events != nil && a.events.OnToolResult != nil {
-				a.events.OnToolResult(call.Name, errMsg, true)
+			a.emitToolCall(call.Name, string(call.Input))
+
+			output, err := t.Execute(ctx, call.Input)
+			if err != nil {
+				errMsg := fmt.Sprintf("tool execution failed: %v", err)
+				results[idx] = llm.ToolResult{
+					CallID:  call.ID,
+					Content: errMsg,
+					IsError: true,
+				}
+				a.emitToolResult(call.Name, errMsg, true)
+				a.logger.Warn("tool execution failed", "tool", call.Name, "error", err)
+				return
 			}
-			a.logger.Warn("tool execution failed", "tool", call.Name, "error", err)
-			continue
-		}
 
-		if a.events != nil && a.events.OnToolResult != nil {
-			a.events.OnToolResult(call.Name, output, false)
-		}
-		results = append(results, llm.ToolResult{
-			CallID:  call.ID,
-			Content: output,
-		})
+			a.emitToolResult(call.Name, output, false)
+			results[idx] = llm.ToolResult{
+				CallID:  call.ID,
+				Content: output,
+			}
+		}(i, call, t)
 	}
+
+	wg.Wait()
 	return results
+}
+
+func (a *Agent) emitToolCall(name, args string) {
+	if a.onToolCall != nil {
+		a.onToolCall(name)
+	}
+	if a.events != nil && a.events.OnToolCall != nil {
+		a.events.OnToolCall(name, args)
+	}
+}
+
+func (a *Agent) emitToolResult(name, result string, isError bool) {
+	if a.events != nil && a.events.OnToolResult != nil {
+		a.events.OnToolResult(name, result, isError)
+	}
 }
