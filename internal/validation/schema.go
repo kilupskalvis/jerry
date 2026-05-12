@@ -1,7 +1,12 @@
 // Package validation provides deep schema checks for workflow and agent configs.
 package validation
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+
+	"github.com/kilupskalvis/jerry/internal/hooks"
+)
 
 // FieldError describes a schema validation problem.
 type FieldError struct {
@@ -49,7 +54,81 @@ func CheckWorkflowFields(raw map[string]any) []FieldError {
 		errs = append(errs, checkUnknownFields(stepMap, stepFields, fmt.Sprintf("step %d", i+1))...)
 	}
 
+	if hooksRaw, ok := raw["hooks"]; ok {
+		errs = append(errs, checkHooks(hooksRaw)...)
+	}
+
 	return errs
+}
+
+var toolEvents = map[string]bool{
+	hooks.BeforeToolCall: true,
+	hooks.AfterToolCall:  true,
+}
+
+func checkHooks(raw any) []FieldError {
+	hooksMap, ok := raw.(map[string]any)
+	if !ok {
+		return []FieldError{{
+			Field:   "hooks",
+			Message: "\"hooks\" must be a map of event names to hook lists",
+		}}
+	}
+
+	var errs []FieldError
+
+	for event, defs := range hooksMap {
+		if !isValidEvent(event) {
+			fe := FieldError{Field: event}
+			if suggestion := Suggest(event, hooks.ValidEvents); suggestion != "" {
+				fe.Suggestion = suggestion
+			} else {
+				fe.Message = fmt.Sprintf("unknown hook event %q", event)
+			}
+			errs = append(errs, fe)
+			continue
+		}
+
+		defList, ok := defs.([]any)
+		if !ok {
+			errs = append(errs, FieldError{
+				Field:   event,
+				Message: fmt.Sprintf("hooks.%s must be a list", event),
+			})
+			continue
+		}
+
+		for i, def := range defList {
+			defMap, ok := def.(map[string]any)
+			if !ok {
+				errs = append(errs, FieldError{
+					Field:   event,
+					Message: fmt.Sprintf("hooks.%s[%d] must be an object with \"run\" field", event, i),
+				})
+				continue
+			}
+
+			if _, hasRun := defMap["run"]; !hasRun {
+				errs = append(errs, FieldError{
+					Field:   event,
+					Message: fmt.Sprintf("hooks.%s[%d]: missing required field \"run\"", event, i),
+				})
+			}
+
+			if _, hasTools := defMap["tools"]; hasTools && !toolEvents[event] {
+				errs = append(errs, FieldError{
+					Field:   event,
+					Message: fmt.Sprintf("hooks.%s[%d]: \"tools\" filter is only valid on before_tool_call and after_tool_call", event, i),
+				})
+			}
+		}
+	}
+
+	return errs
+}
+
+func isValidEvent(event string) bool {
+	return slices.Contains(hooks.ValidEvents, event)
 }
 
 // CheckAgentFields validates agent frontmatter keys and types.

@@ -130,3 +130,73 @@ func TestCheckAgentFields_BadToolsType(t *testing.T) {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
 }
+
+func TestCheckWorkflowFields_ValidHooks(t *testing.T) {
+	t.Parallel()
+	raw := map[string]any{
+		"steps": []any{map[string]any{"agent": "reviewer"}},
+		"hooks": map[string]any{
+			"on_workflow_complete": []any{
+				map[string]any{"run": "echo done"},
+			},
+			"before_tool_call": []any{
+				map[string]any{"run": "echo tool", "tools": []any{"bash"}},
+			},
+		},
+	}
+	errs := validation.CheckWorkflowFields(raw)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+}
+
+func TestCheckWorkflowFields_UnknownHookEvent(t *testing.T) {
+	t.Parallel()
+	raw := map[string]any{
+		"steps": []any{map[string]any{"agent": "reviewer"}},
+		"hooks": map[string]any{
+			"on_step_comlete": []any{
+				map[string]any{"run": "echo done"},
+			},
+		},
+	}
+	errs := validation.CheckWorkflowFields(raw)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Suggestion != "on_step_complete" {
+		t.Errorf("expected suggestion for typo, got %+v", errs[0])
+	}
+}
+
+func TestCheckWorkflowFields_HookMissingRun(t *testing.T) {
+	t.Parallel()
+	raw := map[string]any{
+		"steps": []any{map[string]any{"agent": "reviewer"}},
+		"hooks": map[string]any{
+			"on_workflow_complete": []any{
+				map[string]any{"notrun": "echo hi"},
+			},
+		},
+	}
+	errs := validation.CheckWorkflowFields(raw)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestCheckWorkflowFields_ToolsOnNonToolEvent(t *testing.T) {
+	t.Parallel()
+	raw := map[string]any{
+		"steps": []any{map[string]any{"agent": "reviewer"}},
+		"hooks": map[string]any{
+			"on_workflow_complete": []any{
+				map[string]any{"run": "echo done", "tools": []any{"bash"}},
+			},
+		},
+	}
+	errs := validation.CheckWorkflowFields(raw)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
