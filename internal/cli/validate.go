@@ -12,7 +12,7 @@ import (
 
 // @lattice:flow validate
 func newValidateCmd(app *App) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "validate [workflow]",
 		Short: "Validate workflows and agent definitions",
 		Long:  "Validates workflow YAML and referenced agent definitions. Validates all workflows if none specified.",
@@ -40,6 +40,8 @@ func newValidateCmd(app *App) *cobra.Command {
 			return reportValidation(app, results)
 		},
 	}
+	cmd.Version = app.Version
+	return cmd
 }
 
 func validateWorkflow(loader *workflow.Loader, agentLoader *agent.Loader, name string) []string {
