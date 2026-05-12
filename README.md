@@ -11,6 +11,7 @@
 
 <p align="center">
 <b>The agent runtime for CI/CD.</b><br>
+Jerry is a Go CLI that lets you define AI agents as Markdown files and run them as steps in your existing CI/CD pipeline.<br>
 AI agents that live in your repo and run in your pipeline. Review PRs, implement features, scan for vulnerabilities — no new infrastructure.
 </p>
 
