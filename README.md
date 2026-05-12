@@ -207,15 +207,36 @@ go install github.com/kilupskalvis/jerry/cmd/jerry@latest                       
 | `ANTHROPIC_API_KEY` | Claude models |
 | `OPENAI_API_KEY` | GPT / O-series models |
 | `GITHUB_TOKEN` | CI tools (auto-provided in GitHub Actions) |
-| `JERRY_SECRET_*` | Passed to custom tools and shell steps |
+| `JERRY_DEFAULT_MODEL` | Fallback model when agents don't specify one |
+| `JERRY_SECRET_*` | Passed to custom tools, shell steps, and hooks |
+
+## Features
+
+- **Guardrails** — deny/allow rules in `settings.yaml` control what tools can do. Block dangerous commands, protect sensitive files. Per-project and per-agent. [→ Permissions](docs/configuration/permissions.md)
+- **Subagents** — agents can invoke other agents as tools at runtime. A triage agent delegates to specialists. [→ Tools](docs/configuration/tools.md#subagent-tools)
+- **Lifecycle hooks** — shell commands that fire on workflow, step, and tool events. Slack notifications, audit logging, downstream triggers. [→ Hooks](docs/configuration/hooks.md)
+- **Deep validation** — `jerry validate` catches typos with "did you mean?" suggestions, verifies tool references, checks types, validates hooks. [→ FAQ](docs/faq.md)
+- **Parallel tool execution** — multiple tool calls in one LLM turn execute concurrently.
+- **Prompt caching** — Anthropic prompt caching on system prompts and tool definitions. Automatic cost reduction.
 
 ## Documentation
 
-- [Agent Guide](docs/agent-guide.md) — writing agents, frontmatter reference, model selection
-- [Custom Tools](docs/custom-tools.md) — YAML format, parameters, examples
-- [CI Setup](docs/ci-setup.md) — GitHub Actions + GitLab CI detailed setup
-- [Triggers](docs/triggers.md) — trigger methods, fields, platform examples
-- [Jira Integration](docs/jira-integration.md) — full setup walkthrough
+### Configuration Reference
+
+- [Workflows](docs/configuration/workflows.md) — workflow.yaml format, steps, context flow
+- [Agents](docs/configuration/agents.md) — frontmatter fields, model selection, writing instructions
+- [Tools](docs/configuration/tools.md) — built-in tools, custom tools, subagent tools
+- [Permissions](docs/configuration/permissions.md) — deny/allow rules, glob patterns, resolution chain
+- [Hooks](docs/configuration/hooks.md) — lifecycle events, environment variables, examples
+
+### Guides
+
+- [CI Setup](docs/guides/ci-setup.md) — GitHub Actions + GitLab CI
+- [Triggers](docs/guides/triggers.md) — trigger methods, fields, platform examples
+- [Jira Integration](docs/guides/jira-integration.md) — full setup walkthrough
+
+### Other
+
 - [FAQ](docs/faq.md) — cost, safety, debugging, common questions
 
 ## License
