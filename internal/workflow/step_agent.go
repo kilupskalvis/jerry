@@ -10,6 +10,7 @@ import (
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/permissions"
 	"github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/tool"
 	"github.com/kilupskalvis/jerry/internal/trigger"
@@ -24,6 +25,8 @@ type AgentExecutor struct {
 	printer  *output.Printer
 	resolver *llm.ProviderResolver
 	store    *run.ContextStore
+
+	settingsPerms permissions.Permissions
 
 	ProviderOverride llm.Provider
 }
@@ -40,6 +43,11 @@ func NewAgentExecutor(loader *agent.Loader, registry *tool.Registry, printer *ou
 // SetStore sets the context store so agents can access trigger data.
 func (e *AgentExecutor) SetStore(store *run.ContextStore) {
 	e.store = store
+}
+
+// SetPermissions sets project-level permissions loaded from settings files.
+func (e *AgentExecutor) SetPermissions(perms permissions.Permissions) {
+	e.settingsPerms = perms
 }
 
 func (e *AgentExecutor) CanExecute(step Step) bool {
@@ -97,6 +105,12 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 		}
 	}
 
+	mergedPerms := e.settingsPerms.Merge(agentCfg.Permissions)
+	var checker permissions.Checker
+	if len(mergedPerms.Deny) > 0 || len(mergedPerms.Allow) > 0 {
+		checker = permissions.NewChecker(mergedPerms, "merged")
+	}
+
 	a := agent.NewAgent(provider,
 		agent.WithTools(resolvedTools...),
 		agent.WithModel(agentCfg.Model),
@@ -105,6 +119,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 		agent.WithTemperature(agentCfg.Temperature),
 		agent.WithLogger(slog.Default()),
 		agent.WithEventHandler(events),
+		agent.WithChecker(checker),
 	)
 
 	agentOutput, runErr := a.Run(ctx, "Begin your task.")

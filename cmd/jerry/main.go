@@ -17,6 +17,7 @@ import (
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/permissions"
 	jerryrun "github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/tool"
 	"github.com/kilupskalvis/jerry/internal/workflow"
@@ -102,7 +103,14 @@ func buildApp(printer *output.Printer) *cli.App {
 	resolver.SetKey("anthropic", envOrSecret("ANTHROPIC_API_KEY", secretEnv))
 	resolver.SetKey("openai", envOrSecret("OPENAI_API_KEY", secretEnv))
 
+	settingsPerms, settingsErr := permissions.LoadSettings(jerryDir)
+	if settingsErr != nil {
+		printer.Warning("failed to load settings: %s", settingsErr)
+		settingsPerms = permissions.Permissions{}
+	}
+
 	agentExec := workflow.NewAgentExecutor(agentLoader, toolRegistry, printer, resolver)
+	agentExec.SetPermissions(settingsPerms)
 
 	engine := workflow.NewEngine(
 		[]workflow.StepExecutor{agentExec, scriptExec},
@@ -121,6 +129,7 @@ func buildApp(printer *output.Printer) *cli.App {
 	app.Loader = loader
 	app.AgentLoader = agentLoader
 	app.StateStore = stateStore
+	app.JerryDir = jerryDir
 
 	return app
 }

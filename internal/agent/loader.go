@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/permissions"
+	"github.com/kilupskalvis/jerry/internal/tool"
 )
 
 // Loader parses agent markdown definition files into AgentConfig.
@@ -48,6 +50,23 @@ func (l *Loader) Load(path string) (*AgentConfig, error) {
 	return agentCfg, nil
 }
 
+// rawAgentConfig is the intermediate YAML representation.
+type rawAgentConfig struct {
+	Name          string            `yaml:"name"`
+	Model         string            `yaml:"model,omitempty"`
+	Temperature   *float64          `yaml:"temperature,omitempty"`
+	MaxIterations int               `yaml:"max_iterations,omitempty"`
+	Tools         []tool.ToolAccess `yaml:"tools,omitempty"`
+	Secrets       []string          `yaml:"secrets,omitempty"`
+	Provider      string            `yaml:"provider,omitempty"`
+	Permissions   rawPermissions    `yaml:"permissions,omitempty"`
+}
+
+type rawPermissions struct {
+	Deny  []map[string][]string `yaml:"deny,omitempty"`
+	Allow []map[string][]string `yaml:"allow,omitempty"`
+}
+
 // parse splits the markdown file into frontmatter and body, parses the
 // frontmatter YAML, applies defaults, and validates.
 func (l *Loader) parse(content string) (*AgentConfig, error) {
@@ -56,20 +75,30 @@ func (l *Loader) parse(content string) (*AgentConfig, error) {
 		return nil, err
 	}
 
-	var agentCfg AgentConfig
-	if yamlErr := yaml.Unmarshal([]byte(frontmatter), &agentCfg); yamlErr != nil {
+	var raw rawAgentConfig
+	if yamlErr := yaml.Unmarshal([]byte(frontmatter), &raw); yamlErr != nil {
 		return nil, fmt.Errorf("invalid frontmatter YAML: %w", yamlErr)
 	}
 
-	agentCfg.Instructions = strings.TrimSpace(body)
+	agentCfg := &AgentConfig{
+		Name:          raw.Name,
+		Model:         raw.Model,
+		Temperature:   raw.Temperature,
+		MaxIterations: raw.MaxIterations,
+		Tools:         raw.Tools,
+		Secrets:       raw.Secrets,
+		Provider:      raw.Provider,
+		Permissions:   permissions.ParseRawPermissions(raw.Permissions.Deny, raw.Permissions.Allow),
+		Instructions:  strings.TrimSpace(body),
+	}
 
-	l.applyDefaults(&agentCfg)
+	l.applyDefaults(agentCfg)
 
-	if validErr := l.validate(&agentCfg); validErr != nil {
+	if validErr := l.validate(agentCfg); validErr != nil {
 		return nil, validErr
 	}
 
-	return &agentCfg, nil
+	return agentCfg, nil
 }
 
 // splitFrontmatter separates YAML frontmatter from the markdown body.

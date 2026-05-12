@@ -11,6 +11,7 @@ import (
 	"log/slog"
 
 	"github.com/kilupskalvis/jerry/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/permissions"
 	"github.com/kilupskalvis/jerry/internal/tool"
 )
 
@@ -38,6 +39,7 @@ type Agent struct {
 	logger       *slog.Logger
 	onToolCall   func(toolName string)
 	events       *EventHandler
+	checker      permissions.Checker
 }
 
 // Option configures an Agent.
@@ -81,6 +83,11 @@ func WithOnToolCall(fn func(toolName string)) Option {
 // WithEventHandler sets detailed event callbacks for the agent loop.
 func WithEventHandler(h *EventHandler) Option {
 	return func(a *Agent) { a.events = h }
+}
+
+// WithChecker sets a permission checker for tool call enforcement.
+func WithChecker(c permissions.Checker) Option {
+	return func(a *Agent) { a.checker = c }
 }
 
 // NewAgent creates an Agent with the given provider and options.
@@ -185,6 +192,24 @@ func (a *Agent) executeTools(ctx context.Context, calls []llm.ToolCall, toolMap 
 			})
 			a.logger.Warn("unknown tool requested", "tool", call.Name)
 			continue
+		}
+
+		if a.checker != nil {
+			if denial := a.checker.Check(call.Name, call.Input); denial != nil {
+				msg := fmt.Sprintf("Permission denied: %q blocked by guardrail.\nDenied pattern: %q (source: %s)",
+					denial.Input, denial.Pattern, denial.Source)
+				results = append(results, llm.ToolResult{
+					CallID:  call.ID,
+					Content: msg,
+					IsError: true,
+				})
+				if a.events != nil && a.events.OnToolResult != nil {
+					a.events.OnToolResult(call.Name, msg, true)
+				}
+				a.logger.Warn("tool call denied by guardrail",
+					"tool", call.Name, "pattern", denial.Pattern, "source", denial.Source)
+				continue
+			}
 		}
 
 		if a.onToolCall != nil {

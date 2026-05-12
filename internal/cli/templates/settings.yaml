@@ -1,0 +1,10 @@
+# .jerry/settings.yaml — project-level tool permissions
+# Deny rules block tool calls matching these patterns (checked first).
+# Allow rules restrict tools to only matching patterns (checked second).
+# Patterns use glob syntax: * matches any segment, ** matches recursively.
+
+permissions:
+  deny:
+    - bash: ["rm -rf *", "rm -r /*", "chmod 777 *", "curl * | sh", "wget * | sh"]
+    - read_file: ["*.env", "*.pem", "*.key", "*.secret", "*credentials*"]
+    - write_file: ["*.env", "*.pem", "*.key", "*.secret", ".jerry/settings.yaml"]

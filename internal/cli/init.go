@@ -17,6 +17,7 @@ import (
 //go:embed templates/feature/workflow.yaml templates/feature/planner.md templates/feature/generator.md
 //go:embed templates/ci/github-review.yml templates/ci/github-feature.yml
 //go:embed templates/ci/gitlab-review.yml templates/ci/gitlab-feature.yml
+//go:embed templates/settings.yaml
 var embeddedTemplates embed.FS
 
 func newInitCmd() *cobra.Command {
@@ -71,6 +72,9 @@ func Scaffold(targetPath, template string) error {
 	}
 
 	if template == "review" {
+		if err := writeSettingsFile(jerryDir); err != nil {
+			return err
+		}
 		if err := writeGitignore(jerryDir); err != nil {
 			return err
 		}
@@ -198,12 +202,24 @@ func generateCITemplate(targetPath, platform, template string) error {
 	return fmt.Errorf("unknown CI platform %q (use github or gitlab)", platform)
 }
 
+func writeSettingsFile(jerryDir string) error {
+	settingsPath := filepath.Join(jerryDir, "settings.yaml")
+	if _, err := os.Stat(settingsPath); err == nil {
+		return nil
+	}
+	content, err := embeddedTemplates.ReadFile("templates/settings.yaml")
+	if err != nil {
+		return errors.Wrap(errors.CodeStateWriteFailed, "failed to read settings template", err)
+	}
+	return os.WriteFile(settingsPath, content, 0o644)
+}
+
 func writeGitignore(jerryDir string) error {
 	gitignorePath := filepath.Join(jerryDir, ".gitignore")
 	if _, err := os.Stat(gitignorePath); err == nil {
 		return nil
 	}
-	return os.WriteFile(gitignorePath, []byte("runs/\n"), 0o644)
+	return os.WriteFile(gitignorePath, []byte("runs/\nsettings.local.yaml\n"), 0o644)
 }
 
 func printInitOutput(template, jerryDir, ciPlatform string) {

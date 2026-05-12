@@ -113,6 +113,43 @@ func TestInitCmd_AlreadyExists(t *testing.T) {
 	}
 }
 
+func TestInitCmd_CreatesSettingsYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rootCmd := cli.NewRootCmd(&cli.App{})
+	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
+	_ = rootCmd.Execute()
+
+	settingsPath := filepath.Join(tmpDir, ".jerry", "settings.yaml")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("settings.yaml not created: %v", err)
+	}
+	if !strings.Contains(string(data), "permissions") {
+		t.Error("settings.yaml should contain permissions block")
+	}
+	if !strings.Contains(string(data), "rm -rf") {
+		t.Error("settings.yaml should contain default deny rules")
+	}
+}
+
+func TestInitCmd_GitignoreIncludesSettingsLocal(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rootCmd := cli.NewRootCmd(&cli.App{})
+	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
+	_ = rootCmd.Execute()
+
+	gitignorePath := filepath.Join(tmpDir, ".jerry", ".gitignore")
+	data, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf(".gitignore not created: %v", err)
+	}
+	if !strings.Contains(string(data), "settings.local.yaml") {
+		t.Error(".gitignore should include settings.local.yaml")
+	}
+}
+
 func TestInitCmd_WithPathFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 	targetDir := filepath.Join(tmpDir, "subdir")

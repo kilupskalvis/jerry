@@ -207,3 +207,68 @@ No model and no default.
 		t.Errorf("error should mention 'model', got: %v", err)
 	}
 }
+
+func TestLoad_WithPermissions(t *testing.T) {
+	dir := t.TempDir()
+	path := writeAgentFile(t, dir, "guarded.md", `---
+name: guarded-agent
+model: claude-sonnet-4-6
+tools:
+  - post_pr_comment
+permissions:
+  deny:
+    - write_file: ["**"]
+    - bash: ["git push *"]
+  allow:
+    - bash: ["go test *", "go build *"]
+---
+
+# Guarded Agent
+
+Read-only reviewer.
+`)
+
+	loader := agent.NewLoader("")
+	agentCfg, err := loader.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	bashDeny := agentCfg.Permissions.DenyFor("bash")
+	if len(bashDeny) != 1 || bashDeny[0] != "git push *" {
+		t.Errorf("bash deny = %v, want [git push *]", bashDeny)
+	}
+
+	writeDeny := agentCfg.Permissions.DenyFor("write_file")
+	if len(writeDeny) != 1 || writeDeny[0] != "**" {
+		t.Errorf("write_file deny = %v, want [**]", writeDeny)
+	}
+
+	bashAllow := agentCfg.Permissions.AllowFor("bash")
+	if len(bashAllow) != 2 {
+		t.Errorf("bash allow = %v, want 2 patterns", bashAllow)
+	}
+}
+
+func TestLoad_NoPermissions(t *testing.T) {
+	dir := t.TempDir()
+	path := writeAgentFile(t, dir, "simple.md", `---
+name: simple-agent
+model: claude-sonnet-4-6
+---
+
+# Simple Agent
+
+No permissions block.
+`)
+
+	loader := agent.NewLoader("")
+	agentCfg, err := loader.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(agentCfg.Permissions.Deny) != 0 || len(agentCfg.Permissions.Allow) != 0 {
+		t.Error("expected empty permissions")
+	}
+}

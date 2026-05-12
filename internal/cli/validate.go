@@ -7,6 +7,7 @@ import (
 
 	"github.com/kilupskalvis/jerry/internal/agent"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/permissions"
 	"github.com/kilupskalvis/jerry/internal/workflow"
 )
 
@@ -23,17 +24,24 @@ func newValidateCmd(app *App) *cobra.Command {
 					"not in a Jerry project (no .jerry/ directory found) — run 'jerry init' to initialize")
 			}
 
+			results := make(map[string][]string)
+
+			if app.JerryDir != "" {
+				if errs := validateSettings(app.JerryDir); len(errs) > 0 {
+					results["settings"] = errs
+				}
+			}
+
 			if len(args) == 1 {
-				errs := validateWorkflow(app.Loader, app.AgentLoader, args[0])
-				return reportValidation(app, map[string][]string{args[0]: errs})
+				results[args[0]] = validateWorkflow(app.Loader, app.AgentLoader, args[0])
+				return reportValidation(app, results)
 			}
 
 			names := app.Loader.ListWorkflows()
-			if len(names) == 0 {
+			if len(names) == 0 && len(results) == 0 {
 				return fmt.Errorf("no workflows found in .jerry/")
 			}
 
-			results := make(map[string][]string, len(names))
 			for _, name := range names {
 				results[name] = validateWorkflow(app.Loader, app.AgentLoader, name)
 			}
@@ -61,6 +69,14 @@ func validateAgents(agentLoader *agent.Loader, w *workflow.Workflow) []string {
 		}
 	}
 	return errs
+}
+
+func validateSettings(jerryDir string) []string {
+	_, err := permissions.LoadSettings(jerryDir)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	return nil
 }
 
 func reportValidation(app *App, results map[string][]string) error {

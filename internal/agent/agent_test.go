@@ -8,6 +8,7 @@ import (
 
 	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/llm"
+	"github.com/kilupskalvis/jerry/internal/permissions"
 	"github.com/kilupskalvis/jerry/internal/tool"
 )
 
@@ -258,4 +259,124 @@ type capturingProvider struct {
 func (m *capturingProvider) Complete(_ context.Context, params llm.CompleteParams) (*llm.CompleteResponse, error) {
 	*m.capturedSystem = params.SystemPrompt
 	return m.response, nil
+}
+
+type mockChecker struct {
+	deny map[string]string
+}
+
+func (m *mockChecker) Check(toolName string, input json.RawMessage) *permissions.Denial {
+	var args map[string]any
+	_ = json.Unmarshal(input, &args)
+
+	var matchInput string
+	switch toolName {
+	case "bash":
+		matchInput, _ = args["command"].(string)
+	case "read_file", "write_file":
+		matchInput, _ = args["path"].(string)
+	}
+
+	if pattern, ok := m.deny[matchInput]; ok {
+		return &permissions.Denial{
+			Tool:    toolName,
+			Input:   matchInput,
+			Pattern: pattern,
+			Source:  "test",
+		}
+	}
+	return nil
+}
+
+func TestAgent_CheckerBlocksToolCall(t *testing.T) {
+	provider := &mockProvider{
+		responses: []*llm.CompleteResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{ID: "call_1", Name: "bash", Input: json.RawMessage(`{"command":"rm -rf /"}`)},
+					},
+				},
+				StopReason: llm.StopReasonToolUse,
+				Usage:      llm.Usage{InputTokens: 100, OutputTokens: 50},
+			},
+			{
+				Message:    llm.Message{Role: llm.RoleAssistant, Content: "understood, skipping delete"},
+				StopReason: llm.StopReasonEndTurn,
+				Usage:      llm.Usage{InputTokens: 100, OutputTokens: 20},
+			},
+		},
+	}
+
+	bashTool := tool.NewToolFunc("bash", "Run command", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) {
+			t.Fatal("bash tool should not have been called")
+			return "", nil
+		},
+	)
+
+	checker := &mockChecker{
+		deny: map[string]string{"rm -rf /": "rm *"},
+	}
+
+	a := agent.NewAgent(provider,
+		agent.WithTools(bashTool),
+		agent.WithMaxTurns(10),
+		agent.WithChecker(checker),
+	)
+
+	output, err := a.Run(context.Background(), "delete everything")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output != "understood, skipping delete" {
+		t.Errorf("output = %q, want 'understood, skipping delete'", output)
+	}
+}
+
+func TestAgent_CheckerAllowsToolCall(t *testing.T) {
+	provider := &mockProvider{
+		responses: []*llm.CompleteResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{ID: "call_1", Name: "bash", Input: json.RawMessage(`{"command":"go test ./..."}`)},
+					},
+				},
+				StopReason: llm.StopReasonToolUse,
+				Usage:      llm.Usage{InputTokens: 100, OutputTokens: 50},
+			},
+			{
+				Message:    llm.Message{Role: llm.RoleAssistant, Content: "tests passed"},
+				StopReason: llm.StopReasonEndTurn,
+				Usage:      llm.Usage{InputTokens: 100, OutputTokens: 20},
+			},
+		},
+	}
+
+	var executed bool
+	bashTool := tool.NewToolFunc("bash", "Run command", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) {
+			executed = true
+			return "PASS", nil
+		},
+	)
+
+	checker := &mockChecker{}
+
+	a := agent.NewAgent(provider,
+		agent.WithTools(bashTool),
+		agent.WithMaxTurns(10),
+		agent.WithChecker(checker),
+	)
+
+	_, err := a.Run(context.Background(), "run tests")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !executed {
+		t.Error("bash tool should have been called")
+	}
 }

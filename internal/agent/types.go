@@ -2,7 +2,10 @@
 
 package agent
 
-import "github.com/kilupskalvis/jerry/internal/tool"
+import (
+	"github.com/kilupskalvis/jerry/internal/permissions"
+	"github.com/kilupskalvis/jerry/internal/tool"
+)
 
 const (
 	DefaultTemperature   = 0.0
@@ -19,6 +22,7 @@ type AgentConfig struct {
 	Secrets       []string          `yaml:"secrets,omitempty"`
 	Provider      string            `yaml:"provider,omitempty"`
 
-	Instructions string `yaml:"-"`
-	SourcePath   string `yaml:"-"`
+	Permissions  permissions.Permissions `yaml:"-"`
+	Instructions string                  `yaml:"-"`
+	SourcePath   string                  `yaml:"-"`
 }

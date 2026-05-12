@@ -19,6 +19,7 @@ type App struct {
 	AgentLoader *agent.Loader
 	StateStore  run.StateStore
 	Printer     *output.Printer
+	JerryDir    string
 }
 
 // NewRootCmd creates the root cobra command with all subcommands.

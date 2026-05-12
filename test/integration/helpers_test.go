@@ -16,6 +16,7 @@ import (
 	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
+	"github.com/kilupskalvis/jerry/internal/permissions"
 	"github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/tool"
 	"github.com/kilupskalvis/jerry/internal/trigger"
@@ -195,6 +196,15 @@ func (e *testEnv) withLLMResponses(responses ...llm.CompleteResponse) *testEnv {
 	return e
 }
 
+func (e *testEnv) withSettings(content string) *testEnv {
+	e.t.Helper()
+	settingsPath := filepath.Join(e.jerryDir, "settings.yaml")
+	if err := os.WriteFile(settingsPath, []byte(content), 0o644); err != nil {
+		e.t.Fatalf("write settings.yaml: %v", err)
+	}
+	return e
+}
+
 func (e *testEnv) withGitHubAPI() *testEnv {
 	e.t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -244,8 +254,11 @@ func (e *testEnv) run() testResult {
 		reg.SetGitHubConfig(e.githubURL, e.githubToken)
 	}
 
+	settingsPerms, _ := permissions.LoadSettings(e.jerryDir)
+
 	agentExec := workflow.NewAgentExecutor(agentLoader, reg, printer, resolver)
 	agentExec.ProviderOverride = e.provider
+	agentExec.SetPermissions(settingsPerms)
 	scriptExec := workflow.NewScriptExecutor(e.repoRoot, nil)
 
 	engine := workflow.NewEngine(
