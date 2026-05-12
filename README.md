@@ -221,13 +221,17 @@ go install github.com/kilupskalvis/jerry/cmd/jerry@latest                       
 
 ## Documentation
 
+### Getting Started
+
+- [Getting Started](docs/guides/getting-started.md) — install, first workflow, 5-minute walkthrough
+
 ### Configuration Reference
 
-- [Workflows](docs/configuration/workflows.md) — workflow.yaml format, steps, context flow
-- [Agents](docs/configuration/agents.md) — frontmatter fields, model selection, writing instructions
-- [Tools](docs/configuration/tools.md) — built-in tools, custom tools, subagent tools
+- [Workflows](docs/configuration/workflows.md) — workflow.yaml format, steps, context flow, state, resume
+- [Agents](docs/configuration/agents.md) — frontmatter fields, model selection, agent loop, writing instructions
+- [Tools](docs/configuration/tools.md) — built-in tools, custom tools, subagent tools, resolution order
 - [Permissions](docs/configuration/permissions.md) — deny/allow rules, glob patterns, resolution chain
-- [Hooks](docs/configuration/hooks.md) — lifecycle events, environment variables, examples
+- [Hooks](docs/configuration/hooks.md) — lifecycle events, environment variables, tool filters, examples
 
 ### Guides
 
@@ -235,8 +239,11 @@ go install github.com/kilupskalvis/jerry/cmd/jerry@latest                       
 - [Triggers](docs/guides/triggers.md) — trigger methods, fields, platform examples
 - [Jira Integration](docs/guides/jira-integration.md) — full setup walkthrough
 
-### Other
+### Reference
 
+- [CLI Reference](docs/reference/cli.md) — every command, every flag, exit codes
+- [Environment Variables](docs/reference/environment.md) — API keys, secrets, script vars, hook vars
+- [Error Reference](docs/reference/errors.md) — every error code, causes, fixes
 - [FAQ](docs/faq.md) — cost, safety, debugging, common questions
 
 ## License

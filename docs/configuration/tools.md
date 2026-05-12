@@ -48,14 +48,7 @@ Write content to a file. Creates parent directories automatically.
 
 ### CI Tools
 
-Declare in `tools:` to use. Require `GITHUB_TOKEN` (GitHub) or `GITLAB_TOKEN` (GitLab).
-
-| Tool | Parameters | Description |
-|------|-----------|-------------|
-| `post_pr_comment` | `body` | Post a comment on the triggering PR/MR |
-| `post_review_comment` | `path`, `line`, `body` | Post an inline review comment |
-| `add_check_status` | `name`, `status`, `summary` | Report a check result |
-| `create_pull_request` | `title`, `body`, `branch` | Create a branch, commit, open a PR |
+Declare in `tools:` to use. Require `GITHUB_TOKEN` in the environment. These tools use the trigger's data to determine the target repository and PR number — they require a CI trigger (not a manual CLI trigger) to function.
 
 ```yaml
 tools:
@@ -63,7 +56,64 @@ tools:
   - create_pull_request
 ```
 
-CI tools use the trigger's data to determine the target repository and PR number. They require a CI trigger (not a manual CLI trigger) to function.
+#### post_pr_comment
+
+Post a comment on the triggering pull request or issue.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `body` | string | yes | Comment body. Supports GitHub-flavored Markdown. |
+
+Returns: `"Comment posted on #42"`
+
+#### post_review_comment
+
+Post an inline review comment on a specific file and line in the PR diff.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Relative file path to comment on |
+| `line` | int | yes | Line number in the diff to attach the comment to |
+| `body` | string | yes | Comment body. Supports GitHub-flavored Markdown. |
+
+Returns: `"Review comment posted on path/to/file.go:42"`
+
+#### add_check_status
+
+Report a status check result on the triggering commit.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | yes | Check name (e.g., "Jerry Security Scan") |
+| `status` | string | yes | Result: `success` or `failure` |
+| `summary` | string | yes | Summary of the check results |
+
+Returns: `"Check 'Jerry Security Scan' reported as success"`
+
+#### create_pull_request
+
+Create a git branch, commit all staged changes, push, and open a pull request.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `title` | string | yes | — | Pull request title |
+| `body` | string | no | — | PR description. Supports Markdown. |
+| `branch` | string | no | `jerry/<sanitized-title>` | Branch name |
+
+Returns: `"Pull request #7 created: https://github.com/org/repo/pull/7"`
+
+This tool:
+1. Creates a new branch from the current HEAD
+2. Stages all changes (`git add -A`)
+3. Commits with the PR title as the message
+4. Pushes to the remote
+5. Opens a PR via the GitHub API
+
+If there are no changes to commit, it returns an error. The agent typically calls `write_file` or `bash` to make changes before calling this tool.
+
+#### Manual trigger behavior
+
+When no trigger data is available (manual CLI triggers), CI tools return an error explaining they need platform context. Agents should handle this gracefully — falling back to printing findings to stdout.
 
 ## Custom Tools
 
