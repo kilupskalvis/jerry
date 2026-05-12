@@ -14,12 +14,15 @@ import (
 // App holds the dependencies needed by CLI commands.
 // Constructed in main.go and passed to subcommand builders.
 type App struct {
-	Engine      *workflow.Engine
-	Loader      *workflow.Loader
-	AgentLoader *agent.Loader
-	StateStore  run.StateStore
-	Printer     *output.Printer
-	JerryDir    string
+	Engine        *workflow.Engine
+	Loader        *workflow.Loader
+	AgentLoader   *agent.Loader
+	AgentExecutor *workflow.AgentExecutor
+	StateStore    run.StateStore
+	Printer       *output.Printer
+	JerryDir      string
+	RepoRoot      string
+	SecretEnv     []string
 }
 
 // NewRootCmd creates the root cobra command with all subcommands.

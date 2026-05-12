@@ -6,12 +6,15 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/kilupskalvis/jerry/internal/hooks"
 )
 
 // Workflow represents a parsed workflow.yaml file.
 type Workflow struct {
-	Description string `yaml:"description,omitempty"`
-	Steps       []Step `yaml:"steps"`
+	Description string      `yaml:"description,omitempty"`
+	Steps       []Step      `yaml:"steps"`
+	Hooks       hooks.Hooks `yaml:"hooks,omitempty"`
 
 	// Set by the loader, not from YAML.
 	Name       string `yaml:"-"`

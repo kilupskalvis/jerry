@@ -17,7 +17,7 @@ func (e FieldError) Error() string {
 	return e.Message
 }
 
-var workflowFields = []string{"steps", "description"}
+var workflowFields = []string{"steps", "description", "hooks"}
 
 var stepFields = []string{"name", "agent", "run", "retries", "timeout"}
 

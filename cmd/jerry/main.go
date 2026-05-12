@@ -128,8 +128,11 @@ func buildApp(printer *output.Printer) *cli.App {
 	app.Engine = engine
 	app.Loader = loader
 	app.AgentLoader = agentLoader
+	app.AgentExecutor = agentExec
 	app.StateStore = stateStore
 	app.JerryDir = jerryDir
+	app.RepoRoot = repoRoot
+	app.SecretEnv = envSliceFromMap(secretEnv)
 
 	return app
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/hooks"
 	"github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/trigger"
 	"github.com/kilupskalvis/jerry/internal/workflow"
@@ -130,6 +131,18 @@ func runWorkflow(ctx context.Context, app *App, workflowName string, triggerData
 	if app.AgentLoader != nil {
 		if errs := validateAgents(app.AgentLoader, workflowDef); len(errs) > 0 {
 			return fmt.Errorf("pre-flight validation failed: %s", errs[0])
+		}
+	}
+
+	if len(workflowDef.Hooks) > 0 && app.RepoRoot != "" {
+		hookRunner := hooks.NewRunner(workflowDef.Hooks, app.RepoRoot, app.SecretEnv)
+		hookRunner.SetBaseEnv(map[string]string{
+			"JERRY_HOOK_EVENT":    "",
+			"JERRY_HOOK_WORKFLOW": workflowName,
+		})
+		app.Engine.SetHookRunner(hookRunner)
+		if app.AgentExecutor != nil {
+			app.AgentExecutor.SetHookRunner(hookRunner)
 		}
 	}
 

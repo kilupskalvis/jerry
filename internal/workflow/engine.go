@@ -8,6 +8,7 @@ import (
 	"time"
 
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/hooks"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/run"
 	"github.com/kilupskalvis/jerry/internal/trigger"
@@ -24,10 +25,16 @@ type Engine struct {
 	stateStore     run.StateStore
 	printer        *output.Printer
 	defaultTimeout time.Duration
+	hookRunner     *hooks.Runner
 
 	// OnStoreCreated is called when a new context store is created,
 	// allowing executors to receive a reference to the store.
 	OnStoreCreated func(*run.ContextStore)
+}
+
+// SetHookRunner sets the hook runner for lifecycle events.
+func (e *Engine) SetHookRunner(r *hooks.Runner) {
+	e.hookRunner = r
 }
 
 func NewEngine(executors []StepExecutor, stateStore run.StateStore, printer *output.Printer, defaultTimeout time.Duration) *Engine {
@@ -84,6 +91,11 @@ func (e *Engine) Run(ctx context.Context, workflowDef Workflow, triggerData trig
 
 	e.printer.Info("Running workflow: %s (%d steps)", workflowDef.Name, len(workflowDef.Steps))
 
+	e.fireHook(hooks.OnWorkflowStart, map[string]string{
+		"JERRY_HOOK_TRIGGER_TYPE":   triggerData.Type,
+		"JERRY_HOOK_TRIGGER_INTENT": triggerData.Intent,
+	})
+
 	execErr := e.runSteps(ctx, workflowDef.Steps, 0, ctxStore, &runState, logWriter)
 
 	if runState.Status == run.StatusRunning {
@@ -93,6 +105,30 @@ func (e *Engine) Run(ctx context.Context, workflowDef Workflow, triggerData trig
 		runState.Context = ctxStore.Snapshot()
 		_ = e.stateStore.SaveFinal(runState)
 		e.printer.WorkflowComplete(time.Since(startTime), runID, totalTokens(runState.StepResults))
+
+		e.fireHook(hooks.OnWorkflowComplete, map[string]string{
+			"JERRY_HOOK_STATUS":         "completed",
+			"JERRY_HOOK_DURATION_MS":    fmt.Sprintf("%d", time.Since(startTime).Milliseconds()),
+			"JERRY_HOOK_TRIGGER_TYPE":   triggerData.Type,
+			"JERRY_HOOK_TRIGGER_INTENT": triggerData.Intent,
+		})
+	}
+
+	if execErr != nil {
+		failedStep := ""
+		for _, r := range runState.StepResults {
+			if r.Status == run.StepFailed {
+				failedStep = r.Name
+			}
+		}
+		e.fireHook(hooks.OnWorkflowFailure, map[string]string{
+			"JERRY_HOOK_STATUS":         "failed",
+			"JERRY_HOOK_DURATION_MS":    fmt.Sprintf("%d", time.Since(startTime).Milliseconds()),
+			"JERRY_HOOK_ERROR":          execErr.Error(),
+			"JERRY_HOOK_FAILED_STEP":    failedStep,
+			"JERRY_HOOK_TRIGGER_TYPE":   triggerData.Type,
+			"JERRY_HOOK_TRIGGER_INTENT": triggerData.Intent,
+		})
 	}
 
 	e.logWorkflowEnd(logWriter, &runState, startTime)
@@ -165,6 +201,9 @@ func (e *Engine) runSteps(
 			continue
 		}
 
+		e.fireHook(hooks.OnStepStart, map[string]string{
+			"JERRY_HOOK_STEP_NAME": step.Name,
+		})
 		e.printer.StepStart(step.Name)
 		logWriter.Log(run.LogStepStart, step.Name, run.StepStartData{
 			Type: stepType(step), AgentFile: step.Agent,
@@ -199,6 +238,12 @@ func (e *Engine) runSteps(
 			logWriter.Log(run.LogStepEnd, step.Name, run.StepEndData{
 				Status: "failed", DurationMs: stepDuration.Milliseconds(),
 			})
+			e.fireHook(hooks.OnStepFailure, map[string]string{
+				"JERRY_HOOK_STEP_NAME":   step.Name,
+				"JERRY_HOOK_STEP_STATUS": "failed",
+				"JERRY_HOOK_DURATION_MS": fmt.Sprintf("%d", stepDuration.Milliseconds()),
+				"JERRY_HOOK_ERROR":       execErr.Error(),
+			})
 			e.printer.WorkflowFailed(step.Name, execErr.Error())
 
 			return execErr
@@ -224,6 +269,11 @@ func (e *Engine) runSteps(
 		e.printer.StepSuccess(step.Name, stepDuration, 0, 0, 0, 0)
 		logWriter.Log(run.LogStepEnd, step.Name, run.StepEndData{
 			Status: "success", DurationMs: stepDuration.Milliseconds(),
+		})
+		e.fireHook(hooks.OnStepComplete, map[string]string{
+			"JERRY_HOOK_STEP_NAME":   step.Name,
+			"JERRY_HOOK_STEP_STATUS": "success",
+			"JERRY_HOOK_DURATION_MS": fmt.Sprintf("%d", stepDuration.Milliseconds()),
 		})
 	}
 
@@ -292,6 +342,12 @@ func (e *Engine) logWorkflowEnd(lw *run.LogWriter, runState *run.RunState, start
 		StepsFailed:    failed,
 		StepsSkipped:   skipped,
 	})
+}
+
+func (e *Engine) fireHook(event string, env map[string]string) {
+	if e.hookRunner != nil {
+		e.hookRunner.Fire(event, env)
+	}
 }
 
 func (e *Engine) findExecutor(step Step) StepExecutor {

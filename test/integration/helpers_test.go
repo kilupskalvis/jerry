@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
+	"github.com/kilupskalvis/jerry/internal/hooks"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/permissions"
@@ -277,6 +278,15 @@ func (e *testEnv) run() testResult {
 	wf, err := loader.Load(e.wfName)
 	if err != nil {
 		e.t.Fatalf("load workflow %q: %v", e.wfName, err)
+	}
+
+	if len(wf.Hooks) > 0 {
+		hookRunner := hooks.NewRunner(wf.Hooks, e.repoRoot, nil)
+		hookRunner.SetBaseEnv(map[string]string{
+			"JERRY_HOOK_WORKFLOW": e.wfName,
+		})
+		engine.SetHookRunner(hookRunner)
+		agentExec.SetHookRunner(hookRunner)
 	}
 
 	td := trigger.TriggerData{Type: "manual", Source: "cli"}

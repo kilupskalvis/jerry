@@ -11,6 +11,7 @@ import (
 
 	"github.com/kilupskalvis/jerry/internal/agent"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/hooks"
 	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/permissions"
@@ -30,6 +31,7 @@ type AgentExecutor struct {
 	store    *run.ContextStore
 
 	settingsPerms permissions.Permissions
+	hookRunner    *hooks.Runner
 
 	ProviderOverride llm.Provider
 }
@@ -51,6 +53,11 @@ func (e *AgentExecutor) SetStore(store *run.ContextStore) {
 // SetPermissions sets project-level permissions loaded from settings files.
 func (e *AgentExecutor) SetPermissions(perms permissions.Permissions) {
 	e.settingsPerms = perms
+}
+
+// SetHookRunner sets the hook runner for tool-level lifecycle hooks.
+func (e *AgentExecutor) SetHookRunner(r *hooks.Runner) {
+	e.hookRunner = r
 }
 
 // Registry returns the tool registry for external agent-tool loading.
@@ -105,9 +112,24 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 			},
 			OnToolCall: func(name, args string) {
 				e.printer.ToolCallVerbose(name, args)
+				if e.hookRunner != nil {
+					e.hookRunner.Fire(hooks.BeforeToolCall, map[string]string{
+						"JERRY_HOOK_STEP_NAME":  step.Name,
+						"JERRY_HOOK_TOOL_NAME":  name,
+						"JERRY_HOOK_TOOL_INPUT": args,
+					})
+				}
 			},
 			OnToolResult: func(name, result string, isError bool) {
 				e.printer.ToolResult(name, result, isError)
+				if e.hookRunner != nil {
+					e.hookRunner.Fire(hooks.AfterToolCall, map[string]string{
+						"JERRY_HOOK_STEP_NAME":     step.Name,
+						"JERRY_HOOK_TOOL_NAME":     name,
+						"JERRY_HOOK_TOOL_OUTPUT":   result,
+						"JERRY_HOOK_TOOL_IS_ERROR": fmt.Sprintf("%v", isError),
+					})
+				}
 			},
 			OnResponse: func(text string) {
 				e.printer.AgentResponse(text)
