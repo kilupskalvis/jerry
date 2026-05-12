@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kilupskalvis/jerry/internal/agent"
@@ -50,6 +53,11 @@ func (e *AgentExecutor) SetPermissions(perms permissions.Permissions) {
 	e.settingsPerms = perms
 }
 
+// Registry returns the tool registry for external agent-tool loading.
+func (e *AgentExecutor) Registry() *tool.Registry {
+	return e.registry
+}
+
 func (e *AgentExecutor) CanExecute(step Step) bool {
 	return step.Agent != ""
 }
@@ -71,6 +79,8 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 				fmt.Sprintf("agent %q", agentCfg.Name), provErr)
 		}
 	}
+
+	e.loadAgentTools(step.Agent, provider)
 
 	resolvedTools := e.registry.BaseTools()
 	optInTools, resolveErr := e.registry.Resolve(agentCfg.Tools)
@@ -132,6 +142,94 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 		Data:     agentOutput,
 		Duration: time.Since(start),
 	}, nil
+}
+
+// loadAgentTools discovers sibling .md files in the workflow directory and registers
+// them as agent-tools. Subagents get built-in + CI + custom tools only (no recursion).
+func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Provider) {
+	e.registry.ClearAgentTools()
+	workflowDir := filepath.Dir(agentPath)
+
+	entries, err := os.ReadDir(workflowDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+
+		path := filepath.Join(workflowDir, entry.Name())
+		subCfg, loadErr := e.loader.Load(path)
+		if loadErr != nil {
+			continue
+		}
+
+		subProvider := parentProvider
+		if e.ProviderOverride == nil && subCfg.Model != "" {
+			if resolved, err := e.resolver.ForModel(subCfg.Model, subCfg.Provider); err == nil {
+				subProvider = resolved
+			}
+		}
+
+		var triggerData *trigger.TriggerData
+		if e.store != nil {
+			t := e.store.Trigger()
+			triggerData = &t
+		}
+
+		subTools := e.registry.BaseTools()
+		subOptIn, _ := e.registry.Resolve(subCfg.Tools)
+		subTools = append(subTools, subOptIn...)
+
+		mergedPerms := e.settingsPerms.Merge(subCfg.Permissions)
+		finalProvider := subProvider
+
+		runFunc := func(ctx context.Context, task string) (string, error) {
+			systemPrompt := subCfg.Instructions
+			if triggerData != nil && triggerData.Type != "" {
+				systemPrompt = buildTriggerPrefix(triggerData) + systemPrompt
+			}
+
+			var checker permissions.Checker
+			if len(mergedPerms.Deny) > 0 || len(mergedPerms.Allow) > 0 {
+				checker = permissions.NewChecker(mergedPerms, "subagent:"+subCfg.Name)
+			}
+
+			a := agent.NewAgent(finalProvider,
+				agent.WithTools(subTools...),
+				agent.WithModel(subCfg.Model),
+				agent.WithSystemPrompt(systemPrompt),
+				agent.WithMaxTurns(subCfg.MaxIterations),
+				agent.WithTemperature(subCfg.Temperature),
+				agent.WithLogger(slog.Default()),
+				agent.WithChecker(checker),
+			)
+			return a.Run(ctx, task)
+		}
+
+		e.registry.RegisterAgentTool(
+			tool.NewAgentTool(subCfg.Name, subCfg.Instructions, runFunc),
+		)
+	}
+}
+
+func buildTriggerPrefix(td *trigger.TriggerData) string {
+	prompt := "## Trigger\n\n"
+	prompt += "Type: " + td.Type + "\n"
+	prompt += "Source: " + td.Source + "\n"
+	if td.Intent != "" {
+		prompt += "Intent: " + td.Intent + "\n"
+	}
+	if td.URL != "" {
+		prompt += "URL: " + td.URL + "\n"
+	}
+	if td.Author != "" {
+		prompt += "Author: " + td.Author + "\n"
+	}
+	prompt += "\n---\n\n"
+	return prompt
 }
 
 func buildSystemPrompt(instructions string, triggerData *trigger.TriggerData, prevOutputs []StepOutput) string {

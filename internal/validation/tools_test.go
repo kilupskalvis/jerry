@@ -10,7 +10,7 @@ import (
 
 func TestCheckTools_AllBuiltIn(t *testing.T) {
 	t.Parallel()
-	errs := validation.CheckTools([]string{"bash", "read_file", "write_file"}, "")
+	errs := validation.CheckTools([]string{"bash", "read_file", "write_file"}, "", "")
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got %v", errs)
 	}
@@ -18,7 +18,7 @@ func TestCheckTools_AllBuiltIn(t *testing.T) {
 
 func TestCheckTools_CITools(t *testing.T) {
 	t.Parallel()
-	errs := validation.CheckTools([]string{"post_pr_comment", "create_pull_request"}, "")
+	errs := validation.CheckTools([]string{"post_pr_comment", "create_pull_request"}, "", "")
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got %v", errs)
 	}
@@ -26,7 +26,7 @@ func TestCheckTools_CITools(t *testing.T) {
 
 func TestCheckTools_UnknownTool(t *testing.T) {
 	t.Parallel()
-	errs := validation.CheckTools([]string{"bash", "deploy"}, "")
+	errs := validation.CheckTools([]string{"bash", "deploy"}, "", "")
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -41,7 +41,7 @@ func TestCheckTools_CustomToolExists(t *testing.T) {
 	os.MkdirAll(toolsDir, 0o755)
 	os.WriteFile(filepath.Join(toolsDir, "deploy.yaml"), []byte("description: Deploy\nrun: echo deploy\n"), 0o644)
 
-	errs := validation.CheckTools([]string{"deploy"}, toolsDir)
+	errs := validation.CheckTools([]string{"deploy"}, toolsDir, "")
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got %v", errs)
 	}
@@ -96,5 +96,24 @@ func TestCheckCustomTools_NoDir(t *testing.T) {
 	errs := validation.CheckCustomTools(filepath.Join(t.TempDir(), "nonexistent"))
 	if len(errs) != 0 {
 		t.Errorf("missing dir should return no errors, got %v", errs)
+	}
+}
+
+func TestCheckTools_AgentToolExists(t *testing.T) {
+	t.Parallel()
+	wfDir := t.TempDir()
+	os.WriteFile(filepath.Join(wfDir, "scanner.md"), []byte("---\nname: scanner\nmodel: claude-sonnet-4-6\n---\nScan.\n"), 0o644)
+
+	errs := validation.CheckTools([]string{"scanner"}, "", wfDir)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+}
+
+func TestCheckTools_AgentToolNotFound(t *testing.T) {
+	t.Parallel()
+	errs := validation.CheckTools([]string{"nonexistent_agent"}, "", t.TempDir())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
 }

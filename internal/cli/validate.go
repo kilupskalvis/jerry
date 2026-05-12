@@ -94,7 +94,8 @@ func validateWorkflowDeep(app *App, name string) []string {
 		for i, ta := range agentCfg.Tools {
 			toolNames[i] = ta.Name
 		}
-		for _, te := range validation.CheckTools(toolNames, toolsDir) {
+		workflowDir := filepath.Join(app.JerryDir, name)
+		for _, te := range validation.CheckTools(toolNames, toolsDir, workflowDir) {
 			errs = append(errs, fmt.Sprintf("step %q: %s", step.Name, te.Error()))
 		}
 	}

@@ -36,9 +36,10 @@ var validParamTypes = map[string]bool{
 	"string": true, "integer": true, "number": true, "boolean": true,
 }
 
-// CheckTools verifies that each tool name resolves to a built-in or custom tool.
-func CheckTools(tools []string, toolsDir string) []ToolError {
+// CheckTools verifies that each tool name resolves to a built-in, custom, or agent tool.
+func CheckTools(tools []string, toolsDir, workflowDir string) []ToolError {
 	customTools := discoverCustomToolNames(toolsDir)
+	agentToolNames := discoverAgentToolNames(workflowDir)
 
 	var errs []ToolError
 	for _, name := range tools {
@@ -48,12 +49,18 @@ func CheckTools(tools []string, toolsDir string) []ToolError {
 		if customTools[name] {
 			continue
 		}
+		if agentToolNames[name] {
+			continue
+		}
 
-		available := make([]string, 0, len(ciTools)+len(customTools))
+		available := make([]string, 0, len(ciTools)+len(customTools)+len(agentToolNames))
 		for k := range ciTools {
 			available = append(available, k)
 		}
 		for k := range customTools {
+			available = append(available, k)
+		}
+		for k := range agentToolNames {
 			available = append(available, k)
 		}
 
@@ -64,6 +71,20 @@ func CheckTools(tools []string, toolsDir string) []ToolError {
 	}
 
 	return errs
+}
+
+func discoverAgentToolNames(workflowDir string) map[string]bool {
+	names := make(map[string]bool)
+	entries, err := os.ReadDir(workflowDir)
+	if err != nil {
+		return names
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
+			names[strings.TrimSuffix(entry.Name(), ".md")] = true
+		}
+	}
+	return names
 }
 
 // CheckCustomTools validates all .yaml files in the tools directory.

@@ -12,11 +12,12 @@ type githubCfg struct {
 	Token   string
 }
 
-// Registry manages built-in, CI, and custom tools.
+// Registry manages built-in, CI, custom, and agent tools.
 type Registry struct {
 	baseTools  []Tool
 	ciTools    map[string]Tool
 	custom     map[string]Tool
+	agents     map[string]Tool
 	triggerRef *trigger.TriggerData
 	ghCfg      *githubCfg
 }
@@ -31,6 +32,7 @@ func NewRegistry(repoRoot string, secretEnv map[string]string) *Registry {
 	r := &Registry{
 		ciTools: make(map[string]Tool),
 		custom:  make(map[string]Tool),
+		agents:  make(map[string]Tool),
 		ghCfg:   &githubCfg{},
 	}
 
@@ -76,6 +78,16 @@ func (r *Registry) LoadCustomTools(toolsDir, repoRoot string, secretEnv []string
 	return nil
 }
 
+// RegisterAgentTool registers an agent as a callable tool.
+func (r *Registry) RegisterAgentTool(t Tool) {
+	r.agents[t.Name()] = t
+}
+
+// ClearAgentTools removes all registered agent tools.
+func (r *Registry) ClearAgentTools() {
+	r.agents = make(map[string]Tool)
+}
+
 // BaseTools returns the always-on tools injected into every agent.
 func (r *Registry) BaseTools() []Tool {
 	result := make([]Tool, len(r.baseTools))
@@ -107,6 +119,11 @@ func (r *Registry) Resolve(toolAccess []ToolAccess) ([]Tool, error) {
 			continue
 		}
 
+		if t, ok := r.agents[ta.Name]; ok {
+			resolved = append(resolved, t)
+			continue
+		}
+
 		return nil, fmt.Errorf("unknown tool %q (available: %s)",
 			ta.Name, strings.Join(r.KnownToolNames(), ", "))
 	}
@@ -116,7 +133,7 @@ func (r *Registry) Resolve(toolAccess []ToolAccess) ([]Tool, error) {
 
 // KnownToolNames returns names of all registered tools.
 func (r *Registry) KnownToolNames() []string {
-	names := make([]string, 0, len(r.baseTools)+len(r.ciTools)+len(r.custom))
+	names := make([]string, 0, len(r.baseTools)+len(r.ciTools)+len(r.custom)+len(r.agents))
 	for _, t := range r.baseTools {
 		names = append(names, t.Name())
 	}
@@ -124,6 +141,9 @@ func (r *Registry) KnownToolNames() []string {
 		names = append(names, name)
 	}
 	for name := range r.custom {
+		names = append(names, name)
+	}
+	for name := range r.agents {
 		names = append(names, name)
 	}
 	return names
