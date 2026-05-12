@@ -100,8 +100,8 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 	var events *agent.EventHandler
 	if e.printer != nil {
 		events = &agent.EventHandler{
-			OnTurn: func(turn int, stopReason string, toolCalls, inputTokens, outputTokens int) {
-				e.printer.AgentTurn(turn, stopReason, toolCalls, inputTokens, outputTokens)
+			OnTurn: func(turn int, stopReason string, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead int) {
+				e.printer.AgentTurn(turn, stopReason, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead)
 			},
 			OnToolCall: func(name, args string) {
 				e.printer.ToolCallVerbose(name, args)
@@ -206,8 +206,8 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 			var events *agent.EventHandler
 			if e.printer != nil {
 				events = &agent.EventHandler{
-					OnTurn: func(turn int, stopReason string, toolCalls, inputTokens, outputTokens int) {
-						e.printer.SubagentTurn(turn, stopReason, toolCalls, inputTokens, outputTokens)
+					OnTurn: func(turn int, stopReason string, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead int) {
+						e.printer.SubagentTurn(turn, stopReason, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead)
 					},
 					OnToolCall: func(name, args string) {
 						e.printer.SubagentToolCallVerbose(name, args)

@@ -112,10 +112,17 @@ func (p *Printer) ToolResult(name, result string, isError bool) {
 }
 
 // AgentTurn prints a summary of each LLM turn (verbose only).
-func (p *Printer) AgentTurn(turn int, stopReason string, toolCalls, inputTokens, outputTokens int) {
+func (p *Printer) AgentTurn(turn int, stopReason string, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead int) {
 	if p.verbosity >= VerbosityVerbose {
-		fmt.Fprintf(p.stderr, "    [turn %d] stop=%s tools=%d tokens=%d/%d\n",
-			turn, stopReason, toolCalls, inputTokens, outputTokens)
+		extra := ""
+		if cacheRead > 0 {
+			extra = fmt.Sprintf(" cache_read=%d", cacheRead)
+		}
+		if cacheCreation > 0 {
+			extra += fmt.Sprintf(" cache_write=%d", cacheCreation)
+		}
+		fmt.Fprintf(p.stderr, "    [turn %d] stop=%s tools=%d tokens=%d/%d%s\n",
+			turn, stopReason, toolCalls, inputTokens, outputTokens, extra)
 	}
 }
 
@@ -163,10 +170,17 @@ func (p *Printer) SubagentToolResult(name, result string, isError bool) {
 }
 
 // SubagentTurn prints a subagent turn summary with extra indent.
-func (p *Printer) SubagentTurn(turn int, stopReason string, toolCalls, inputTokens, outputTokens int) {
+func (p *Printer) SubagentTurn(turn int, stopReason string, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead int) {
 	if p.verbosity >= VerbosityVerbose {
-		fmt.Fprintf(p.stderr, "        [turn %d] stop=%s tools=%d tokens=%d/%d\n",
-			turn, stopReason, toolCalls, inputTokens, outputTokens)
+		extra := ""
+		if cacheRead > 0 {
+			extra = fmt.Sprintf(" cache_read=%d", cacheRead)
+		}
+		if cacheCreation > 0 {
+			extra += fmt.Sprintf(" cache_write=%d", cacheCreation)
+		}
+		fmt.Fprintf(p.stderr, "        [turn %d] stop=%s tools=%d tokens=%d/%d%s\n",
+			turn, stopReason, toolCalls, inputTokens, outputTokens, extra)
 	}
 }
 

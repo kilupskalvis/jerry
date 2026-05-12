@@ -124,6 +124,7 @@ func toAnthropicMessages(messages []Message) []anthropic.MessageParam {
 }
 
 // toAnthropicTools converts our ToolDefinition slice to Anthropic SDK tool params.
+// The last tool gets a cache_control breakpoint so system + tools are cached together.
 func toAnthropicTools(tools []ToolDefinition) []anthropic.ToolUnionParam {
 	result := make([]anthropic.ToolUnionParam, len(tools))
 	for i, t := range tools {
@@ -133,16 +134,20 @@ func toAnthropicTools(tools []ToolDefinition) []anthropic.ToolUnionParam {
 		}
 		_ = json.Unmarshal(t.Schema, &schema)
 
-		result[i] = anthropic.ToolUnionParam{
-			OfTool: &anthropic.ToolParam{
-				Name:        t.Name,
-				Description: anthropic.String(t.Description),
-				InputSchema: anthropic.ToolInputSchemaParam{
-					Properties: schema.Properties,
-					Required:   schema.Required,
-				},
+		toolParam := anthropic.ToolParam{
+			Name:        t.Name,
+			Description: anthropic.String(t.Description),
+			InputSchema: anthropic.ToolInputSchemaParam{
+				Properties: schema.Properties,
+				Required:   schema.Required,
 			},
 		}
+
+		if i == len(tools)-1 {
+			toolParam.CacheControl = anthropic.NewCacheControlEphemeralParam()
+		}
+
+		result[i] = anthropic.ToolUnionParam{OfTool: &toolParam}
 	}
 	return result
 }

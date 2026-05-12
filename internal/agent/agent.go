@@ -23,7 +23,7 @@ var ErrMaxTurns = errors.New("agent exceeded maximum turns")
 
 // EventHandler receives detailed execution events from the agent loop.
 type EventHandler struct {
-	OnTurn       func(turn int, stopReason string, toolCalls, inputTokens, outputTokens int)
+	OnTurn       func(turn int, stopReason string, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead int)
 	OnToolCall   func(name, args string)
 	OnToolResult func(name, result string, isError bool)
 	OnResponse   func(text string)
@@ -142,7 +142,8 @@ func (a *Agent) Run(ctx context.Context, input string) (string, error) {
 		)
 		if a.events != nil && a.events.OnTurn != nil {
 			a.events.OnTurn(turn, string(resp.StopReason),
-				len(resp.Message.ToolCalls), resp.Usage.InputTokens, resp.Usage.OutputTokens)
+				len(resp.Message.ToolCalls), resp.Usage.InputTokens, resp.Usage.OutputTokens,
+				resp.Usage.CacheCreationTokens, resp.Usage.CacheReadTokens)
 		}
 
 		if resp.StopReason != llm.StopReasonToolUse || len(resp.Message.ToolCalls) == 0 {
