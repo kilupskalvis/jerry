@@ -186,7 +186,13 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 		mergedPerms := e.settingsPerms.Merge(subCfg.Permissions)
 		finalProvider := subProvider
 
+		subName := subCfg.Name
 		runFunc := func(ctx context.Context, task string) (string, error) {
+			start := time.Now()
+			if e.printer != nil {
+				e.printer.SubagentStart(subName)
+			}
+
 			systemPrompt := subCfg.Instructions
 			if triggerData != nil && triggerData.Type != "" {
 				systemPrompt = buildTriggerPrefix(triggerData) + systemPrompt
@@ -194,7 +200,22 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 
 			var checker permissions.Checker
 			if len(mergedPerms.Deny) > 0 || len(mergedPerms.Allow) > 0 {
-				checker = permissions.NewChecker(mergedPerms, "subagent:"+subCfg.Name)
+				checker = permissions.NewChecker(mergedPerms, "subagent:"+subName)
+			}
+
+			var events *agent.EventHandler
+			if e.printer != nil {
+				events = &agent.EventHandler{
+					OnTurn: func(turn int, stopReason string, toolCalls, inputTokens, outputTokens int) {
+						e.printer.SubagentTurn(turn, stopReason, toolCalls, inputTokens, outputTokens)
+					},
+					OnToolCall: func(name, args string) {
+						e.printer.SubagentToolCallVerbose(name, args)
+					},
+					OnToolResult: func(name, result string, isError bool) {
+						e.printer.SubagentToolResult(name, result, isError)
+					},
+				}
 			}
 
 			a := agent.NewAgent(finalProvider,
@@ -205,8 +226,14 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 				agent.WithTemperature(subCfg.Temperature),
 				agent.WithLogger(slog.Default()),
 				agent.WithChecker(checker),
+				agent.WithEventHandler(events),
 			)
-			return a.Run(ctx, task)
+
+			output, err := a.Run(ctx, task)
+			if e.printer != nil {
+				e.printer.SubagentSuccess(subName, time.Since(start))
+			}
+			return output, err
 		}
 
 		e.registry.RegisterAgentTool(

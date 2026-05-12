@@ -136,6 +136,52 @@ func (p *Printer) AgentResponse(text string) {
 	}
 }
 
+// SubagentStart prints the subagent starting indicator.
+func (p *Printer) SubagentStart(name string) {
+	if p.verbosity >= VerbosityDefault {
+		fmt.Fprintf(p.stderr, "      ▸ %s ...\n", name)
+	}
+}
+
+// SubagentSuccess prints the subagent completion indicator.
+func (p *Printer) SubagentSuccess(name string, duration time.Duration) {
+	if p.verbosity >= VerbosityDefault {
+		fmt.Fprintf(p.stderr, "      ✓ %s (%s)\n", name, formatDuration(duration))
+	}
+}
+
+// SubagentToolCallVerbose prints a subagent tool invocation with extra indent.
+func (p *Printer) SubagentToolCallVerbose(name, args string) {
+	if p.verbosity >= VerbosityVerbose {
+		fmt.Fprintf(p.stderr, "        -> %s(%s)\n", name, args)
+	} else if p.verbosity >= VerbosityDefault {
+		fmt.Fprintf(p.stderr, "        -> %s\n", name)
+	}
+}
+
+// SubagentToolResult prints a subagent tool result with extra indent.
+func (p *Printer) SubagentToolResult(name, result string, isError bool) {
+	if p.verbosity >= VerbosityVerbose {
+		truncated := result
+		if len(truncated) > 500 {
+			truncated = truncated[:500] + "..."
+		}
+		if isError {
+			fmt.Fprintf(p.stderr, "        <- %s ERROR: %s\n", name, truncated)
+		} else {
+			fmt.Fprintf(p.stderr, "        <- %s: %s\n", name, truncated)
+		}
+	}
+}
+
+// SubagentTurn prints a subagent turn summary with extra indent.
+func (p *Printer) SubagentTurn(turn int, stopReason string, toolCalls, inputTokens, outputTokens int) {
+	if p.verbosity >= VerbosityVerbose {
+		fmt.Fprintf(p.stderr, "        [turn %d] stop=%s tools=%d tokens=%d/%d\n",
+			turn, stopReason, toolCalls, inputTokens, outputTokens)
+	}
+}
+
 // Warning prints a warning message.
 func (p *Printer) Warning(format string, args ...any) {
 	// Warnings shown at default and verbose levels.
