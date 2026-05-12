@@ -13,7 +13,7 @@ func TestCheckWorkflowFields_Valid(t *testing.T) {
 			map[string]any{"agent": "reviewer"},
 		},
 	}
-	errs := validation.CheckWorkflowFields(raw)
+	errs := validation.CheckWorkflowFields(raw, nil)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got %v", errs)
 	}
@@ -25,7 +25,7 @@ func TestCheckWorkflowFields_UnknownField(t *testing.T) {
 		"steps": []any{},
 		"tols":  "bash",
 	}
-	errs := validation.CheckWorkflowFields(raw)
+	errs := validation.CheckWorkflowFields(raw, nil)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -41,7 +41,7 @@ func TestCheckWorkflowFields_UnknownStepField(t *testing.T) {
 			map[string]any{"agent": "reviewer", "retrys": 2},
 		},
 	}
-	errs := validation.CheckWorkflowFields(raw)
+	errs := validation.CheckWorkflowFields(raw, nil)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -144,7 +144,7 @@ func TestCheckWorkflowFields_ValidHooks(t *testing.T) {
 			},
 		},
 	}
-	errs := validation.CheckWorkflowFields(raw)
+	errs := validation.CheckWorkflowFields(raw, nil)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got %v", errs)
 	}
@@ -160,7 +160,7 @@ func TestCheckWorkflowFields_UnknownHookEvent(t *testing.T) {
 			},
 		},
 	}
-	errs := validation.CheckWorkflowFields(raw)
+	errs := validation.CheckWorkflowFields(raw, nil)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -179,7 +179,7 @@ func TestCheckWorkflowFields_HookMissingRun(t *testing.T) {
 			},
 		},
 	}
-	errs := validation.CheckWorkflowFields(raw)
+	errs := validation.CheckWorkflowFields(raw, nil)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -195,8 +195,40 @@ func TestCheckWorkflowFields_ToolsOnNonToolEvent(t *testing.T) {
 			},
 		},
 	}
-	errs := validation.CheckWorkflowFields(raw)
+	errs := validation.CheckWorkflowFields(raw, nil)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestCheckWorkflowFields_HookUnknownTool(t *testing.T) {
+	t.Parallel()
+	raw := map[string]any{
+		"steps": []any{map[string]any{"agent": "reviewer"}},
+		"hooks": map[string]any{
+			"before_tool_call": []any{
+				map[string]any{"run": "echo log", "tools": []any{"nonexistent_tool"}},
+			},
+		},
+	}
+	errs := validation.CheckWorkflowFields(raw, []string{"bash", "read_file", "write_file"})
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestCheckWorkflowFields_HookKnownTool(t *testing.T) {
+	t.Parallel()
+	raw := map[string]any{
+		"steps": []any{map[string]any{"agent": "reviewer"}},
+		"hooks": map[string]any{
+			"before_tool_call": []any{
+				map[string]any{"run": "echo log", "tools": []any{"bash"}},
+			},
+		},
+	}
+	errs := validation.CheckWorkflowFields(raw, []string{"bash", "read_file", "write_file"})
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
 	}
 }

@@ -68,10 +68,11 @@ func validateWorkflowDeep(app *App, name string) []string {
 		return []string{loadErr.Error()}
 	}
 
-	wfPath := filepath.Join(app.JerryDir, name, "workflow.yaml")
-	errs = append(errs, validateWorkflowSchema(wfPath)...)
-
 	toolsDir := filepath.Join(app.JerryDir, "tools")
+	workflowDir := filepath.Join(app.JerryDir, name)
+
+	wfPath := filepath.Join(workflowDir, "workflow.yaml")
+	errs = append(errs, validateWorkflowSchema(wfPath, toolsDir, workflowDir)...)
 	for _, step := range w.Steps {
 		if step.Agent == "" {
 			continue
@@ -103,7 +104,7 @@ func validateWorkflowDeep(app *App, name string) []string {
 	return errs
 }
 
-func validateWorkflowSchema(path string) []string {
+func validateWorkflowSchema(path, toolsDir, workflowDir string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -114,11 +115,32 @@ func validateWorkflowSchema(path string) []string {
 		return nil
 	}
 
+	knownTools := collectKnownToolNames(toolsDir, workflowDir)
+
 	var errs []string
-	for _, fe := range validation.CheckWorkflowFields(raw) {
+	for _, fe := range validation.CheckWorkflowFields(raw, knownTools) {
 		errs = append(errs, fe.Error())
 	}
 	return errs
+}
+
+func collectKnownToolNames(toolsDir, workflowDir string) []string {
+	known := []string{"bash", "read_file", "write_file", "post_pr_comment", "post_review_comment", "add_check_status", "create_pull_request"}
+	if entries, err := os.ReadDir(toolsDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
+				known = append(known, strings.TrimSuffix(e.Name(), ".yaml"))
+			}
+		}
+	}
+	if entries, err := os.ReadDir(workflowDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+				known = append(known, strings.TrimSuffix(e.Name(), ".md"))
+			}
+		}
+	}
+	return known
 }
 
 func validateAgentSchema(path string) []string {

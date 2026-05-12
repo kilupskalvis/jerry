@@ -30,8 +30,9 @@ var agentFields = []string{"name", "model", "temperature", "max_iterations", "to
 
 var validProviders = map[string]bool{"anthropic": true, "openai": true}
 
-// CheckWorkflowFields validates workflow YAML keys and step-level keys.
-func CheckWorkflowFields(raw map[string]any) []FieldError {
+// CheckWorkflowFields validates workflow YAML keys, step-level keys, and hooks.
+// knownTools is used to validate tool names in hook filters (pass nil to skip).
+func CheckWorkflowFields(raw map[string]any, knownTools []string) []FieldError {
 	var errs []FieldError
 
 	errs = append(errs, checkUnknownFields(raw, workflowFields, "workflow")...)
@@ -55,7 +56,7 @@ func CheckWorkflowFields(raw map[string]any) []FieldError {
 	}
 
 	if hooksRaw, ok := raw["hooks"]; ok {
-		errs = append(errs, checkHooks(hooksRaw)...)
+		errs = append(errs, checkHooks(hooksRaw, knownTools)...)
 	}
 
 	return errs
@@ -66,7 +67,7 @@ var toolEvents = map[string]bool{
 	hooks.AfterToolCall:  true,
 }
 
-func checkHooks(raw any) []FieldError {
+func checkHooks(raw any, knownTools []string) []FieldError {
 	hooksMap, ok := raw.(map[string]any)
 	if !ok {
 		return []FieldError{{
@@ -115,15 +116,46 @@ func checkHooks(raw any) []FieldError {
 				})
 			}
 
-			if _, hasTools := defMap["tools"]; hasTools && !toolEvents[event] {
-				errs = append(errs, FieldError{
-					Field:   event,
-					Message: fmt.Sprintf("hooks.%s[%d]: \"tools\" filter is only valid on before_tool_call and after_tool_call", event, i),
-				})
+			if toolsRaw, hasTools := defMap["tools"]; hasTools {
+				if !toolEvents[event] {
+					errs = append(errs, FieldError{
+						Field:   event,
+						Message: fmt.Sprintf("hooks.%s[%d]: \"tools\" filter is only valid on before_tool_call and after_tool_call", event, i),
+					})
+				} else if knownTools != nil {
+					errs = append(errs, checkHookToolNames(event, i, toolsRaw, knownTools)...)
+				}
 			}
 		}
 	}
 
+	return errs
+}
+
+func checkHookToolNames(event string, hookIdx int, toolsRaw any, knownTools []string) []FieldError {
+	toolsList, ok := toolsRaw.([]any)
+	if !ok {
+		return nil
+	}
+
+	knownSet := make(map[string]bool, len(knownTools))
+	for _, t := range knownTools {
+		knownSet[t] = true
+	}
+
+	var errs []FieldError
+	for _, t := range toolsList {
+		name, ok := t.(string)
+		if !ok {
+			continue
+		}
+		if !knownSet[name] {
+			errs = append(errs, FieldError{
+				Field:   event,
+				Message: fmt.Sprintf("hooks.%s[%d]: unknown tool %q in tools filter", event, hookIdx, name),
+			})
+		}
+	}
 	return errs
 }
 
