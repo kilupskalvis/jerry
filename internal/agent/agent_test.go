@@ -44,12 +44,95 @@ func TestAgent_DirectResponse(t *testing.T) {
 
 	a := agent.NewAgent(provider, agent.WithMaxTurns(10))
 
-	output, err := a.Run(context.Background(), "Begin your task.")
+	result, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if output != `{"result": "done"}` {
-		t.Errorf("unexpected output: %q", output)
+	if result.Output != `{"result": "done"}` {
+		t.Errorf("unexpected output: %q", result.Output)
+	}
+}
+
+func TestAgent_DirectResponseAccumulatesUsage(t *testing.T) {
+	provider := &mockProvider{
+		responses: []*llm.CompleteResponse{
+			{
+				Message:    llm.Message{Role: llm.RoleAssistant, Content: "done"},
+				StopReason: llm.StopReasonEndTurn,
+				Usage:      llm.Usage{InputTokens: 100, OutputTokens: 50, CacheCreationTokens: 200, CacheReadTokens: 0},
+			},
+		},
+	}
+
+	a := agent.NewAgent(provider, agent.WithMaxTurns(10))
+	result, err := a.Run(context.Background(), "task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Turns != 1 {
+		t.Errorf("turns = %d, want 1", result.Turns)
+	}
+	if result.Usage.InputTokens != 100 || result.Usage.OutputTokens != 50 {
+		t.Errorf("usage = %d/%d, want 100/50", result.Usage.InputTokens, result.Usage.OutputTokens)
+	}
+	if result.Usage.CacheCreationTokens != 200 {
+		t.Errorf("cache_creation = %d, want 200", result.Usage.CacheCreationTokens)
+	}
+	if result.ToolCalls != 0 {
+		t.Errorf("tool_calls = %d, want 0", result.ToolCalls)
+	}
+}
+
+func TestAgent_MultiTurnAccumulatesUsage(t *testing.T) {
+	provider := &mockProvider{
+		responses: []*llm.CompleteResponse{
+			{
+				Message: llm.Message{
+					Role:      llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{{ID: "c1", Name: "t", Input: json.RawMessage(`{}`)}},
+				},
+				StopReason: llm.StopReasonToolUse,
+				Usage:      llm.Usage{InputTokens: 100, OutputTokens: 50},
+			},
+			{
+				Message: llm.Message{
+					Role:      llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{{ID: "c2", Name: "t", Input: json.RawMessage(`{}`)}, {ID: "c3", Name: "t", Input: json.RawMessage(`{}`)}},
+				},
+				StopReason: llm.StopReasonToolUse,
+				Usage:      llm.Usage{InputTokens: 200, OutputTokens: 60, CacheReadTokens: 100},
+			},
+			{
+				Message:    llm.Message{Role: llm.RoleAssistant, Content: "done"},
+				StopReason: llm.StopReasonEndTurn,
+				Usage:      llm.Usage{InputTokens: 300, OutputTokens: 40, CacheReadTokens: 200},
+			},
+		},
+	}
+
+	testTool := tool.NewToolFunc("t", "test", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) { return "ok", nil },
+	)
+
+	a := agent.NewAgent(provider, agent.WithTools(testTool), agent.WithMaxTurns(10))
+	result, err := a.Run(context.Background(), "task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Turns != 3 {
+		t.Errorf("turns = %d, want 3", result.Turns)
+	}
+	if result.ToolCalls != 3 {
+		t.Errorf("tool_calls = %d, want 3", result.ToolCalls)
+	}
+	if result.Usage.InputTokens != 600 {
+		t.Errorf("input_tokens = %d, want 600", result.Usage.InputTokens)
+	}
+	if result.Usage.OutputTokens != 150 {
+		t.Errorf("output_tokens = %d, want 150", result.Usage.OutputTokens)
+	}
+	if result.Usage.CacheReadTokens != 300 {
+		t.Errorf("cache_read = %d, want 300", result.Usage.CacheReadTokens)
 	}
 }
 
@@ -84,12 +167,12 @@ func TestAgent_OneToolCall(t *testing.T) {
 
 	a := agent.NewAgent(provider, agent.WithTools(testTool), agent.WithMaxTurns(10))
 
-	output, err := a.Run(context.Background(), "Begin your task.")
+	result, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if output != `{"result": "done"}` {
-		t.Errorf("unexpected output: %q", output)
+	if result.Output != `{"result": "done"}` {
+		t.Errorf("unexpected output: %q", result.Output)
 	}
 	if len(dispatchedCalls) != 1 || dispatchedCalls[0] != "read_file" {
 		t.Errorf("expected dispatched [read_file], got %v", dispatchedCalls)
@@ -125,12 +208,12 @@ func TestAgent_MultipleIterations(t *testing.T) {
 		agent.WithMaxTurns(10),
 	)
 
-	output, err := a.Run(context.Background(), "Begin your task.")
+	result, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if output != `{"result": "done"}` {
-		t.Errorf("unexpected output: %q", output)
+	if result.Output != `{"result": "done"}` {
+		t.Errorf("unexpected output: %q", result.Output)
 	}
 }
 
@@ -196,12 +279,12 @@ func TestAgent_ToolError(t *testing.T) {
 
 	a := agent.NewAgent(provider, agent.WithTools(testTool), agent.WithMaxTurns(10))
 
-	output, err := a.Run(context.Background(), "Begin your task.")
+	result, err := a.Run(context.Background(), "Begin your task.")
 	if err != nil {
 		t.Fatalf("agent should continue after tool error, got: %v", err)
 	}
-	if output != `{"result": "recovered"}` {
-		t.Errorf("expected recovered output, got %q", output)
+	if result.Output != `{"result": "recovered"}` {
+		t.Errorf("expected recovered output, got %q", result.Output)
 	}
 }
 
@@ -327,12 +410,12 @@ func TestAgent_CheckerBlocksToolCall(t *testing.T) {
 		agent.WithChecker(checker),
 	)
 
-	output, err := a.Run(context.Background(), "delete everything")
+	result, err := a.Run(context.Background(), "delete everything")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if output != "understood, skipping delete" {
-		t.Errorf("output = %q, want 'understood, skipping delete'", output)
+	if result.Output != "understood, skipping delete" {
+		t.Errorf("output = %q, want 'understood, skipping delete'", result.Output)
 	}
 }
 
@@ -423,12 +506,12 @@ func TestAgent_ParallelToolExecution(t *testing.T) {
 
 	a := agent.NewAgent(provider, agent.WithTools(readTool), agent.WithMaxTurns(10))
 
-	output, err := a.Run(context.Background(), "read files")
+	result, err := a.Run(context.Background(), "read files")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if output != "done" {
-		t.Errorf("output = %q, want 'done'", output)
+	if result.Output != "done" {
+		t.Errorf("output = %q, want 'done'", result.Output)
 	}
 	if len(callOrder) != 3 {
 		t.Fatalf("expected 3 tool calls, got %d", len(callOrder))

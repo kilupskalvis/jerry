@@ -21,6 +21,14 @@ const defaultMaxTurns = 10
 // ErrMaxTurns is returned when the agent exceeds its configured turn limit.
 var ErrMaxTurns = errors.New("agent exceeded maximum turns")
 
+// RunResult holds the output and accumulated stats from an agent execution.
+type RunResult struct {
+	Output    string
+	Usage     llm.Usage
+	Turns     int
+	ToolCalls int
+}
+
 // EventHandler receives detailed execution events from the agent loop.
 type EventHandler struct {
 	OnTurn       func(turn int, stopReason string, toolCalls, inputTokens, outputTokens, cacheCreation, cacheRead int)
@@ -107,15 +115,18 @@ func NewAgent(provider llm.Provider, opts ...Option) *Agent {
 // Run executes the agentic loop: sends the input to the LLM, dispatches any
 // tool calls, feeds results back, and repeats until the LLM returns a final
 // text response or the turn limit is reached.
-func (a *Agent) Run(ctx context.Context, input string) (string, error) {
+func (a *Agent) Run(ctx context.Context, input string) (*RunResult, error) {
 	messages := []llm.Message{{Role: llm.RoleUser, Content: input}}
 	toolDefs := toolsToDefinitions(a.tools)
 	toolMap := a.buildToolMap()
 
+	var total llm.Usage
+	var totalToolCalls int
+
 	for turn := range a.maxTurns {
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return nil, ctx.Err()
 		default:
 		}
 
@@ -127,8 +138,14 @@ func (a *Agent) Run(ctx context.Context, input string) (string, error) {
 			Temperature:  a.temperature,
 		})
 		if err != nil {
-			return "", fmt.Errorf("provider complete (turn %d): %w", turn, err)
+			return nil, fmt.Errorf("provider complete (turn %d): %w", turn, err)
 		}
+
+		total.InputTokens += resp.Usage.InputTokens
+		total.OutputTokens += resp.Usage.OutputTokens
+		total.CacheCreationTokens += resp.Usage.CacheCreationTokens
+		total.CacheReadTokens += resp.Usage.CacheReadTokens
+		totalToolCalls += len(resp.Message.ToolCalls)
 
 		messages = append(messages, resp.Message)
 		a.logger.Info("agent turn",
@@ -150,7 +167,12 @@ func (a *Agent) Run(ctx context.Context, input string) (string, error) {
 			if a.events != nil && a.events.OnResponse != nil {
 				a.events.OnResponse(resp.Message.Content)
 			}
-			return resp.Message.Content, nil
+			return &RunResult{
+				Output:    resp.Message.Content,
+				Usage:     total,
+				Turns:     turn + 1,
+				ToolCalls: totalToolCalls,
+			}, nil
 		}
 
 		results := a.executeTools(ctx, resp.Message.ToolCalls, toolMap)
@@ -159,7 +181,7 @@ func (a *Agent) Run(ctx context.Context, input string) (string, error) {
 		}
 	}
 
-	return "", ErrMaxTurns
+	return nil, ErrMaxTurns
 }
 
 func toolsToDefinitions(tools []tool.Tool) []llm.ToolDefinition {

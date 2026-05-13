@@ -13,7 +13,11 @@ type StepExecutor interface {
 
 // StepOutput holds the output of a completed step.
 type StepOutput struct {
-	StepName string
-	Data     string
-	Duration time.Duration
+	StepName     string
+	Data         string
+	Duration     time.Duration
+	TokensInput  int
+	TokensOutput int
+	Turns        int
+	ToolCalls    int
 }

@@ -261,12 +261,21 @@ func (e *Engine) runSteps(
 		}
 		if stepOutput != nil {
 			result.Stdout = stepOutput.Data
+			result.TokensInput = stepOutput.TokensInput
+			result.TokensOutput = stepOutput.TokensOutput
 		}
 		runState.StepResults = append(runState.StepResults, result)
 		runState.Context = ctxStore.Snapshot()
 		_ = e.stateStore.SaveCheckpoint(*runState)
 
-		e.printer.StepSuccess(step.Name, stepDuration, 0, 0, 0, 0)
+		var turns, toolCalls, tokIn, tokOut int
+		if stepOutput != nil {
+			turns = stepOutput.Turns
+			toolCalls = stepOutput.ToolCalls
+			tokIn = stepOutput.TokensInput
+			tokOut = stepOutput.TokensOutput
+		}
+		e.printer.StepSuccess(step.Name, stepDuration, turns, toolCalls, tokIn, tokOut)
 		logWriter.Log(run.LogStepEnd, step.Name, run.StepEndData{
 			Status: "success", DurationMs: stepDuration.Milliseconds(),
 		})

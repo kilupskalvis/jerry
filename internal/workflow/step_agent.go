@@ -154,15 +154,19 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 		agent.WithChecker(checker),
 	)
 
-	agentOutput, runErr := a.Run(ctx, "Begin your task.")
+	result, runErr := a.Run(ctx, "Begin your task.")
 	if runErr != nil {
 		return nil, runErr
 	}
 
 	return &StepOutput{
-		StepName: step.Name,
-		Data:     agentOutput,
-		Duration: time.Since(start),
+		StepName:     step.Name,
+		Data:         result.Output,
+		Duration:     time.Since(start),
+		TokensInput:  result.Usage.InputTokens,
+		TokensOutput: result.Usage.OutputTokens,
+		Turns:        result.Turns,
+		ToolCalls:    result.ToolCalls,
 	}, nil
 }
 
@@ -251,11 +255,14 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 				agent.WithEventHandler(events),
 			)
 
-			output, err := a.Run(ctx, task)
+			result, err := a.Run(ctx, task)
 			if e.printer != nil {
 				e.printer.SubagentSuccess(subName, time.Since(start))
 			}
-			return output, err
+			if err != nil {
+				return "", err
+			}
+			return result.Output, nil
 		}
 
 		e.registry.RegisterAgentTool(
