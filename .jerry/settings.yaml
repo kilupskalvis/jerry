@@ -1,0 +1,5 @@
+permissions:
+  deny:
+    - bash: ["rm -rf *", "rm -r /*", "chmod 777 *", "curl * | sh", "wget * | sh"]
+    - read_file: ["*.env", "*.pem", "*.key", "*.secret", "*credentials*"]
+    - write_file: ["*.env", "*.pem", "*.key", "*.secret", ".jerry/settings.yaml"]
