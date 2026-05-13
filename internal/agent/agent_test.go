@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -343,6 +344,108 @@ type capturingProvider struct {
 func (m *capturingProvider) Complete(_ context.Context, params llm.CompleteParams) (*llm.CompleteResponse, error) {
 	*m.capturedSystem = params.SystemPrompt
 	return m.response, nil
+}
+
+func TestAgent_CompactsOnContextTooLong(t *testing.T) {
+	// Build 7 tool-call turns (> DefaultKeepRecent=5), then context overflow,
+	// compaction summarizes old turns, retry succeeds.
+	var results []compactionCallResult
+	for i := range 7 {
+		results = append(results, compactionCallResult{resp: &llm.CompleteResponse{
+			Message: llm.Message{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{
+				{ID: fmt.Sprintf("c%d", i), Name: "noop", Input: json.RawMessage(`{}`)},
+			}},
+			StopReason: llm.StopReasonToolUse,
+			Usage:      llm.Usage{InputTokens: 100, OutputTokens: 50},
+		}})
+	}
+	// Turn 7: context too long
+	results = append(results, compactionCallResult{
+		err: &llm.ContextTooLongError{Message: "too many tokens"},
+	})
+	// Retry after compaction: success
+	results = append(results, compactionCallResult{resp: &llm.CompleteResponse{
+		Message:    llm.Message{Role: llm.RoleAssistant, Content: "done after compaction"},
+		StopReason: llm.StopReasonEndTurn,
+		Usage:      llm.Usage{InputTokens: 50, OutputTokens: 20},
+	}})
+
+	provider := &compactionTestProvider{
+		agentCallResults: results,
+		summaryResp: &llm.CompleteResponse{
+			Message:    llm.Message{Role: llm.RoleAssistant, Content: "Summary of prior work."},
+			StopReason: llm.StopReasonEndTurn,
+			Usage:      llm.Usage{InputTokens: 30, OutputTokens: 15},
+		},
+	}
+
+	noopTool := tool.NewToolFunc("noop", "noop", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) { return "ok", nil },
+	)
+
+	a := agent.NewAgent(provider,
+		agent.WithTools(noopTool),
+		agent.WithMaxTurns(20),
+		agent.WithCompactor(llm.NewCompactor(provider)),
+	)
+
+	result, err := a.Run(context.Background(), "do the thing")
+	if err != nil {
+		t.Fatalf("expected compaction recovery, got: %v", err)
+	}
+	if result.Output != "done after compaction" {
+		t.Errorf("output = %q, want 'done after compaction'", result.Output)
+	}
+	// 7*100 (tool turns) + 30 (compaction) + 50 (retry) = 780
+	if result.Usage.InputTokens != 780 {
+		t.Errorf("input_tokens = %d, want 780", result.Usage.InputTokens)
+	}
+}
+
+func TestAgent_CompactionDisabledWithoutCompactor(t *testing.T) {
+	provider := &compactionTestProvider{
+		agentCallResults: []compactionCallResult{
+			{err: &llm.ContextTooLongError{Message: "too many tokens"}},
+		},
+	}
+
+	dummyTool := tool.NewToolFunc("noop", "noop", json.RawMessage(`{}`),
+		func(_ context.Context, _ json.RawMessage) (string, error) { return "", nil },
+	)
+
+	a := agent.NewAgent(provider, agent.WithTools(dummyTool), agent.WithMaxTurns(10))
+
+	_, err := a.Run(context.Background(), "do the thing")
+	if err == nil {
+		t.Fatal("expected error without compactor")
+	}
+}
+
+type compactionCallResult struct {
+	resp *llm.CompleteResponse
+	err  error
+}
+
+// compactionTestProvider routes agent calls (with tools) and compaction calls (without tools) separately.
+type compactionTestProvider struct {
+	agentCallResults []compactionCallResult
+	agentCallIndex   int
+	summaryResp      *llm.CompleteResponse
+}
+
+func (p *compactionTestProvider) Complete(_ context.Context, params llm.CompleteParams) (*llm.CompleteResponse, error) {
+	if len(params.Tools) == 0 {
+		return p.summaryResp, nil
+	}
+	if p.agentCallIndex >= len(p.agentCallResults) {
+		return &llm.CompleteResponse{
+			Message:    llm.Message{Role: llm.RoleAssistant, Content: "fallback"},
+			StopReason: llm.StopReasonEndTurn,
+		}, nil
+	}
+	r := p.agentCallResults[p.agentCallIndex]
+	p.agentCallIndex++
+	return r.resp, r.err
 }
 
 type mockChecker struct {

@@ -152,6 +152,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, step Step, prevOutputs []St
 		agent.WithLogger(slog.Default()),
 		agent.WithEventHandler(events),
 		agent.WithChecker(checker),
+		agent.WithCompactor(llm.NewCompactor(provider)),
 	)
 
 	result, runErr := a.Run(ctx, "Begin your task.")

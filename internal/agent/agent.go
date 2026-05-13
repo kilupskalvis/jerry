@@ -49,6 +49,7 @@ type Agent struct {
 	onToolCall   func(toolName string)
 	events       *EventHandler
 	checker      permissions.Checker
+	compactor    *llm.Compactor
 }
 
 // Option configures an Agent.
@@ -99,6 +100,13 @@ func WithChecker(c permissions.Checker) Option {
 	return func(a *Agent) { a.checker = c }
 }
 
+// WithCompactor sets a compactor for automatic context window management.
+// When the conversation exceeds the model's context limit, the compactor
+// summarizes older messages and retries.
+func WithCompactor(c *llm.Compactor) Option {
+	return func(a *Agent) { a.compactor = c }
+}
+
 // NewAgent creates an Agent with the given provider and options.
 func NewAgent(provider llm.Provider, opts ...Option) *Agent {
 	a := &Agent{
@@ -130,13 +138,26 @@ func (a *Agent) Run(ctx context.Context, input string) (*RunResult, error) {
 		default:
 		}
 
-		resp, err := a.provider.Complete(ctx, llm.CompleteParams{
-			Model:        a.model,
-			SystemPrompt: a.systemPrompt,
-			Messages:     messages,
-			Tools:        toolDefs,
-			Temperature:  a.temperature,
-		})
+		resp, err := a.complete(ctx, messages, toolDefs)
+		if llm.IsContextTooLong(err) && a.compactor != nil {
+			for attempt := range llm.MaxCompactionAttempts {
+				a.logger.Info("compacting conversation", "attempt", attempt+1, "messages", len(messages))
+				compacted, compactErr := a.compactor.Compact(ctx, a.systemPrompt, messages, llm.DefaultKeepRecent)
+				if compactErr != nil {
+					a.logger.Warn("compaction failed, returning original error", "error", compactErr)
+					break
+				}
+				total.InputTokens += compacted.Usage.InputTokens
+				total.OutputTokens += compacted.Usage.OutputTokens
+				messages = compacted.CompactedMessages
+				a.logger.Info("compaction complete", "evicted", compacted.EvictedCount, "remaining", len(messages))
+
+				resp, err = a.complete(ctx, messages, toolDefs)
+				if !llm.IsContextTooLong(err) {
+					break
+				}
+			}
+		}
 		if err != nil {
 			return nil, fmt.Errorf("provider complete (turn %d): %w", turn, err)
 		}
@@ -182,6 +203,16 @@ func (a *Agent) Run(ctx context.Context, input string) (*RunResult, error) {
 	}
 
 	return nil, ErrMaxTurns
+}
+
+func (a *Agent) complete(ctx context.Context, messages []llm.Message, toolDefs []llm.ToolDefinition) (*llm.CompleteResponse, error) {
+	return a.provider.Complete(ctx, llm.CompleteParams{
+		Model:        a.model,
+		SystemPrompt: a.systemPrompt,
+		Messages:     messages,
+		Tools:        toolDefs,
+		Temperature:  a.temperature,
+	})
 }
 
 func toolsToDefinitions(tools []tool.Tool) []llm.ToolDefinition {
