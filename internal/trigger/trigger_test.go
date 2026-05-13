@@ -150,6 +150,184 @@ func TestNormalizeGitLab_Push(t *testing.T) {
 	}
 }
 
+func TestNormalizeGitHub_PRMetadata(t *testing.T) {
+	payload := map[string]any{
+		"action": "opened",
+		"pull_request": map[string]any{
+			"title":    "Fix auth timeout",
+			"number":   float64(42),
+			"body":     "This PR fixes the 30s timeout in auth middleware.\n\nLinked to PROJ-123.",
+			"html_url": "https://github.com/org/repo/pull/42",
+			"user":     map[string]any{"login": "kalvis"},
+			"head":     map[string]any{"sha": "abc123", "ref": "feature/auth-fix"},
+			"base":     map[string]any{"ref": "main"},
+			"labels":   []any{map[string]any{"name": "bug"}, map[string]any{"name": "security"}},
+			"draft":    false,
+		},
+		"repository": map[string]any{
+			"name":  "repo",
+			"owner": map[string]any{"login": "org"},
+		},
+	}
+
+	td, err := NormalizeGitHubEvent("pull_request.opened", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if td.Metadata["description"] != "This PR fixes the 30s timeout in auth middleware.\n\nLinked to PROJ-123." {
+		t.Errorf("description = %q, want PR body", td.Metadata["description"])
+	}
+	if td.Metadata["base_branch"] != "main" {
+		t.Errorf("base_branch = %q, want 'main'", td.Metadata["base_branch"])
+	}
+	if td.Metadata["head_branch"] != "feature/auth-fix" {
+		t.Errorf("head_branch = %q, want 'feature/auth-fix'", td.Metadata["head_branch"])
+	}
+	if td.Metadata["labels"] != "bug, security" {
+		t.Errorf("labels = %q, want 'bug, security'", td.Metadata["labels"])
+	}
+	if td.Metadata["draft"] != "" {
+		t.Errorf("draft = %q, want empty for non-draft", td.Metadata["draft"])
+	}
+}
+
+func TestNormalizeGitHub_PRDraft(t *testing.T) {
+	payload := map[string]any{
+		"action": "opened",
+		"pull_request": map[string]any{
+			"title": "WIP: auth fix",
+			"user":  map[string]any{"login": "kalvis"},
+			"head":  map[string]any{"sha": "abc"},
+			"base":  map[string]any{"ref": "main"},
+			"draft": true,
+		},
+	}
+
+	td, err := NormalizeGitHubEvent("pull_request.opened", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if td.Metadata["draft"] != "true" {
+		t.Errorf("draft = %q, want 'true'", td.Metadata["draft"])
+	}
+}
+
+func TestNormalizeGitHub_IssueMetadata(t *testing.T) {
+	payload := map[string]any{
+		"action": "opened",
+		"issue": map[string]any{
+			"number":   float64(10),
+			"title":    "Add dark mode",
+			"body":     "Users want dark mode support.",
+			"html_url": "https://github.com/org/repo/issues/10",
+			"user":     map[string]any{"login": "user1"},
+			"labels":   []any{map[string]any{"name": "enhancement"}},
+		},
+	}
+
+	td, err := NormalizeGitHubEvent("issues.opened", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if td.Metadata["description"] != "Users want dark mode support." {
+		t.Errorf("description = %q, want issue body", td.Metadata["description"])
+	}
+	if td.Metadata["labels"] != "enhancement" {
+		t.Errorf("labels = %q, want 'enhancement'", td.Metadata["labels"])
+	}
+}
+
+func TestNormalizeGitLab_MRMetadata(t *testing.T) {
+	payload := map[string]any{
+		"object_kind": "merge_request",
+		"user":        map[string]any{"username": "kalvis"},
+		"object_attributes": map[string]any{
+			"title":         "Add pagination",
+			"iid":           float64(7),
+			"url":           "https://gitlab.com/org/repo/-/merge_requests/7",
+			"description":   "Adds offset/limit params to the users endpoint.",
+			"target_branch": "main",
+			"source_branch": "feature/pagination",
+			"last_commit":   map[string]any{"id": "def456"},
+			"labels":        []any{map[string]any{"title": "enhancement"}},
+		},
+		"project": map[string]any{
+			"name":      "repo",
+			"namespace": "org",
+		},
+	}
+
+	td, err := NormalizeGitLabEvent("merge_request", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if td.Metadata["description"] != "Adds offset/limit params to the users endpoint." {
+		t.Errorf("description = %q, want MR description", td.Metadata["description"])
+	}
+	if td.Metadata["base_branch"] != "main" {
+		t.Errorf("base_branch = %q, want 'main'", td.Metadata["base_branch"])
+	}
+	if td.Metadata["head_branch"] != "feature/pagination" {
+		t.Errorf("head_branch = %q, want 'feature/pagination'", td.Metadata["head_branch"])
+	}
+	if td.Metadata["labels"] != "enhancement" {
+		t.Errorf("labels = %q, want 'enhancement'", td.Metadata["labels"])
+	}
+}
+
+func TestNormalizeGitLab_IssueMetadata(t *testing.T) {
+	payload := map[string]any{
+		"object_kind": "issue",
+		"user":        map[string]any{"username": "dev"},
+		"object_attributes": map[string]any{
+			"title":       "Fix crash",
+			"iid":         float64(3),
+			"url":         "https://gitlab.com/org/repo/-/issues/3",
+			"description": "App crashes on startup.",
+			"labels":      []any{map[string]any{"title": "bug"}, map[string]any{"title": "critical"}},
+		},
+		"project": map[string]any{
+			"name":      "repo",
+			"namespace": "org",
+		},
+	}
+
+	td, err := NormalizeGitLabEvent("issue", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if td.Metadata["description"] != "App crashes on startup." {
+		t.Errorf("description = %q, want issue description", td.Metadata["description"])
+	}
+	if td.Metadata["labels"] != "bug, critical" {
+		t.Errorf("labels = %q, want 'bug, critical'", td.Metadata["labels"])
+	}
+}
+
+func TestFromReader_PreNormalizedWithDescription(t *testing.T) {
+	input := `{
+		"type": "ticket",
+		"source": "jira",
+		"intent": "Add dark mode",
+		"raw_payload": {
+			"key": "PROJ-123",
+			"description": "Full ticket description here"
+		}
+	}`
+	td, err := FromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if td.Metadata["description"] != "Full ticket description here" {
+		t.Errorf("description = %q, want Jira description from raw_payload", td.Metadata["description"])
+	}
+}
+
 func TestFromReader_PreNormalized(t *testing.T) {
 	input := `{"type": "manual", "source": "cli", "intent": "add health endpoint"}`
 	trigger, err := FromReader(strings.NewReader(input))

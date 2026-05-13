@@ -12,16 +12,17 @@ import (
 
 // TriggerData holds information about what initiated the workflow run.
 type TriggerData struct {
-	Type       string         `json:"type"`
-	Source     string         `json:"source"`
-	Intent     string         `json:"intent,omitempty"`
-	Number     int            `json:"number,omitempty"`
-	URL        string         `json:"url,omitempty"`
-	Author     string         `json:"author,omitempty"`
-	HeadSHA    string         `json:"head_sha,omitempty"`
-	RepoOwner  string         `json:"repo_owner,omitempty"`
-	RepoName   string         `json:"repo_name,omitempty"`
-	RawPayload map[string]any `json:"raw_payload,omitempty"`
+	Type       string            `json:"type"`
+	Source     string            `json:"source"`
+	Intent     string            `json:"intent,omitempty"`
+	Number     int               `json:"number,omitempty"`
+	URL        string            `json:"url,omitempty"`
+	Author     string            `json:"author,omitempty"`
+	HeadSHA    string            `json:"head_sha,omitempty"`
+	RepoOwner  string            `json:"repo_owner,omitempty"`
+	RepoName   string            `json:"repo_name,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+	RawPayload map[string]any    `json:"raw_payload,omitempty"`
 }
 
 // FromFile reads a JSON file and returns TriggerData.
@@ -53,6 +54,12 @@ func parse(data []byte) (*TriggerData, error) {
 			var t TriggerData
 			if unmarshalErr := json.Unmarshal(data, &t); unmarshalErr != nil {
 				return nil, fmt.Errorf("invalid trigger data: %w", unmarshalErr)
+			}
+			if t.Metadata == nil && t.RawPayload != nil {
+				t.Metadata = make(map[string]string)
+				if desc, ok := t.RawPayload["description"].(string); ok && desc != "" {
+					t.Metadata["description"] = desc
+				}
 			}
 			return &t, nil
 		}

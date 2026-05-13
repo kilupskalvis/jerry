@@ -264,21 +264,34 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 	}
 }
 
-func buildTriggerPrefix(td *trigger.TriggerData) string {
-	prompt := "## Trigger\n\n"
-	prompt += "Type: " + td.Type + "\n"
-	prompt += "Source: " + td.Source + "\n"
+func formatTriggerSection(td *trigger.TriggerData) string {
+	var b strings.Builder
+	b.WriteString("## Trigger\n\n")
+	b.WriteString("Type: " + td.Type + "\n")
+	b.WriteString("Source: " + td.Source + "\n")
 	if td.Intent != "" {
-		prompt += "Intent: " + td.Intent + "\n"
+		b.WriteString("Intent: " + td.Intent + "\n")
 	}
 	if td.URL != "" {
-		prompt += "URL: " + td.URL + "\n"
+		b.WriteString("URL: " + td.URL + "\n")
 	}
 	if td.Author != "" {
-		prompt += "Author: " + td.Author + "\n"
+		b.WriteString("Author: " + td.Author + "\n")
 	}
-	prompt += "\n---\n\n"
-	return prompt
+	for key, value := range td.Metadata {
+		if value == "" {
+			continue
+		}
+		label := strings.ReplaceAll(key, "_", " ")
+		label = strings.ToUpper(label[:1]) + label[1:]
+		b.WriteString(label + ": " + value + "\n")
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func buildTriggerPrefix(td *trigger.TriggerData) string {
+	return formatTriggerSection(td) + "---\n\n"
 }
 
 func buildSystemPrompt(instructions string, triggerData *trigger.TriggerData, prevOutputs []StepOutput) string {
@@ -292,19 +305,7 @@ func buildSystemPrompt(instructions string, triggerData *trigger.TriggerData, pr
 	var prompt string
 
 	if hasTrigger {
-		prompt += "## Trigger\n\n"
-		prompt += "Type: " + triggerData.Type + "\n"
-		prompt += "Source: " + triggerData.Source + "\n"
-		if triggerData.Intent != "" {
-			prompt += "Intent: " + triggerData.Intent + "\n"
-		}
-		if triggerData.URL != "" {
-			prompt += "URL: " + triggerData.URL + "\n"
-		}
-		if triggerData.Author != "" {
-			prompt += "Author: " + triggerData.Author + "\n"
-		}
-		prompt += "\n"
+		prompt += formatTriggerSection(triggerData)
 	}
 
 	if hasPrev {
