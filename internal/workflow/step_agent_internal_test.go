@@ -122,6 +122,30 @@ func TestMetadataDisplayOrder(t *testing.T) {
 	}
 }
 
+func TestMetadataTruncation(t *testing.T) {
+	longDesc := strings.Repeat("x", 3000)
+	td := &trigger.TriggerData{
+		Type:   "pull_request",
+		Source: "github",
+		Metadata: map[string]string{
+			"description": longDesc,
+			"labels":      "bug",
+		},
+	}
+
+	result := formatTriggerSection(td)
+
+	if strings.Contains(result, longDesc) {
+		t.Error("full 3000-char description should be truncated")
+	}
+	if !strings.Contains(result, "... [truncated]") {
+		t.Error("truncated description should have truncation marker")
+	}
+	if !strings.Contains(result, "Labels: bug") {
+		t.Error("short metadata should not be truncated")
+	}
+}
+
 func TestBuildTriggerPrefixWithMetadata(t *testing.T) {
 	td := &trigger.TriggerData{
 		Type:   "ticket",

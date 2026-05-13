@@ -409,6 +409,32 @@ func TestFromReader_GitHubPushAutoDetect(t *testing.T) {
 	}
 }
 
+func TestFromKeyValues_MetadataFields(t *testing.T) {
+	td, err := FromKeyValues([]string{
+		"type=pull_request",
+		"source=github",
+		"intent=Fix auth",
+		"description=Fixes the timeout bug.",
+		"base_branch=main",
+		"labels=bug, security",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if td.Type != "pull_request" {
+		t.Errorf("type = %q, want 'pull_request'", td.Type)
+	}
+	if td.Metadata["description"] != "Fixes the timeout bug." {
+		t.Errorf("description = %q, want 'Fixes the timeout bug.'", td.Metadata["description"])
+	}
+	if td.Metadata["base_branch"] != "main" {
+		t.Errorf("base_branch = %q, want 'main'", td.Metadata["base_branch"])
+	}
+	if td.Metadata["labels"] != "bug, security" {
+		t.Errorf("labels = %q, want 'bug, security'", td.Metadata["labels"])
+	}
+}
+
 func TestFromReader_InvalidJSON(t *testing.T) {
 	_, err := FromReader(strings.NewReader("not json"))
 	if err == nil {

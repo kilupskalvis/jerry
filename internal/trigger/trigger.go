@@ -137,7 +137,10 @@ func FromKeyValues(pairs []string) (*TriggerData, error) {
 		case "url":
 			t.URL = value
 		default:
-			return nil, fmt.Errorf("unknown trigger field %q (valid: type, source, intent, number, head_sha, repo_owner, repo_name, author, url)", key)
+			if t.Metadata == nil {
+				t.Metadata = make(map[string]string)
+			}
+			t.Metadata[key] = value
 		}
 	}
 	if t.Type == "" {

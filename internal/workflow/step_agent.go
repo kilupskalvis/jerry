@@ -273,6 +273,8 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 	}
 }
 
+const maxMetadataValueLen = 2000
+
 var metadataDisplayOrder = []string{
 	"description", "base_branch", "head_branch", "labels", "draft",
 }
@@ -280,6 +282,13 @@ var metadataDisplayOrder = []string{
 func formatMetadataLabel(key string) string {
 	label := strings.ReplaceAll(key, "_", " ")
 	return strings.ToUpper(label[:1]) + label[1:]
+}
+
+func truncateMetadataValue(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "\n... [truncated]"
 }
 
 func formatTriggerSection(td *trigger.TriggerData) string {
@@ -299,7 +308,7 @@ func formatTriggerSection(td *trigger.TriggerData) string {
 	written := make(map[string]bool, len(td.Metadata))
 	for _, key := range metadataDisplayOrder {
 		if value, ok := td.Metadata[key]; ok && value != "" {
-			b.WriteString(formatMetadataLabel(key) + ": " + value + "\n")
+			b.WriteString(formatMetadataLabel(key) + ": " + truncateMetadataValue(value, maxMetadataValueLen) + "\n")
 			written[key] = true
 		}
 	}
@@ -312,7 +321,7 @@ func formatTriggerSection(td *trigger.TriggerData) string {
 	sort.Strings(extra)
 	for _, key := range extra {
 		if td.Metadata[key] != "" {
-			b.WriteString(formatMetadataLabel(key) + ": " + td.Metadata[key] + "\n")
+			b.WriteString(formatMetadataLabel(key) + ": " + truncateMetadataValue(td.Metadata[key], maxMetadataValueLen) + "\n")
 		}
 	}
 	b.WriteString("\n")
