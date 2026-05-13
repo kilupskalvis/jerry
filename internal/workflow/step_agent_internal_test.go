@@ -80,6 +80,48 @@ func TestBuildSystemPromptMetadataWithPrevOutputs(t *testing.T) {
 	}
 }
 
+func TestMetadataDisplayOrder(t *testing.T) {
+	td := &trigger.TriggerData{
+		Type:   "pull_request",
+		Source: "github",
+		Metadata: map[string]string{
+			"labels":       "bug",
+			"description":  "Fix the thing.",
+			"head_branch":  "feat/x",
+			"base_branch":  "main",
+			"custom_field": "extra",
+		},
+	}
+
+	result := formatTriggerSection(td)
+
+	descIdx := strings.Index(result, "Description:")
+	baseIdx := strings.Index(result, "Base branch:")
+	headIdx := strings.Index(result, "Head branch:")
+	labelsIdx := strings.Index(result, "Labels:")
+	customIdx := strings.Index(result, "Custom field:")
+
+	if descIdx > baseIdx {
+		t.Error("description should appear before base_branch")
+	}
+	if baseIdx > headIdx {
+		t.Error("base_branch should appear before head_branch")
+	}
+	if headIdx > labelsIdx {
+		t.Error("head_branch should appear before labels")
+	}
+	if labelsIdx > customIdx {
+		t.Error("labels should appear before unknown keys")
+	}
+
+	// Run 10 times — order must be stable
+	for range 10 {
+		if got := formatTriggerSection(td); got != result {
+			t.Fatalf("non-deterministic output:\nfirst:\n%s\ngot:\n%s", result, got)
+		}
+	}
+}
+
 func TestBuildTriggerPrefixWithMetadata(t *testing.T) {
 	td := &trigger.TriggerData{
 		Type:   "ticket",

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -272,6 +273,15 @@ func (e *AgentExecutor) loadAgentTools(agentPath string, parentProvider llm.Prov
 	}
 }
 
+var metadataDisplayOrder = []string{
+	"description", "base_branch", "head_branch", "labels", "draft",
+}
+
+func formatMetadataLabel(key string) string {
+	label := strings.ReplaceAll(key, "_", " ")
+	return strings.ToUpper(label[:1]) + label[1:]
+}
+
 func formatTriggerSection(td *trigger.TriggerData) string {
 	var b strings.Builder
 	b.WriteString("## Trigger\n\n")
@@ -286,13 +296,24 @@ func formatTriggerSection(td *trigger.TriggerData) string {
 	if td.Author != "" {
 		b.WriteString("Author: " + td.Author + "\n")
 	}
-	for key, value := range td.Metadata {
-		if value == "" {
-			continue
+	written := make(map[string]bool, len(td.Metadata))
+	for _, key := range metadataDisplayOrder {
+		if value, ok := td.Metadata[key]; ok && value != "" {
+			b.WriteString(formatMetadataLabel(key) + ": " + value + "\n")
+			written[key] = true
 		}
-		label := strings.ReplaceAll(key, "_", " ")
-		label = strings.ToUpper(label[:1]) + label[1:]
-		b.WriteString(label + ": " + value + "\n")
+	}
+	var extra []string
+	for key := range td.Metadata {
+		if !written[key] {
+			extra = append(extra, key)
+		}
+	}
+	sort.Strings(extra)
+	for _, key := range extra {
+		if td.Metadata[key] != "" {
+			b.WriteString(formatMetadataLabel(key) + ": " + td.Metadata[key] + "\n")
+		}
 	}
 	b.WriteString("\n")
 	return b.String()
