@@ -1,251 +1,67 @@
-<table align="center"><tr><td>
-<pre>
-     ██╗███████╗██████╗ ██████╗ ██╗   ██╗
-     ██║██╔════╝██╔══██╗██╔══██╗╚██╗ ██╔╝
-     ██║█████╗  ██████╔╝██████╔╝ ╚████╔╝
-██   ██║██╔══╝  ██╔══██╗██╔══██╗  ╚██╔╝
-╚█████╔╝███████╗██║  ██║██║  ██║   ██║
- ╚════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
-</pre>
-</td></tr></table>
+# Jerry
 
-<p align="center">
-<b>The agent runtime for CI/CD.</b><br>
-AI agents that live in your repo and run in your pipeline. Review PRs, implement features, scan for vulnerabilities — no new infrastructure.
-</p>
+**Terraform for AI agents in CI.**
 
-<p align="center">
-<a href="https://github.com/kilupskalvis/jerry/releases"><img src="https://img.shields.io/github/v/release/kilupskalvis/jerry" alt="Release"></a>
-<a href="LICENSE"><img src="https://img.shields.io/github/license/kilupskalvis/jerry" alt="License"></a>
-</p>
-
----
-
-**A Jira ticket gets assigned. Two minutes later, a PR appears.**
-
-```yaml
-# .jerry/feature/workflow.yaml — three steps, that's it
-steps:
-  - agent: planner
-  - agent: generator
-  - name: test
-    run: go test ./...
-```
-
-```markdown
-# .jerry/feature/generator.md — the agent is a Markdown file
----
-name: generator
-model: claude-sonnet-4-6
-tools:
-  - create_pull_request
----
-
-Implement the plan from the previous step.
-Read existing code, match conventions, build, test, open a PR.
-```
+Declare agent pipelines once — review agents, security scans, ticket-to-PR
+automation — in a small spec that lives in your repo. Jerry compiles it to
+native CI config for GitHub Actions or GitLab CI and gives your agents typed
+handoffs, budgets, permissions, and an audit trail. Any agent runtime. Any CI.
+Zero new infrastructure.
 
 ```
-$ jerry run feature "Add pagination to the users endpoint"
-
-jerry: Running workflow: feature (3 steps)
-  ▸ planner ...
-    -> bash({"command":"find . -type f -name '*.go' | head -20"})
-    -> read_file({"path":"main.go"})
-    [response] Plan: add offset/limit params to handleGetUsers...
-  ✓ planner (18.2s)
-  ▸ generator ...
-    -> read_file({"path":"main.go"})
-    -> write_file({"path":"main.go","content":"..."})
-    -> bash({"command":"go build ./..."})
-    -> bash({"command":"go test ./..."})
-    -> create_pull_request({"title":"Add pagination to users endpoint"})
-  ✓ generator (34.1s)
-  ▸ test ...
-  ✓ test (0.4s)
-jerry: Workflow completed in 52.7s
+.jerry/review/workflow.yaml   ──jerry generate──▶   .github/workflows/jerry-review.yml
 ```
 
----
+## Why
 
-## Get Started
+Everyone is wiring agents into CI by hand: YAML that shells out to an agent
+CLI, bash gluing stdout into PR comments, no budgets, no policy, GitHub-only,
+untestable locally. The runtimes are great. CI is great. The declaration layer
+between them is missing. Jerry owns that layer — and nothing else:
+
+- **CI orchestrates.** Sequencing, retries, secrets, logs — your platform's job.
+- **Runtimes agent.** pi (default), Claude Code, Codex — the loop is their job.
+- **Jerry translates.** One portable, reviewable, governed spec → any of them.
+
+## 5 minutes
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/kilupskalvis/jerry/main/install.sh | sh
-cd your-project
-jerry init                          # creates .jerry/review/ + CI config
-jerry run review "Check for issues" # try it locally
+curl -sSL https://jerry.dev/install.sh | sh
+cd your-repo
+jerry init            # scaffold .jerry/review/ + generate CI config
+git add .jerry .github && git commit -m "add jerry review pipeline" && git push
 ```
 
-Add `ANTHROPIC_API_KEY` to your CI secrets. Push a PR. Jerry reviews it.
+Open a PR. The reviewer agent reads the diff, posts findings, sets a check —
+as native CI steps you can watch live.
 
-Want feature generation? Add the feature workflow:
-
-```bash
-jerry init --template feature       # adds .jerry/feature/ + CI config
-jerry setup jira                    # prints Jira integration config
-```
-
-Assign a Jira ticket to Jerry. It plans, implements, tests, and opens a PR.
-
----
-
-## How It Works
-
-Every agent gets three tools automatically: `bash`, `read_file`, `write_file`. Declare additional tools in the frontmatter:
-
-```markdown
----
-name: reviewer
-model: claude-sonnet-4-6
-tools:
-  - post_pr_comment
----
-
-Review the PR for bugs and security issues.
-Post findings as a PR comment.
-```
-
-Context flows between steps — each agent sees the output of every previous step. No wiring needed.
-
-**Built-in CI tools:** `post_pr_comment`, `post_review_comment`, `add_check_status`, `create_pull_request`
-
-**Custom tools** — define your own as YAML in `.jerry/tools/`:
+## The spec
 
 ```yaml
-# .jerry/tools/deploy.yaml
-description: Deploy a service
-parameters:
-  service:
-    type: string
-    required: true
-run: |
-  curl -X POST "https://deploy.internal/api/v1/deploy" \
-    -d "{\"service\": \"$TOOL_SERVICE\"}"
-```
-
----
-
-## CI Integration
-
-Works with GitHub Actions and GitLab CI. `jerry init` auto-detects your platform and generates the config.
-
-<details>
-<summary>GitHub Actions</summary>
-
-```yaml
+# .jerry/review/workflow.yaml
+version: 1
 on:
-  pull_request:
-    types: [opened, synchronize]
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: curl -sSL https://raw.githubusercontent.com/kilupskalvis/jerry/main/install.sh | sh
-      - run: jerry run review --trigger-file "$GITHUB_EVENT_PATH" --verbose
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-</details>
-
-<details>
-<summary>GitLab CI</summary>
-
-```yaml
-jerry-review:
-  script:
-    - curl -sSL https://raw.githubusercontent.com/kilupskalvis/jerry/main/install.sh | sh
-    - >
-      jerry run review
-      --trigger type=pull_request
-      --trigger source=gitlab
-      --trigger intent="$CI_MERGE_REQUEST_TITLE"
-      --trigger number=$CI_MERGE_REQUEST_IID
-      --verbose
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-```
-</details>
-
-<details>
-<summary>Jira Integration</summary>
-
-```bash
-jerry setup jira
+  pull_request: { types: [opened, synchronize] }
+steps:
+  - name: review
+    prompt: reviewer.md
+    permissions: { allow: ["read", "bash(go test:*)"] }
+    budget: { max_cost: 1.50 }
+    outputs: { verdict: string, findings: list }
+  - name: report
+    ci: post_pr_comment
+    body: "${{ steps.review.outputs.findings }}"
+  - name: gate
+    ci: add_check_status
+    status: "${{ steps.review.outputs.verdict }}"
 ```
 
-Prints step-by-step instructions tailored to your repo and CI platform. The flow: Jira ticket assigned → automation fires → CI runs Jerry → PR opens.
-</details>
+Swap runtimes per step (`runtime: claude-code`). Pipe one step's diff into the
+next step's prompt (`${{ steps.implement.diff }}`). Cap spend per step and per
+run. Same spec compiles to GitHub and GitLab; `jerry run review` executes it
+locally first.
 
----
+## Status
 
-## Install
-
-```bash
-curl -sSL https://raw.githubusercontent.com/kilupskalvis/jerry/main/install.sh | sh   # recommended
-brew install kilupskalvis/tap/jerry                                                     # or Homebrew
-go install github.com/kilupskalvis/jerry/cmd/jerry@latest                               # or Go
-```
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `jerry init` | Scaffold review workflow + CI config |
-| `jerry init --template feature` | Add feature development workflow |
-| `jerry run <workflow> [intent]` | Execute a workflow |
-| `jerry validate` | Validate workflows and agents |
-| `jerry setup jira` | Generate Jira integration config |
-| `jerry logs` | Show recent local runs |
-
-## Configuration
-
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | Claude models |
-| `OPENAI_API_KEY` | GPT / O-series models |
-| `GITHUB_TOKEN` | CI tools (auto-provided in GitHub Actions) |
-| `JERRY_DEFAULT_MODEL` | Fallback model when agents don't specify one |
-| `JERRY_SECRET_*` | Passed to custom tools, shell steps, and hooks |
-
-## Features
-
-- **Guardrails** — deny/allow rules in `settings.yaml` control what tools can do. Block dangerous commands, protect sensitive files. Per-project and per-agent. [→ Permissions](docs/configuration/permissions.md)
-- **Subagents** — agents can invoke other agents as tools at runtime. A triage agent delegates to specialists. [→ Tools](docs/configuration/tools.md#subagent-tools)
-- **Lifecycle hooks** — shell commands that fire on workflow, step, and tool events. Slack notifications, audit logging, downstream triggers. [→ Hooks](docs/configuration/hooks.md)
-- **Deep validation** — `jerry validate` catches typos with "did you mean?" suggestions, verifies tool references, checks types, validates hooks. [→ FAQ](docs/faq.md)
-- **Parallel tool execution** — multiple tool calls in one LLM turn execute concurrently.
-- **Prompt caching** — Anthropic prompt caching on system prompts and tool definitions. Automatic cost reduction.
-
-## Documentation
-
-### Getting Started
-
-- [Getting Started](docs/guides/getting-started.md) — install, first workflow, 5-minute walkthrough
-
-### Configuration Reference
-
-- [Workflows](docs/configuration/workflows.md) — workflow.yaml format, steps, context flow, state, resume
-- [Agents](docs/configuration/agents.md) — frontmatter fields, model selection, agent loop, writing instructions
-- [Tools](docs/configuration/tools.md) — built-in tools, custom tools, subagent tools, resolution order
-- [Permissions](docs/configuration/permissions.md) — deny/allow rules, glob patterns, resolution chain
-- [Hooks](docs/configuration/hooks.md) — lifecycle events, environment variables, tool filters, examples
-
-### Guides
-
-- [CI Setup](docs/guides/ci-setup.md) — GitHub Actions + GitLab CI
-- [Triggers](docs/guides/triggers.md) — trigger methods, fields, platform examples
-- [Jira Integration](docs/guides/jira-integration.md) — full setup walkthrough
-
-### Reference
-
-- [CLI Reference](docs/reference/cli.md) — every command, every flag, exit codes
-- [Environment Variables](docs/reference/environment.md) — API keys, secrets, script vars, hook vars
-- [Error Reference](docs/reference/errors.md) — every error code, causes, fixes
-- [FAQ](docs/faq.md) — cost, safety, debugging, common questions
-
-## License
-
-MIT
+v3 (compiler architecture) under active development — design docs land in `docs/`
+as features ship. MIT.
