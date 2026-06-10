@@ -92,6 +92,36 @@ func (s *Step) EffectiveRuntime(d Defaults) string {
 	return DefaultRuntime
 }
 
+// StepKind discriminates the three step types.
+type StepKind int
+
+const (
+	KindInvalid StepKind = iota
+	KindAgent
+	KindShell
+	KindCI
+)
+
+// Kind returns the step's kind, or KindInvalid unless exactly one of
+// Prompt, Run, CI is set.
+func (s *Step) Kind() StepKind {
+	set := 0
+	kind := KindInvalid
+	if s.Prompt != "" {
+		set, kind = set+1, KindAgent
+	}
+	if s.Run != "" {
+		set, kind = set+1, KindShell
+	}
+	if s.CI != "" {
+		set, kind = set+1, KindCI
+	}
+	if set != 1 {
+		return KindInvalid
+	}
+	return kind
+}
+
 // PermissionSet is the policy a step grants its runtime. Patterns use the
 // noun(selector) grammar: "read", "bash(go test:*)", "write(.env)".
 // Deny always wins over allow.
