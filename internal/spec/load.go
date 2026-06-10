@@ -5,12 +5,56 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 )
+
+// Project is a fully loaded .jerry/ directory.
+type Project struct {
+	Root      string
+	Workflows []*Workflow
+	Settings  *Settings
+	Lock      *Lockfile
+}
+
+// LoadProject loads every directory under root that contains a
+// workflow.yaml, plus settings.yaml and jerry.lock. There is exactly one
+// format; files that do not parse strictly are errors.
+func LoadProject(root string) (*Project, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, jerrerr.Wrap(jerrerr.CodeJerryDirNotFound, root, err)
+	}
+
+	p := &Project{Root: root}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(root, e.Name())
+		if _, statErr := os.Stat(filepath.Join(dir, "workflow.yaml")); statErr != nil {
+			continue
+		}
+		wf, loadErr := LoadWorkflow(dir)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		p.Workflows = append(p.Workflows, wf)
+	}
+	sort.Slice(p.Workflows, func(i, j int) bool { return p.Workflows[i].Name < p.Workflows[j].Name })
+
+	if p.Settings, err = LoadSettings(root); err != nil {
+		return nil, err
+	}
+	if p.Lock, err = LoadLock(root); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
 
 // parseWorkflow strictly decodes workflow.yaml bytes. Unknown fields are
 // errors (typo safety); callers add did-you-mean context.

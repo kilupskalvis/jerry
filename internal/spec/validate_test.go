@@ -213,6 +213,48 @@ func TestValidateTemplateSyntaxError(t *testing.T) {
 	wantIssue(t, ValidateWorkflow(wf), "unterminated")
 }
 
+func TestValidateProjectPolicy(t *testing.T) {
+	p, err := LoadProject("testdata/project")
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	issues := ValidateProject(p)
+	wantIssue(t, issues, `runtime "claude-code" is not allowed by settings.yaml`)
+	wantIssue(t, issues, `runtime "claude-code" is not pinned in jerry.lock`)
+	found := false
+	for _, i := range issues {
+		if i.Level == LevelWarning && strings.Contains(i.Message, `"expensive" has no max_cost`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("want unbounded-budget warning, got %v", issues)
+	}
+}
+
+func TestValidateProjectBudgetCeiling(t *testing.T) {
+	p, err := LoadProject("testdata/project")
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	p.Settings.Policy.Budget.MaxCostPerRun = 1.00
+	wantIssue(t, ValidateProject(p), "declared step budgets total $2.00, exceeding the $1.00 ceiling")
+}
+
+func TestValidateProjectNoSettingsNoLock(t *testing.T) {
+	p := &Project{Workflows: []*Workflow{mustParseValid(t)}}
+	issues := ValidateProject(p)
+	if HasErrors(issues) {
+		t.Errorf("bare project should validate clean, got %v", errorsOf(issues))
+	}
+	wantIssue(t, issues, "not pinned")
+}
+
+func mustParseValid(t *testing.T) *Workflow {
+	t.Helper()
+	return mustParse(t, "version: 1\non: { push: {} }\nsteps:\n  - name: a\n    prompt: \"Do something\"\n")
+}
+
 func TestValidateCleanWorkflowNoErrors(t *testing.T) {
 	wf, err := LoadWorkflow("testdata/valid-review")
 	if err != nil {

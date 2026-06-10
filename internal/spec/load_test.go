@@ -96,6 +96,19 @@ func TestPromptText(t *testing.T) {
 	}
 }
 
+func TestLoadProject(t *testing.T) {
+	p, err := LoadProject("testdata/project")
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	if len(p.Workflows) != 1 || p.Workflows[0].Name != "review" {
+		t.Errorf("Workflows = %+v", p.Workflows)
+	}
+	if p.Settings == nil || p.Lock == nil {
+		t.Error("settings/lock not loaded")
+	}
+}
+
 func TestParseWorkflowStepEnvAbsentVsEmpty(t *testing.T) {
 	wf, err := parseWorkflow([]byte("version: 1\nsteps:\n  - name: a\n    run: ls\n  - name: b\n    run: ls\n    env: []\n"))
 	if err != nil {

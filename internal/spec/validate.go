@@ -195,6 +195,67 @@ func validateRefs(wf *Workflow) []Issue {
 	return issues
 }
 
+// ValidateProject runs per-workflow validation plus cross-cutting policy
+// checks: settings runtime allowlist, budget ceiling, lockfile coverage.
+func ValidateProject(p *Project) []Issue {
+	var issues []Issue
+	for _, wf := range p.Workflows {
+		issues = append(issues, ValidateWorkflow(wf)...)
+		issues = append(issues, validatePolicy(p, wf)...)
+	}
+	return issues
+}
+
+func validatePolicy(p *Project, wf *Workflow) []Issue {
+	var issues []Issue
+
+	var ceiling float64
+	var allowed []string
+	if p.Settings != nil {
+		ceiling = p.Settings.Policy.Budget.MaxCostPerRun
+		allowed = p.Settings.Policy.Runtimes.Allowed
+	}
+
+	var totalDeclared float64
+	for i := range wf.Steps {
+		s := &wf.Steps[i]
+		if s.Kind() != KindAgent {
+			continue
+		}
+		rt := s.EffectiveRuntime(wf.Defaults)
+
+		if len(allowed) > 0 && !slices.Contains(allowed, rt) {
+			issues = append(issues, Issue{LevelError, wf.Name, s.Name,
+				fmt.Sprintf("step %q: runtime %q is not allowed by settings.yaml (allowed: %v)",
+					s.Name, rt, allowed)})
+		}
+
+		if p.Lock == nil {
+			issues = append(issues, Issue{LevelWarning, wf.Name, s.Name,
+				fmt.Sprintf("step %q: runtime %q is not pinned (no jerry.lock) — run `jerry lock`",
+					s.Name, rt)})
+		} else if entry, ok := p.Lock.Runtimes[rt]; !ok || entry.Version == "" {
+			issues = append(issues, Issue{LevelError, wf.Name, s.Name,
+				fmt.Sprintf("step %q: runtime %q is not pinned in jerry.lock", s.Name, rt)})
+		}
+
+		if s.Budget.MaxCost > 0 {
+			totalDeclared += s.Budget.MaxCost
+		} else if ceiling > 0 {
+			issues = append(issues, Issue{LevelWarning, wf.Name, s.Name,
+				fmt.Sprintf("step %q has no max_cost — run ceiling $%.2f cannot be statically guaranteed",
+					s.Name, ceiling)})
+		}
+	}
+
+	if ceiling > 0 && totalDeclared > ceiling {
+		issues = append(issues, Issue{LevelError, wf.Name, "",
+			fmt.Sprintf("declared step budgets total $%.2f, exceeding the $%.2f ceiling in settings.yaml",
+				totalDeclared, ceiling)})
+	}
+	return issues
+}
+
 func stepNames(wf *Workflow) []string {
 	names := make([]string, 0, len(wf.Steps))
 	for i := range wf.Steps {

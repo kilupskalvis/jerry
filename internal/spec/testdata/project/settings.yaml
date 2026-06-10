@@ -1,0 +1,6 @@
+policy:
+  deny: ["read(.env)"]
+  budget:
+    max_cost_per_run: 3.00
+  runtimes:
+    allowed: [pi]

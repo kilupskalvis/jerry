@@ -1,0 +1,12 @@
+version: 1
+on:
+  pull_request:
+    types: [opened]
+steps:
+  - name: review
+    prompt: reviewer.md
+    budget:
+      max_cost: 2.00
+  - name: expensive
+    prompt: "Inline prompt, no budget declared"
+    runtime: claude-code
