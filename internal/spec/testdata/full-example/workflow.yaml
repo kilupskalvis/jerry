@@ -1,0 +1,54 @@
+version: 1
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+  dispatch:
+    types: [jerry-ticket]
+  schedule:
+    cron: "0 6 * * 1"
+defaults:
+  runtime: pi
+  model: claude-sonnet-4-6
+env:
+  - ANTHROPIC_API_KEY
+  - GITHUB_TOKEN
+steps:
+  - name: plan
+    prompt: plan.md
+    model: claude-haiku-4-5
+    outputs:
+      approach: string
+      files: list
+    budget:
+      max_cost: 0.50
+  - name: implement
+    prompt: |
+      Implement: ${{ steps.plan.outputs.approach }}
+      Only touch: ${{ steps.plan.outputs.files }}
+    permissions:
+      allow: ["edit", "bash(go test:*)"]
+      deny: ["bash(rm:*)"]
+    budget:
+      max_cost: 2.00
+      max_tokens: 500000
+    timeout: 600s
+    retries: 1
+  - name: review
+    prompt: review.md
+    context: ["trigger", "diff:implement"]
+    outputs:
+      verdict: string
+  - name: test
+    run: go test ./...
+    env: []
+    timeout: 300s
+  - name: report
+    ci: post_pr_comment
+    body: |
+      ## Result: ${{ steps.review.outputs.verdict }}
+      Cost: ${{ run.cost }} — ${{ steps.implement.diff_stat }}
+  - name: gate
+    ci: add_check_status
+    status: "${{ steps.review.outputs.verdict }}"

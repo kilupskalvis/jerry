@@ -255,6 +255,16 @@ func mustParseValid(t *testing.T) *Workflow {
 	return mustParse(t, "version: 1\non: { push: {} }\nsteps:\n  - name: a\n    prompt: \"Do something\"\n")
 }
 
+func TestValidateFullExample(t *testing.T) {
+	wf, err := LoadWorkflow("testdata/full-example")
+	if err != nil {
+		t.Fatalf("LoadWorkflow: %v", err)
+	}
+	if errs := errorsOf(ValidateWorkflow(wf)); len(errs) != 0 {
+		t.Errorf("full example must validate clean, got: %v", errs)
+	}
+}
+
 func TestValidateCleanWorkflowNoErrors(t *testing.T) {
 	wf, err := LoadWorkflow("testdata/valid-review")
 	if err != nil {
