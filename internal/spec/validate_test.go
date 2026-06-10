@@ -133,6 +133,86 @@ steps:
 	wantIssue(t, issues, "max_cost must be > 0")
 }
 
+func refsWorkflow(t *testing.T, steps string) *Workflow {
+	t.Helper()
+	return mustParse(t, "version: 1\non: { push: {} }\nsteps:\n"+steps)
+}
+
+func TestValidateRefsForwardAndUnknown(t *testing.T) {
+	wf := refsWorkflow(t, `
+  - name: report
+    ci: post_pr_comment
+    body: "${{ steps.review.output }} and ${{ steps.later.output }}"
+  - name: later
+    run: ls
+`)
+	issues := ValidateWorkflow(wf)
+	wantIssue(t, issues, `unknown step "review"`)
+	wantIssue(t, issues, `step "later" runs after`)
+}
+
+func TestValidateRefsOutputsKey(t *testing.T) {
+	wf := refsWorkflow(t, `
+  - name: plan
+    prompt: "Make a plan"
+    outputs: { approach: string }
+  - name: report
+    ci: post_pr_comment
+    body: "${{ steps.plan.outputs.approach }} ${{ steps.plan.outputs.missing }}"
+`)
+	issues := ValidateWorkflow(wf)
+	wantIssue(t, issues, `step "plan" does not declare output "missing"`)
+	if len(errorsOf(issues)) != 1 {
+		t.Errorf("want exactly 1 error, got %v", errorsOf(issues))
+	}
+}
+
+func TestValidateRefsStepNameSuggestion(t *testing.T) {
+	wf := refsWorkflow(t, `
+  - name: plan
+    prompt: "Make a plan"
+  - name: report
+    ci: post_pr_comment
+    body: "${{ steps.plna.output }}"
+`)
+	wantIssue(t, ValidateWorkflow(wf), `did you mean "plan"`)
+}
+
+func TestValidateContextEntries(t *testing.T) {
+	wf := refsWorkflow(t, `
+  - name: implement
+    prompt: "Do it"
+  - name: review
+    prompt: "Review it"
+    context: ["trigger", "steps.implement", "diff:implement", "diff:nope", "garbage:x"]
+`)
+	issues := ValidateWorkflow(wf)
+	wantIssue(t, issues, `unknown step "nope"`)
+	wantIssue(t, issues, `invalid context entry "garbage:x"`)
+	for _, e := range errorsOf(issues) {
+		if strings.Contains(e, `"implement"`) {
+			t.Errorf("valid entries flagged: %v", e)
+		}
+	}
+}
+
+func TestValidateRefsInPromptFile(t *testing.T) {
+	wf, err := LoadWorkflow("testdata/bad-prompt-ref")
+	if err != nil {
+		t.Fatalf("LoadWorkflow: %v", err)
+	}
+	wantIssue(t, ValidateWorkflow(wf), `unknown step "ghost"`)
+}
+
+func TestValidateTemplateSyntaxError(t *testing.T) {
+	wf := refsWorkflow(t, `
+  - name: report
+    ci: post_pr_comment
+    body: "${{ trigger.intent"
+`)
+	wantIssue(t, ValidateWorkflow(wf), "unterminated")
+}
+
 func TestValidateCleanWorkflowNoErrors(t *testing.T) {
 	wf, err := LoadWorkflow("testdata/valid-review")
 	if err != nil {

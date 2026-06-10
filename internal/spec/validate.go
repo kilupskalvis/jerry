@@ -5,6 +5,9 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strings"
+
+	"github.com/kilupskalvis/jerry/internal/handoff"
 )
 
 // Level is the severity of a validation issue.
@@ -88,7 +91,118 @@ func ValidateWorkflow(wf *Workflow) []Issue {
 
 		issues = append(issues, validateStep(wf, s, label)...)
 	}
+	issues = append(issues, validateRefs(wf)...)
 	return issues
+}
+
+// validateRefs statically checks every ${{ }} reference and context: entry:
+// referenced steps exist and run earlier; outputs keys are declared.
+func validateRefs(wf *Workflow) []Issue {
+	var issues []Issue
+
+	stepIdx := map[string]int{}
+	for i := range wf.Steps {
+		stepIdx[wf.Steps[i].Name] = i
+	}
+	declared := func(name, key string) bool {
+		i, ok := stepIdx[name]
+		if !ok {
+			return false
+		}
+		_, has := wf.Steps[i].Outputs[key]
+		return has
+	}
+
+	check := func(pos int, where, text string) {
+		errf := func(format string, args ...any) {
+			issues = append(issues, Issue{LevelError, wf.Name, wf.Steps[pos].Name,
+				fmt.Sprintf("step %q (%s): ", wf.Steps[pos].Name, where) +
+					fmt.Sprintf(format, args...)})
+		}
+
+		refs, err := handoff.ExtractRefs(text)
+		if err != nil {
+			errf("%v", err)
+			return
+		}
+		for _, r := range refs {
+			switch r.Kind {
+			case handoff.RefStepOutput, handoff.RefStepOutputs,
+				handoff.RefStepDiff, handoff.RefStepDiffStat:
+				target, ok := stepIdx[r.Step]
+				if !ok {
+					msg := fmt.Sprintf("unknown step %q", r.Step)
+					if sug := Suggest(r.Step, stepNames(wf)); sug != "" {
+						msg += fmt.Sprintf(" — did you mean %q?", sug)
+					}
+					errf("%s", msg)
+					continue
+				}
+				if target >= pos {
+					errf("step %q runs after %q — only earlier steps can be referenced",
+						r.Step, wf.Steps[pos].Name)
+					continue
+				}
+				if r.Kind == handoff.RefStepOutputs && !declared(r.Step, r.Key) {
+					errf("step %q does not declare output %q", r.Step, r.Key)
+				}
+			}
+		}
+	}
+
+	for i := range wf.Steps {
+		s := &wf.Steps[i]
+
+		switch s.Kind() {
+		case KindAgent:
+			text, err := wf.PromptText(s)
+			if err != nil {
+				issues = append(issues, Issue{LevelError, wf.Name, s.Name, err.Error()})
+			} else {
+				check(i, "prompt", text)
+			}
+		case KindShell:
+			check(i, "run", s.Run)
+		case KindCI:
+			check(i, "body", s.Body)
+			check(i, "status", s.Status)
+			check(i, "title", s.Title)
+		}
+
+		for _, entry := range s.Context {
+			target := ""
+			switch {
+			case entry == "trigger":
+				continue
+			case strings.HasPrefix(entry, "steps."):
+				target = strings.TrimPrefix(entry, "steps.")
+			case strings.HasPrefix(entry, "diff:"):
+				target = strings.TrimPrefix(entry, "diff:")
+			default:
+				issues = append(issues, Issue{LevelError, wf.Name, s.Name,
+					fmt.Sprintf("step %q: invalid context entry %q (trigger | steps.<name> | diff:<name>)",
+						s.Name, entry)})
+				continue
+			}
+			j, ok := stepIdx[target]
+			if !ok || j >= i {
+				issues = append(issues, Issue{LevelError, wf.Name, s.Name,
+					fmt.Sprintf("step %q: context references unknown step %q (or one that runs later)",
+						s.Name, target)})
+			}
+		}
+	}
+	return issues
+}
+
+func stepNames(wf *Workflow) []string {
+	names := make([]string, 0, len(wf.Steps))
+	for i := range wf.Steps {
+		if wf.Steps[i].Name != "" {
+			names = append(names, wf.Steps[i].Name)
+		}
+	}
+	return names
 }
 
 func validateStep(wf *Workflow, s *Step, label string) []Issue {

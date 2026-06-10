@@ -1,0 +1,6 @@
+version: 1
+on:
+  push: {}
+steps:
+  - name: review
+    prompt: reviewer.md
