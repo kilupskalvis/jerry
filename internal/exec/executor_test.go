@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kilupskalvis/jerry/internal/budget"
 	"github.com/kilupskalvis/jerry/internal/handoff"
 	"github.com/kilupskalvis/jerry/internal/runtime"
 	"github.com/kilupskalvis/jerry/internal/trigger"
@@ -100,5 +102,80 @@ func TestAgentStepHappyPath(t *testing.T) {
 	}
 	if rec.Output != "planned" || rec.Outputs["approach"] != "small steps" {
 		t.Errorf("step record = %+v", rec)
+	}
+}
+
+func TestAgentStepSchemaMismatchExit1(t *testing.T) {
+	repo, jerryDir := testProject(t, agentWorkflow, "Plan it")
+	fake := runtime.NewFake("pi")
+	fake.Script(runtime.Result{Text: "x", Outputs: map[string]any{"approach": float64(7)}})
+
+	e := newTestExecutor(repo, jerryDir, fake)
+	code := e.Run(context.Background(), Request{
+		Workflow: "wf", Step: "plan", CtxDir: filepath.Join(repo, ".jerry-run"),
+		Trigger: &trigger.TriggerData{Type: "manual", Source: "cli", Intent: "x"},
+	})
+	if code != ExitStep {
+		t.Errorf("exit = %d, want %d (schema mismatch)", code, ExitStep)
+	}
+}
+
+func TestAgentStepRuntimeFailureExit3(t *testing.T) {
+	repo, jerryDir := testProject(t, agentWorkflow, "Plan it")
+	fake := runtime.NewFake("pi")
+	fake.ScriptErr(fmt.Errorf("spawn failed"))
+
+	e := newTestExecutor(repo, jerryDir, fake)
+	code := e.Run(context.Background(), Request{
+		Workflow: "wf", Step: "plan", CtxDir: filepath.Join(repo, ".jerry-run"),
+		Trigger: &trigger.TriggerData{Type: "manual", Source: "cli", Intent: "x"},
+	})
+	if code != ExitRuntime {
+		t.Errorf("exit = %d, want %d", code, ExitRuntime)
+	}
+}
+
+const budgetWorkflow = `
+version: 1
+on: { push: {} }
+steps:
+  - name: plan
+    prompt: "Plan inline"
+    budget: { max_cost: 0.10 }
+`
+
+func TestAgentStepBudgetBreachExit4AndUsageRecorded(t *testing.T) {
+	repo, jerryDir := testProject(t, budgetWorkflow, "")
+	fake := runtime.NewFake("pi")
+	fake.Script(runtime.Result{Text: "x", Usage: &runtime.Usage{CostUSD: 0.50}})
+
+	e := newTestExecutor(repo, jerryDir, fake)
+	ctxDir := filepath.Join(repo, ".jerry-run")
+	code := e.Run(context.Background(), Request{
+		Workflow: "wf", Step: "plan", CtxDir: ctxDir,
+		Trigger: &trigger.TriggerData{Type: "manual", Source: "cli", Intent: "x"},
+	})
+	if code != ExitBudget {
+		t.Fatalf("exit = %d, want %d", code, ExitBudget)
+	}
+
+	l, err := budget.Load(filepath.Join(ctxDir, "ledger.json"))
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	if cost, _ := l.Totals(); cost != 0.50 {
+		t.Errorf("breaching attempt not recorded: cost = %v", cost)
+	}
+}
+
+func TestUnknownWorkflowExit2(t *testing.T) {
+	repo, jerryDir := testProject(t, agentWorkflow, "Plan it")
+	e := newTestExecutor(repo, jerryDir, runtime.NewFake("pi"))
+	code := e.Run(context.Background(), Request{
+		Workflow: "nope", Step: "plan", CtxDir: filepath.Join(repo, ".jerry-run"),
+		Trigger: &trigger.TriggerData{Type: "manual", Source: "cli", Intent: "x"},
+	})
+	if code != ExitConfig {
+		t.Errorf("exit = %d, want %d", code, ExitConfig)
 	}
 }
