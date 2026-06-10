@@ -130,6 +130,26 @@ type PermissionSet struct {
 	Deny  []string `yaml:"deny,omitempty"`
 }
 
+// MergeDeny returns a copy with org-level deny rules appended (deduped).
+// Org deny is non-overridable: workflows cannot relax it.
+func (p PermissionSet) MergeDeny(orgDeny []string) PermissionSet {
+	out := PermissionSet{
+		Allow: append([]string(nil), p.Allow...),
+		Deny:  append([]string(nil), p.Deny...),
+	}
+	seen := make(map[string]bool, len(out.Deny))
+	for _, d := range out.Deny {
+		seen[d] = true
+	}
+	for _, d := range orgDeny {
+		if !seen[d] {
+			out.Deny = append(out.Deny, d)
+			seen[d] = true
+		}
+	}
+	return out
+}
+
 // Budget caps a step's spend. Zero values mean "no cap".
 type Budget struct {
 	MaxCost   float64 `yaml:"max_cost,omitempty"`
