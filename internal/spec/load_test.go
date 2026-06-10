@@ -44,6 +44,58 @@ func TestParseWorkflowUnknownFieldRejected(t *testing.T) {
 	}
 }
 
+func TestLoadWorkflowFromDir(t *testing.T) {
+	wf, err := LoadWorkflow("testdata/valid-review")
+	if err != nil {
+		t.Fatalf("LoadWorkflow: %v", err)
+	}
+	if wf.Name != "valid-review" {
+		t.Errorf("Name = %q, want valid-review", wf.Name)
+	}
+	if wf.Dir == "" {
+		t.Error("Dir not set")
+	}
+	if len(wf.Steps) != 2 {
+		t.Fatalf("len(Steps) = %d, want 2", len(wf.Steps))
+	}
+}
+
+func TestLoadWorkflowMissingFile(t *testing.T) {
+	_, err := LoadWorkflow("testdata/does-not-exist")
+	if err == nil {
+		t.Fatal("want error for missing dir")
+	}
+}
+
+func TestPromptText(t *testing.T) {
+	wf, err := LoadWorkflow("testdata/valid-review")
+	if err != nil {
+		t.Fatalf("LoadWorkflow: %v", err)
+	}
+
+	text, err := wf.PromptText(&wf.Steps[0])
+	if err != nil {
+		t.Fatalf("PromptText: %v", err)
+	}
+	if !strings.Contains(text, "Code Reviewer") {
+		t.Errorf("file prompt not loaded, got %q", text)
+	}
+
+	inline := &Step{Name: "x", Prompt: "Summarize: ${{ steps.review.output }}"}
+	text, err = wf.PromptText(inline)
+	if err != nil {
+		t.Fatalf("PromptText inline: %v", err)
+	}
+	if text != inline.Prompt {
+		t.Errorf("inline prompt mangled: %q", text)
+	}
+
+	missing := &Step{Name: "y", Prompt: "nope.md"}
+	if _, err := wf.PromptText(missing); err == nil {
+		t.Error("want error for missing prompt file")
+	}
+}
+
 func TestParseWorkflowStepEnvAbsentVsEmpty(t *testing.T) {
 	wf, err := parseWorkflow([]byte("version: 1\nsteps:\n  - name: a\n    run: ls\n  - name: b\n    run: ls\n    env: []\n"))
 	if err != nil {

@@ -1,0 +1,20 @@
+version: 1
+on:
+  pull_request:
+    types: [opened, synchronize]
+env:
+  - ANTHROPIC_API_KEY
+  - GITHUB_TOKEN
+steps:
+  - name: review
+    prompt: reviewer.md
+    permissions:
+      allow: ["read"]
+    budget:
+      max_cost: 1.50
+    outputs:
+      verdict: string
+      findings: list
+  - name: report
+    ci: post_pr_comment
+    body: "${{ steps.review.outputs.findings }}"
