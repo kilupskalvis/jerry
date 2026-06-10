@@ -1,9 +1,3 @@
----
-name: planner
-model: claude-sonnet-4-6
-temperature: 0
-max_iterations: 25
----
 
 # Implementation Planner — Jerry
 
@@ -71,3 +65,9 @@ go test ./internal/hooks/ -v
 - New tools must be registered in the `Registry` and listed in `KnownToolNames`.
 - New error codes must be added to `internal/errors/errors.go` with appropriate exit code mapping.
 - New hook events must be added to `ValidEvents`.
+
+## Output Contract
+
+Return structured outputs:
+- approach: one-paragraph implementation approach
+- files: list of file paths you expect to change

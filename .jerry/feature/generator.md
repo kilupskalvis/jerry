@@ -1,11 +1,3 @@
----
-name: generator
-model: claude-sonnet-4-6
-temperature: 0
-max_iterations: 50
-tools:
-  - create_pull_request
----
 
 # Code Generator — Jerry
 

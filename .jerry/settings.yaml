@@ -1,5 +1,15 @@
-permissions:
+policy:
   deny:
-    - bash: ["rm -rf *", "rm -r /*", "chmod 777 *", "curl * | sh", "wget * | sh"]
-    - read_file: ["*.env", "*.pem", "*.key", "*.secret", "*credentials*"]
-    - write_file: ["*.env", "*.pem", "*.key", "*.secret", ".jerry/settings.yaml"]
+    - "bash(rm -rf:*)"
+    - "bash(chmod 777:*)"
+    - "bash(curl * | sh:*)"
+    - "bash(wget * | sh:*)"
+    - "read(.env)"
+    - "read(**/*.pem)"
+    - "read(**/*.key)"
+    - "read(**/*credentials*)"
+    - "write(.env)"
+    - "write(**/*.pem)"
+    - "write(.jerry/settings.yaml)"
+  budget:
+    max_cost_per_run: 10.00

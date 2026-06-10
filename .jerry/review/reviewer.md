@@ -1,11 +1,3 @@
----
-name: reviewer
-model: claude-sonnet-4-6
-max_iterations: 30
-tools:
-  - post_pr_comment
-  - post_review_comment
----
 
 # Code Reviewer — Jerry
 
@@ -86,3 +78,9 @@ Use `post_pr_comment` for summary: verdict + finding list.
 **Locally:** structured text with file:line, severity, and fix.
 
 **Clean code = say so.** "LGTM" is a valid review.
+
+## Output Contract
+
+Return structured outputs:
+- verdict: "success" if the change looks correct, "failure" if it must not merge
+- findings: markdown bullet list of findings (empty list = "No findings.")
