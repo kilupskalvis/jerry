@@ -43,7 +43,8 @@ const (
 	CodeGitNotAvailable = "GIT_NOT_AVAILABLE"
 
 	// Configuration errors.
-	CodeConfigInvalid = "CONFIG_INVALID"
+	CodeConfigInvalid          = "CONFIG_INVALID"
+	CodeSpecVersionUnsupported = "SPEC_VERSION_UNSUPPORTED"
 )
 
 // Exit codes per spec: 1=step failure, 2=config error, 3=runtime error.
@@ -55,16 +56,17 @@ const (
 
 var exitCodes = map[string]int{
 	// Config errors (exit 2).
-	CodeInvalidWorkflow:  ExitConfig,
-	CodeWorkflowNotFound: ExitConfig,
-	CodeJerryDirNotFound: ExitConfig,
-	CodeJerryDirExists:   ExitConfig,
-	CodeConfigInvalid:    ExitConfig,
-	CodeAgentLoadFailed:  ExitConfig,
-	CodeToolNotFound:     ExitConfig,
-	CodeRunNotFound:      ExitConfig,
-	CodeRunNotResumable:  ExitConfig,
-	CodeWorkflowChanged:  ExitConfig,
+	CodeInvalidWorkflow:        ExitConfig,
+	CodeWorkflowNotFound:       ExitConfig,
+	CodeJerryDirNotFound:       ExitConfig,
+	CodeJerryDirExists:         ExitConfig,
+	CodeConfigInvalid:          ExitConfig,
+	CodeSpecVersionUnsupported: ExitConfig,
+	CodeAgentLoadFailed:        ExitConfig,
+	CodeToolNotFound:           ExitConfig,
+	CodeRunNotFound:            ExitConfig,
+	CodeRunNotResumable:        ExitConfig,
+	CodeWorkflowChanged:        ExitConfig,
 
 	// Runtime errors (exit 3).
 	CodeLLMAuthFailed:      ExitRuntime,

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/kilupskalvis/jerry/internal/agent"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/hooks"
 	"github.com/kilupskalvis/jerry/internal/run"
@@ -261,4 +262,19 @@ func resumeWorkflow(ctx context.Context, app *App, runID string, force bool) err
 	existingStore := run.RestoreFromSnapshot(runState.Context)
 	_, runErr := app.Engine.RunFrom(ctx, *workflowDef, fromStep, existingStore, runState)
 	return runErr
+}
+
+// validateAgents pre-flights legacy agent references. Dies with the legacy
+// run path in phase 2.
+func validateAgents(agentLoader *agent.Loader, w *workflow.Workflow) []string {
+	var errs []string
+	for _, step := range w.Steps {
+		if step.Agent == "" {
+			continue
+		}
+		if _, agentErr := agentLoader.Load(step.Agent); agentErr != nil {
+			errs = append(errs, fmt.Sprintf("step %q: %s", step.Name, agentErr))
+		}
+	}
+	return errs
 }
