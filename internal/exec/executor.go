@@ -298,8 +298,3 @@ func typeMatches(typ string, v any) bool {
 	}
 	return false
 }
-
-func (e *Executor) runCIStep(step *spec.Step, _ *handoff.CtxDir,
-	_ *handoff.RunContext, _ bool) (int, error) {
-	return ExitConfig, fmt.Errorf("step %q: ci steps land in a later commit", step.Name)
-}
