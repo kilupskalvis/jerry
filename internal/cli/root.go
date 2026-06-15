@@ -1,28 +1,21 @@
 // Package cli defines the command-line interface for Jerry.
-// Commands: init, run, validate, logs. Dependencies are injected via the App struct.
+// Commands: init, run, validate, setup. Dependencies are injected via the
+// App struct, constructed in main.go.
 package cli
 
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/run"
-	"github.com/kilupskalvis/jerry/internal/workflow"
+	"github.com/kilupskalvis/jerry/internal/runtime"
 )
 
 // App holds the dependencies needed by CLI commands.
-// Constructed in main.go and passed to subcommand builders.
 type App struct {
-	Engine        *workflow.Engine
-	Loader        *workflow.Loader
-	AgentLoader   *agent.Loader
-	AgentExecutor *workflow.AgentExecutor
-	StateStore    run.StateStore
-	Printer       *output.Printer
-	JerryDir      string
-	RepoRoot      string
-	SecretEnv     []string
+	Registry *runtime.Registry
+	Printer  *output.Printer
+	JerryDir string
+	RepoRoot string
 }
 
 // NewRootCmd creates the root cobra command with all subcommands.
@@ -34,8 +27,8 @@ func NewRootCmd(app *App) *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:   "jerry",
-		Short: "Jerry — the agent runtime for CI/CD",
-		Long:  "Jerry is the agent runtime for CI/CD. Define AI agents in Markdown, run them as steps in your pipeline.",
+		Short: "Jerry — Terraform for AI agents in CI",
+		Long:  "Jerry compiles portable agent-pipeline specs into native CI config and runs them through pluggable agent runtimes.",
 		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			if verbose {
 				app.Printer.SetVerbosity(output.VerbosityVerbose)
@@ -54,7 +47,6 @@ func NewRootCmd(app *App) *cobra.Command {
 		newInitCmd(),
 		newRunCmd(app),
 		newValidateCmd(app),
-		newLogsCmd(app),
 		newSetupCmd(app),
 	)
 

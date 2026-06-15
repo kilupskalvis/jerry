@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kilupskalvis/jerry/internal/errors"
+	"github.com/kilupskalvis/jerry/internal/spec"
 )
 
 func newSetupCmd(app *App) *cobra.Command {
@@ -300,10 +301,18 @@ func detectCIPlatform() string {
 }
 
 func listSetupWorkflows(app *App) []string {
-	if app.Loader == nil {
+	if app.JerryDir == "" {
 		return nil
 	}
-	return app.Loader.ListWorkflows()
+	project, err := spec.LoadProject(app.JerryDir)
+	if err != nil {
+		return nil
+	}
+	names := make([]string, len(project.Workflows))
+	for i, w := range project.Workflows {
+		names[i] = w.Name
+	}
+	return names
 }
 
 func isTerminal() bool {

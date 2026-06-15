@@ -1,4 +1,5 @@
-// Command jerry is the Jerry CLI — a runtime for composable AI code generation workflows.
+// Command jerry compiles portable agent-pipeline specs into native CI
+// config and runs them through pluggable agent runtimes.
 package main
 
 import (
@@ -7,20 +8,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 
-	"github.com/kilupskalvis/jerry/internal/agent"
 	"github.com/kilupskalvis/jerry/internal/cli"
 	"github.com/kilupskalvis/jerry/internal/config"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
-	"github.com/kilupskalvis/jerry/internal/llm"
 	"github.com/kilupskalvis/jerry/internal/output"
-	"github.com/kilupskalvis/jerry/internal/permissions"
-	jerryrun "github.com/kilupskalvis/jerry/internal/run"
-	"github.com/kilupskalvis/jerry/internal/tool"
-	"github.com/kilupskalvis/jerry/internal/workflow"
+	"github.com/kilupskalvis/jerry/internal/runtime"
 )
 
 var Version = "dev"
@@ -51,103 +45,39 @@ func run() int {
 	return 0
 }
 
+// buildApp wires the CLI dependencies. The runtime registry is empty until
+// the pi adapter lands; agent steps error with "unknown runtime" until then.
 func buildApp(printer *output.Printer) *cli.App {
-	app := &cli.App{
-		Printer: printer,
-	}
+	app := &cli.App{Printer: printer, Registry: runtime.NewRegistry()}
 
-	cwd, cwdErr := os.Getwd()
-	if cwdErr != nil {
+	cwd, err := os.Getwd()
+	if err != nil {
 		return app
 	}
-
 	jerryDir, repoRoot, findErr := config.FindJerryDir(cwd)
 	if findErr != nil {
 		return app
 	}
-
-	dotEnv, dotEnvErr := config.LoadDotEnv(repoRoot, ".env")
-	if dotEnvErr != nil {
-		printer.Warning("failed to load .env: %s", dotEnvErr)
-		dotEnv = map[string]string{}
-	}
-
-	secretEnv := make(map[string]string)
-	for _, entry := range os.Environ() {
-		key, val, found := strings.Cut(entry, "=")
-		if found && strings.HasPrefix(key, "JERRY_SECRET_") {
-			secretEnv[key] = val
-		}
-	}
-	for key, val := range dotEnv {
-		if _, exists := secretEnv[key]; !exists {
-			secretEnv[key] = val
-		}
-	}
-
-	defaultModel := os.Getenv("JERRY_DEFAULT_MODEL")
-
-	loader := workflow.NewLoader(jerryDir)
-	runsDir := filepath.Join(jerryDir, "runs")
-	stateStore := jerryrun.NewFileStateStore(runsDir)
-	scriptExec := workflow.NewScriptExecutor(repoRoot, secretEnv)
-
-	toolRegistry := tool.NewRegistry(repoRoot, secretEnv)
-	toolsDir := filepath.Join(jerryDir, "tools")
-	if loadErr := toolRegistry.LoadCustomTools(toolsDir, repoRoot, envSliceFromMap(secretEnv)); loadErr != nil {
-		printer.Warning("failed to load custom tools: %s", loadErr)
-	}
-	agentLoader := agent.NewLoader(defaultModel)
-
-	resolver := llm.NewProviderResolver()
-	resolver.SetKey("anthropic", envOrSecret("ANTHROPIC_API_KEY", secretEnv))
-	resolver.SetKey("openai", envOrSecret("OPENAI_API_KEY", secretEnv))
-
-	settingsPerms, settingsErr := permissions.LoadSettings(jerryDir)
-	if settingsErr != nil {
-		printer.Warning("failed to load settings: %s", settingsErr)
-		settingsPerms = permissions.Permissions{}
-	}
-
-	agentExec := workflow.NewAgentExecutor(agentLoader, toolRegistry, printer, resolver)
-	agentExec.SetPermissions(settingsPerms)
-
-	engine := workflow.NewEngine(
-		[]workflow.StepExecutor{agentExec, scriptExec},
-		stateStore,
-		printer,
-		config.DefaultStepTimeoutValue,
-	)
-
-	engine.OnStoreCreated = func(store *jerryrun.ContextStore) {
-		agentExec.SetStore(store)
-		scriptExec.SetStore(store)
-		toolRegistry.SetTrigger(store.Trigger())
-	}
-
-	app.Engine = engine
-	app.Loader = loader
-	app.AgentLoader = agentLoader
-	app.AgentExecutor = agentExec
-	app.StateStore = stateStore
 	app.JerryDir = jerryDir
 	app.RepoRoot = repoRoot
-	app.SecretEnv = envSliceFromMap(secretEnv)
 
+	loadDotEnvIntoProcess(repoRoot, printer)
 	return app
 }
 
-func envSliceFromMap(m map[string]string) []string {
-	s := make([]string, 0, len(m))
-	for k, v := range m {
-		s = append(s, k+"="+v)
+// loadDotEnvIntoProcess loads .env values into the process environment so
+// agent runtimes and shell steps — which read from a strict allowlist of
+// process env vars — can see locally-declared secrets. Real environment
+// values take precedence.
+func loadDotEnvIntoProcess(repoRoot string, printer *output.Printer) {
+	dotEnv, err := config.LoadDotEnv(repoRoot, ".env")
+	if err != nil {
+		printer.Warning("failed to load .env: %s", err)
+		return
 	}
-	return s
-}
-
-func envOrSecret(key string, secrets map[string]string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+	for k, v := range dotEnv {
+		if _, ok := os.LookupEnv(k); !ok {
+			_ = os.Setenv(k, v)
+		}
 	}
-	return secrets[key]
 }
