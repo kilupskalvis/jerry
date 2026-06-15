@@ -11,10 +11,10 @@ import (
 	"syscall"
 
 	"github.com/kilupskalvis/jerry/internal/cli"
-	"github.com/kilupskalvis/jerry/internal/config"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/runtime"
+	"github.com/kilupskalvis/jerry/internal/spec"
 )
 
 var Version = "dev"
@@ -54,7 +54,7 @@ func buildApp(printer *output.Printer) *cli.App {
 	if err != nil {
 		return app
 	}
-	jerryDir, repoRoot, findErr := config.FindJerryDir(cwd)
+	jerryDir, repoRoot, findErr := spec.FindJerryDir(cwd)
 	if findErr != nil {
 		return app
 	}
@@ -70,7 +70,7 @@ func buildApp(printer *output.Printer) *cli.App {
 // process env vars — can see locally-declared secrets. Real environment
 // values take precedence.
 func loadDotEnvIntoProcess(repoRoot string, printer *output.Printer) {
-	dotEnv, err := config.LoadDotEnv(repoRoot, ".env")
+	dotEnv, err := spec.LoadDotEnv(repoRoot, ".env")
 	if err != nil {
 		printer.Warning("failed to load .env: %s", err)
 		return

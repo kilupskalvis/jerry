@@ -5,8 +5,8 @@
 # Secrets
 .env
 
-# Jerry local run state
-.jerry/runs/
+# Jerry ephemeral run context (local dev)
+.jerry-run/
 
 # Lattice
 .lattice/
