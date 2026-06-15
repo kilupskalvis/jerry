@@ -7,165 +7,147 @@ import (
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/cli"
+	"github.com/kilupskalvis/jerry/internal/spec"
 )
 
-func TestInitCmd_CreatesDirectory(t *testing.T) {
+func initInto(t *testing.T, args ...string) string {
+	t.Helper()
 	tmpDir := t.TempDir()
-
 	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-
+	rootCmd.SetArgs(append([]string{"init", "--path", tmpDir}, args...))
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
+	return tmpDir
+}
 
-	jerryDir := filepath.Join(tmpDir, ".jerry")
-	info, statErr := os.Stat(jerryDir)
-	if statErr != nil {
-		t.Fatalf(".jerry/ not created: %v", statErr)
-	}
-	if !info.IsDir() {
-		t.Fatal(".jerry should be a directory")
+func TestInitCmd_CreatesDirectory(t *testing.T) {
+	tmpDir := initInto(t)
+	info, statErr := os.Stat(filepath.Join(tmpDir, ".jerry"))
+	if statErr != nil || !info.IsDir() {
+		t.Fatalf(".jerry/ not created as a directory: %v", statErr)
 	}
 }
 
 func TestInitCmd_CreatesReviewWorkflow(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
-
-	workflowPath := filepath.Join(tmpDir, ".jerry", "review", "workflow.yaml")
-	content, readErr := os.ReadFile(workflowPath)
+	tmpDir := initInto(t)
+	content, readErr := os.ReadFile(filepath.Join(tmpDir, ".jerry", "review", "workflow.yaml"))
 	if readErr != nil {
 		t.Fatalf("review/workflow.yaml not created: %v", readErr)
 	}
-	if !strings.Contains(string(content), "reviewer") {
-		t.Error("workflow.yaml should reference reviewer agent")
+	if !strings.Contains(string(content), "version: 1") {
+		t.Error("workflow.yaml should be a v3 spec (version: 1)")
+	}
+	if !strings.Contains(string(content), "prompt: reviewer.md") {
+		t.Error("workflow.yaml should reference reviewer.md")
 	}
 }
 
-func TestInitCmd_CreatesReviewAgent(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
-
-	agentPath := filepath.Join(tmpDir, ".jerry", "review", "reviewer.md")
-	content, readErr := os.ReadFile(agentPath)
+func TestInitCmd_CreatesReviewPrompt(t *testing.T) {
+	tmpDir := initInto(t)
+	content, readErr := os.ReadFile(filepath.Join(tmpDir, ".jerry", "review", "reviewer.md"))
 	if readErr != nil {
 		t.Fatalf("review/reviewer.md not created: %v", readErr)
 	}
-	if !strings.Contains(string(content), "name: reviewer") {
-		t.Error("reviewer.md should have name: reviewer in frontmatter")
+	if strings.HasPrefix(strings.TrimSpace(string(content)), "---") {
+		t.Error("v3 prompt files must not have YAML frontmatter")
+	}
+	if !strings.Contains(string(content), "Output Contract") {
+		t.Error("reviewer.md should declare its output contract")
 	}
 }
 
-func TestInitCmd_CreatesGitignore(t *testing.T) {
-	tmpDir := t.TempDir()
+func TestInitCmd_ScaffoldValidates(t *testing.T) {
+	tmpDir := initInto(t)
+	project, err := spec.LoadProject(filepath.Join(tmpDir, ".jerry"))
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	if issues := spec.ValidateProject(project); spec.HasErrors(issues) {
+		t.Errorf("scaffold must validate clean, got: %v", issues)
+	}
+}
 
+func TestInitCmd_FeatureTemplateValidates(t *testing.T) {
+	tmpDir := initInto(t)
 	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
+	rootCmd.SetArgs([]string{"init", "--path", tmpDir, "--template", "feature"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("init --template feature failed: %v", err)
+	}
+	project, err := spec.LoadProject(filepath.Join(tmpDir, ".jerry"))
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	if len(project.Workflows) != 2 {
+		t.Fatalf("want review + feature workflows, got %d", len(project.Workflows))
+	}
+	if issues := spec.ValidateProject(project); spec.HasErrors(issues) {
+		t.Errorf("review + feature scaffold must validate clean: %v", issues)
+	}
+}
 
-	gitignorePath := filepath.Join(tmpDir, ".jerry", ".gitignore")
-	content, readErr := os.ReadFile(gitignorePath)
+func TestInitCmd_JerryGitignore(t *testing.T) {
+	tmpDir := initInto(t)
+	content, readErr := os.ReadFile(filepath.Join(tmpDir, ".jerry", ".gitignore"))
 	if readErr != nil {
-		t.Fatalf(".gitignore not created: %v", readErr)
+		t.Fatalf(".jerry/.gitignore not created: %v", readErr)
 	}
-
-	if !strings.Contains(string(content), "runs/") {
-		t.Error(".gitignore should contain 'runs/'")
-	}
-}
-
-func TestInitCmd_CreatesRunsDir(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
-
-	runsDir := filepath.Join(tmpDir, ".jerry", "runs")
-	info, statErr := os.Stat(runsDir)
-	if statErr != nil {
-		t.Fatalf("runs/ not created: %v", statErr)
-	}
-	if !info.IsDir() {
-		t.Fatal("runs/ should be a directory")
+	if !strings.Contains(string(content), "settings.local.yaml") {
+		t.Error(".jerry/.gitignore should include settings.local.yaml")
 	}
 }
 
-func TestInitCmd_AlreadyExists(t *testing.T) {
-	tmpDir := t.TempDir()
+func TestInitCmd_RootGitignoreIgnoresCtxDir(t *testing.T) {
+	tmpDir := initInto(t)
+	content, readErr := os.ReadFile(filepath.Join(tmpDir, ".gitignore"))
+	if readErr != nil {
+		t.Fatalf("root .gitignore not created: %v", readErr)
+	}
+	if !strings.Contains(string(content), ".jerry-run/") {
+		t.Error("root .gitignore should ignore .jerry-run/")
+	}
+}
 
+func TestInitCmd_RootGitignoreAppendsWithoutClobber(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitignore := filepath.Join(tmpDir, ".gitignore")
+	if err := os.WriteFile(gitignore, []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	rootCmd := cli.NewRootCmd(&cli.App{})
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
-
-	rootCmd2 := cli.NewRootCmd(&cli.App{})
-	rootCmd2.SetArgs([]string{"init", "--path", tmpDir})
-	err := rootCmd2.Execute()
-	if err == nil {
-		t.Fatal("expected error when .jerry/ already exists")
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+	content, _ := os.ReadFile(gitignore)
+	if !strings.Contains(string(content), "node_modules/") {
+		t.Error("existing .gitignore content was clobbered")
+	}
+	if !strings.Contains(string(content), ".jerry-run/") {
+		t.Error(".jerry-run/ not appended")
 	}
 }
 
 func TestInitCmd_CreatesSettingsYAML(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
-
-	settingsPath := filepath.Join(tmpDir, ".jerry", "settings.yaml")
-	data, err := os.ReadFile(settingsPath)
+	tmpDir := initInto(t)
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".jerry", "settings.yaml"))
 	if err != nil {
 		t.Fatalf("settings.yaml not created: %v", err)
 	}
-	if !strings.Contains(string(data), "permissions") {
-		t.Error("settings.yaml should contain permissions block")
+	if !strings.Contains(string(data), "policy:") {
+		t.Error("settings.yaml should contain a policy block")
 	}
 	if !strings.Contains(string(data), "rm -rf") {
 		t.Error("settings.yaml should contain default deny rules")
 	}
 }
 
-func TestInitCmd_GitignoreIncludesSettingsLocal(t *testing.T) {
-	tmpDir := t.TempDir()
-
+func TestInitCmd_AlreadyExists(t *testing.T) {
+	tmpDir := initInto(t)
 	rootCmd := cli.NewRootCmd(&cli.App{})
 	rootCmd.SetArgs([]string{"init", "--path", tmpDir})
-	_ = rootCmd.Execute()
-
-	gitignorePath := filepath.Join(tmpDir, ".jerry", ".gitignore")
-	data, err := os.ReadFile(gitignorePath)
-	if err != nil {
-		t.Fatalf(".gitignore not created: %v", err)
-	}
-	if !strings.Contains(string(data), "settings.local.yaml") {
-		t.Error(".gitignore should include settings.local.yaml")
-	}
-}
-
-func TestInitCmd_WithPathFlag(t *testing.T) {
-	tmpDir := t.TempDir()
-	targetDir := filepath.Join(tmpDir, "subdir")
-	if mkErr := os.MkdirAll(targetDir, 0o755); mkErr != nil {
-		t.Fatalf("failed to create target dir: %v", mkErr)
-	}
-
-	rootCmd := cli.NewRootCmd(&cli.App{})
-	rootCmd.SetArgs([]string{"init", "--path", targetDir})
-
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("init with --path failed: %v", err)
-	}
-
-	jerryDir := filepath.Join(targetDir, ".jerry")
-	if _, statErr := os.Stat(jerryDir); statErr != nil {
-		t.Fatalf(".jerry/ not created in target dir: %v", statErr)
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatal("expected error when .jerry/ already exists")
 	}
 }

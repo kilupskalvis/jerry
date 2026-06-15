@@ -1,10 +1,15 @@
-# .jerry/settings.yaml — project-level tool permissions
-# Deny rules block tool calls matching these patterns (checked first).
-# Allow rules restrict tools to only matching patterns (checked second).
-# Patterns use glob syntax: * matches any segment, ** matches recursively.
-
-permissions:
+# .jerry/settings.yaml — org policy applied to every workflow in this repo.
+# deny rules are non-overridable: workflows cannot relax them. Patterns use
+# the noun(selector) grammar, e.g. bash(rm -rf:*), read(.env), write(**/*.pem).
+policy:
   deny:
-    - bash: ["rm -rf *", "rm -r /*", "chmod 777 *", "curl * | sh", "wget * | sh"]
-    - read_file: ["*.env", "*.pem", "*.key", "*.secret", "*credentials*"]
-    - write_file: ["*.env", "*.pem", "*.key", "*.secret", ".jerry/settings.yaml"]
+    - "bash(rm -rf:*)"
+    - "bash(chmod 777:*)"
+    - "bash(curl * | sh:*)"
+    - "read(.env)"
+    - "read(**/*.pem)"
+    - "read(**/*.key)"
+    - "write(.env)"
+    - "write(.jerry/settings.yaml)"
+  budget:
+    max_cost_per_run: 10.00

@@ -1,4 +1,4 @@
-// jerry init: scaffolds .jerry/ with workflow templates and CI config.
+// jerry init: scaffolds .jerry/ with a v3 workflow spec.
 
 package cli
 
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,8 +16,6 @@ import (
 
 //go:embed templates/review/workflow.yaml templates/review/reviewer.md
 //go:embed templates/feature/workflow.yaml templates/feature/planner.md templates/feature/generator.md
-//go:embed templates/ci/github-review.yml templates/ci/github-feature.yml
-//go:embed templates/ci/gitlab-review.yml templates/ci/gitlab-feature.yml
 //go:embed templates/settings.yaml
 var embeddedTemplates embed.FS
 
@@ -24,29 +23,24 @@ func newInitCmd() *cobra.Command {
 	var (
 		targetPath string
 		template   string
-		ciPlatform string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize a new .jerry/ directory",
-		Long:  "Scaffolds a .jerry/ directory with workflow templates and CI config.",
+		Long:  "Scaffolds a .jerry/ directory with a v3 workflow spec. Run `jerry generate` to compile CI config.",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if ciPlatform != "" {
-				return initCI(targetPath, ciPlatform)
-			}
 			return Scaffold(targetPath, template)
 		},
 	}
 
 	cmd.Flags().StringVar(&targetPath, "path", "", "Directory to initialize in (default: current directory)")
 	cmd.Flags().StringVar(&template, "template", "", "Additional workflow template to add (e.g., feature)")
-	cmd.Flags().StringVar(&ciPlatform, "ci", "", "Generate CI config only (github or gitlab)")
 
 	return cmd
 }
 
-// Scaffold creates .jerry/ with the specified workflow template and auto-detected CI config.
+// Scaffold creates .jerry/ with the specified workflow template.
 // @lattice:flow init
 func Scaffold(targetPath, template string) error {
 	if targetPath == "" {
@@ -75,17 +69,15 @@ func Scaffold(targetPath, template string) error {
 		if err := writeSettingsFile(jerryDir); err != nil {
 			return err
 		}
-		if err := writeGitignore(jerryDir); err != nil {
+		if err := writeJerryGitignore(jerryDir); err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Join(jerryDir, "runs"), 0o755); err != nil {
-			return errors.Wrap(errors.CodeStateWriteFailed, "failed to create runs directory", err)
+		if err := ensureRootGitignore(targetPath); err != nil {
+			return err
 		}
 	}
 
-	ciGenerated := autoDetectAndGenerateCI(targetPath, template)
-
-	printInitOutput(template, jerryDir, ciGenerated)
+	printInitOutput(template)
 	return nil
 }
 
@@ -123,85 +115,6 @@ func scaffoldTemplate(jerryDir, template string) error {
 	return nil
 }
 
-func autoDetectAndGenerateCI(targetPath, template string) string {
-	if _, err := os.Stat(filepath.Join(targetPath, ".github")); err == nil {
-		if generateCITemplate(targetPath, "github", template) == nil {
-			return "github"
-		}
-	}
-	if _, err := os.Stat(filepath.Join(targetPath, ".gitlab-ci.yml")); err == nil {
-		if generateCITemplate(targetPath, "gitlab", template) == nil {
-			return "gitlab"
-		}
-	}
-	return ""
-}
-
-func initCI(targetPath, platform string) error {
-	if targetPath == "" {
-		cwd, cwdErr := os.Getwd()
-		if cwdErr != nil {
-			return errors.Wrap(errors.CodeJerryDirNotFound, "failed to get current directory", cwdErr)
-		}
-		targetPath = cwd
-	}
-
-	jerryDir := filepath.Join(targetPath, ".jerry")
-	entries, err := os.ReadDir(jerryDir)
-	if err != nil {
-		return errors.New(errors.CodeJerryDirNotFound,
-			"no .jerry/ directory found — run 'jerry init' first")
-	}
-
-	generated := 0
-	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == "runs" || entry.Name() == "tools" {
-			continue
-		}
-		wfFile := filepath.Join(jerryDir, entry.Name(), "workflow.yaml")
-		if _, err := os.Stat(wfFile); err != nil {
-			continue
-		}
-		if generateCITemplate(targetPath, platform, entry.Name()) == nil {
-			fmt.Fprintf(os.Stderr, "  Generated CI config for %s workflow (%s)\n", entry.Name(), platform)
-			generated++
-		}
-	}
-
-	if generated == 0 {
-		return fmt.Errorf("no workflows found in .jerry/ to generate CI config for")
-	}
-	return nil
-}
-
-func generateCITemplate(targetPath, platform, template string) error {
-	ciFile := fmt.Sprintf("templates/ci/%s-%s.yml", platform, template)
-	content, err := embeddedTemplates.ReadFile(ciFile)
-	if err != nil {
-		return err
-	}
-
-	switch platform {
-	case "github":
-		destDir := filepath.Join(targetPath, ".github", "workflows")
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
-			return err
-		}
-		dest := filepath.Join(destDir, fmt.Sprintf("jerry-%s.yml", template))
-		if _, err := os.Stat(dest); err == nil {
-			return nil
-		}
-		return os.WriteFile(dest, content, 0o644)
-	case "gitlab":
-		dest := filepath.Join(targetPath, fmt.Sprintf(".jerry-%s-ci.yml", template))
-		if _, err := os.Stat(dest); err == nil {
-			return nil
-		}
-		return os.WriteFile(dest, content, 0o644)
-	}
-	return fmt.Errorf("unknown CI platform %q (use github or gitlab)", platform)
-}
-
 func writeSettingsFile(jerryDir string) error {
 	settingsPath := filepath.Join(jerryDir, "settings.yaml")
 	if _, err := os.Stat(settingsPath); err == nil {
@@ -214,15 +127,40 @@ func writeSettingsFile(jerryDir string) error {
 	return os.WriteFile(settingsPath, content, 0o644)
 }
 
-func writeGitignore(jerryDir string) error {
+// writeJerryGitignore ignores local-only files under .jerry/.
+func writeJerryGitignore(jerryDir string) error {
 	gitignorePath := filepath.Join(jerryDir, ".gitignore")
 	if _, err := os.Stat(gitignorePath); err == nil {
 		return nil
 	}
-	return os.WriteFile(gitignorePath, []byte("runs/\nsettings.local.yaml\n"), 0o644)
+	return os.WriteFile(gitignorePath, []byte("settings.local.yaml\n"), 0o644)
 }
 
-func printInitOutput(template, jerryDir, ciPlatform string) {
+// ensureRootGitignore appends the ephemeral context directory to the repo's
+// root .gitignore (it lives at the workspace root, not under .jerry/).
+func ensureRootGitignore(targetPath string) error {
+	const entry = ".jerry-run/"
+	path := filepath.Join(targetPath, ".gitignore")
+	existing, _ := os.ReadFile(path)
+	if strings.Contains(string(existing), entry) {
+		return nil
+	}
+	prefix := ""
+	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
+		prefix = "\n"
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return errors.Wrap(errors.CodeStateWriteFailed, "failed to update .gitignore", err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(prefix + entry + "\n"); err != nil {
+		return errors.Wrap(errors.CodeStateWriteFailed, "failed to write .gitignore", err)
+	}
+	return nil
+}
+
+func printInitOutput(template string) {
 	if template == "review" {
 		fmt.Println("Jerry initialized:")
 	} else {
@@ -234,20 +172,7 @@ func printInitOutput(template, jerryDir, ciPlatform string) {
 		fmt.Printf("  .jerry/%s/%s\n", template, entry.Name())
 	}
 
-	switch ciPlatform {
-	case "github":
-		fmt.Printf("  .github/workflows/jerry-%s.yml\n", template)
-	case "gitlab":
-		fmt.Printf("  .jerry-%s-ci.yml\n", template)
-	}
-
 	fmt.Println()
-	if ciPlatform == "" {
-		fmt.Println("No CI platform detected. Generate CI config with:")
-		fmt.Println("  jerry init --ci github")
-		fmt.Println("  jerry init --ci gitlab")
-		fmt.Println()
-	}
-
-	fmt.Printf("Run locally: jerry run %s \"your task description\"\n", template)
+	fmt.Println("Validate:    jerry validate")
+	fmt.Printf("Run locally: jerry run %s \"your task\"\n", template)
 }

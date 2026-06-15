@@ -1,2 +1,26 @@
+version: 1
+on:
+  pull_request:
+    types: [opened, synchronize]
+env:
+  - ANTHROPIC_API_KEY
+  - GITHUB_TOKEN
 steps:
-  - agent: reviewer
+  - name: review
+    prompt: reviewer.md
+    model: claude-sonnet-4-6
+    permissions:
+      allow: ["read"]
+    budget:
+      max_cost: 1.50
+    outputs:
+      verdict: string
+      findings: string
+  - name: report
+    ci: post_pr_comment
+    body: |
+      ## Jerry Review
+      ${{ steps.review.outputs.findings }}
+  - name: gate
+    ci: add_check_status
+    status: "${{ steps.review.outputs.verdict }}"

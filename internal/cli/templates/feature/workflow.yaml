@@ -1,6 +1,29 @@
+version: 1
+on:
+  dispatch:
+    types: [jerry-ticket]
+env:
+  - ANTHROPIC_API_KEY
+  - GITHUB_TOKEN
+defaults:
+  model: claude-sonnet-4-6
 steps:
-  - agent: planner
-  - agent: generator
+  - name: plan
+    prompt: planner.md
+    model: claude-haiku-4-5
+    budget:
+      max_cost: 0.50
+    outputs:
+      approach: string
+      files: list
+  - name: implement
+    prompt: generator.md
+    context: ["trigger", "steps.plan"]
+    permissions:
+      allow: ["read", "edit"]
+    budget:
+      max_cost: 3.00
+    timeout: 900s
   - name: test
     run: |
       if [ -f go.mod ]; then go test ./...
@@ -8,3 +31,12 @@ steps:
       elif [ -f requirements.txt ]; then pytest
       else echo "no test runner detected"; fi
     timeout: 300s
+  - name: open-pr
+    ci: create_pull_request
+    title: "jerry: ${{ trigger.intent }}"
+    body: |
+      Automated implementation for: ${{ trigger.intent }}
+
+      **Plan:** ${{ steps.plan.outputs.approach }}
+
+      ${{ steps.implement.diff_stat }}
