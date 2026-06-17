@@ -3,6 +3,7 @@ package spec
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -43,4 +44,13 @@ func LoadLock(root string) (*Lockfile, error) {
 		return nil, jerrerr.Wrap(jerrerr.CodeConfigInvalid, "parsing jerry.lock", err)
 	}
 	return &l, nil
+}
+
+// Save writes the lockfile to <root>/jerry.lock.
+func (l *Lockfile) Save(root string) error {
+	data, err := yaml.Marshal(l)
+	if err != nil {
+		return fmt.Errorf("marshaling jerry.lock: %w", err)
+	}
+	return os.WriteFile(filepath.Join(root, "jerry.lock"), data, 0o644)
 }

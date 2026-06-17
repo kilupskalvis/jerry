@@ -29,6 +29,26 @@ runtimes:
 	}
 }
 
+func TestLockfileSaveRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	l := &Lockfile{
+		Version: 1,
+		Runtimes: map[string]LockedRuntime{
+			"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"},
+		},
+	}
+	if err := l.Save(dir); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := LoadLock(dir)
+	if err != nil {
+		t.Fatalf("LoadLock: %v", err)
+	}
+	if got.Runtimes["pi"].Version != "0.73.1" || got.Version != 1 {
+		t.Errorf("round trip wrong: %+v", got)
+	}
+}
+
 func TestLoadLockAbsent(t *testing.T) {
 	l, err := LoadLock(t.TempDir())
 	if err != nil {
