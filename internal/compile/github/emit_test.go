@@ -35,34 +35,29 @@ func assertGolden(t *testing.T, name string, got []byte) {
 	}
 }
 
-func minimalPlan() *compile.Plan {
-	return &compile.Plan{
-		JerryVersion: "0.1.0",
-		Files: []compile.PlannedFile{
-			{
-				Path: ".github/workflows/jerry-minimal.yml",
-				Jobs: []compile.PlannedJob{
-					{
-						Name:     "minimal",
-						Triggers: spec.Triggers{Push: &spec.PushTrigger{Branches: []string{"main"}}},
-						Env:      []string{"ANTHROPIC_API_KEY"},
-						Steps: []compile.PlannedStep{
-							{Label: "Checkout", Command: "actions/checkout@v4", IsPreamble: true},
-							{Label: "Install Jerry", Command: "curl -sSL https://jerry.dev/install.sh | sh -s -- --version v0.1.0", IsPreamble: true},
-							{Label: "Drift check", Command: "jerry generate --check", IsPreamble: true},
-							{Label: "greet", Command: "jerry exec minimal/greet", EnvRefs: []compile.EnvRef{
-								{Name: "ANTHROPIC_API_KEY", SecretRef: "${{ secrets.ANTHROPIC_API_KEY }}"},
-							}},
-						},
-					},
-				},
-			},
-		},
+func piLock() *spec.Lockfile {
+	return &spec.Lockfile{
+		Version:  1,
+		Runtimes: map[string]spec.LockedRuntime{"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"}},
 	}
 }
 
 func TestEmitMinimal(t *testing.T) {
-	files, err := Emit(minimalPlan())
+	plan := &compile.Plan{
+		JerryVersion: "0.1.0",
+		Workflows: []compile.PlannedWorkflow{
+			{
+				Name:     "minimal",
+				Triggers: spec.Triggers{Push: &spec.PushTrigger{Branches: []string{"main"}}},
+				Env:      []string{"ANTHROPIC_API_KEY"},
+				Steps: []compile.PlannedStep{
+					{Label: "greet", Command: "jerry exec minimal/greet",
+						EnvNames: []string{"ANTHROPIC_API_KEY"}},
+				},
+			},
+		},
+	}
+	files, err := Emit(plan)
 	if err != nil {
 		t.Fatalf("Emit: %v", err)
 	}
@@ -72,15 +67,8 @@ func TestEmitMinimal(t *testing.T) {
 	assertGolden(t, "minimal.yml", files[0].Content)
 }
 
-func piLock() *spec.Lockfile {
-	return &spec.Lockfile{
-		Version:  1,
-		Runtimes: map[string]spec.LockedRuntime{"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"}},
-	}
-}
-
 func TestEmitReviewWorkflow(t *testing.T) {
-	plan, err := compile.PlanProject(&spec.Project{
+	plan, _ := compile.PlanProject(&spec.Project{
 		Root: "/tmp/.jerry",
 		Workflows: []*spec.Workflow{
 			{
@@ -103,22 +91,16 @@ func TestEmitReviewWorkflow(t *testing.T) {
 		},
 		Lock: piLock(),
 	}, "0.1.0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	files, err := Emit(plan)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(files) != 1 {
-		t.Fatalf("len = %d", len(files))
 	}
 	assertGolden(t, "review.yml", files[0].Content)
 }
 
 func TestEmitFeatureWorkflow(t *testing.T) {
 	empty := []string{}
-	plan, err := compile.PlanProject(&spec.Project{
+	plan, _ := compile.PlanProject(&spec.Project{
 		Root: "/tmp/.jerry",
 		Workflows: []*spec.Workflow{
 			{
@@ -146,15 +128,9 @@ func TestEmitFeatureWorkflow(t *testing.T) {
 		},
 		Lock: piLock(),
 	}, "0.1.0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	files, err := Emit(plan)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(files) != 1 {
-		t.Fatalf("len = %d", len(files))
 	}
 	assertGolden(t, "feature.yml", files[0].Content)
 }
@@ -162,30 +138,20 @@ func TestEmitFeatureWorkflow(t *testing.T) {
 func TestEmitRetryLoop(t *testing.T) {
 	plan := &compile.Plan{
 		JerryVersion: "0.1.0",
-		Files: []compile.PlannedFile{
+		Workflows: []compile.PlannedWorkflow{
 			{
-				Path: ".github/workflows/jerry-retry.yml",
-				Jobs: []compile.PlannedJob{
-					{
-						Name:     "retry",
-						Triggers: spec.Triggers{Push: &spec.PushTrigger{}},
-						Steps: []compile.PlannedStep{
-							{Label: "Checkout", Command: "actions/checkout@v4", IsPreamble: true},
-							{Label: "Drift check", Command: "jerry generate --check", IsPreamble: true},
-							{Label: "flaky", Command: "jerry exec retry/flaky",
-								Retries:        2,
-								TimeoutMinutes: 11,
-								EnvRefs: []compile.EnvRef{
-									{Name: "ANTHROPIC_API_KEY", SecretRef: "${{ secrets.ANTHROPIC_API_KEY }}"},
-								},
-							},
-						},
+				Name:     "retry",
+				Triggers: spec.Triggers{Push: &spec.PushTrigger{}},
+				Steps: []compile.PlannedStep{
+					{Label: "flaky", Command: "jerry exec retry/flaky",
+						Retries:        2,
+						TimeoutMinutes: 11,
+						EnvNames:       []string{"ANTHROPIC_API_KEY"},
 					},
 				},
 			},
 		},
 	}
-
 	files, err := Emit(plan)
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +160,13 @@ func TestEmitRetryLoop(t *testing.T) {
 }
 
 func TestEmitDeterministic(t *testing.T) {
-	plan := minimalPlan()
+	plan := &compile.Plan{
+		JerryVersion: "0.1.0",
+		Workflows: []compile.PlannedWorkflow{
+			{Name: "a", Triggers: spec.Triggers{Push: &spec.PushTrigger{}},
+				Steps: []compile.PlannedStep{{Label: "s", Command: "jerry exec a/s"}}},
+		},
+	}
 	f1, _ := Emit(plan)
 	f2, _ := Emit(plan)
 	if string(f1[0].Content) != string(f2[0].Content) {

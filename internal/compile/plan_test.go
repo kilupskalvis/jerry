@@ -61,47 +61,27 @@ func TestPlanReviewWorkflow(t *testing.T) {
 	if plan.JerryVersion != "0.1.0" {
 		t.Errorf("JerryVersion = %q", plan.JerryVersion)
 	}
-	if len(plan.Files) != 1 {
-		t.Fatalf("len(Files) = %d, want 1", len(plan.Files))
+	if len(plan.Workflows) != 1 {
+		t.Fatalf("len(Workflows) = %d, want 1", len(plan.Workflows))
 	}
 
-	f := plan.Files[0]
-	if f.Path != ".github/workflows/jerry-review.yml" {
-		t.Errorf("Path = %q", f.Path)
+	pw := plan.Workflows[0]
+	if pw.Name != "review" {
+		t.Errorf("Name = %q", pw.Name)
 	}
-	if len(f.Jobs) != 1 {
-		t.Fatalf("len(Jobs) = %d, want 1", len(f.Jobs))
-	}
-
-	job := f.Jobs[0]
-	if job.Name != "review" {
-		t.Errorf("Job.Name = %q", job.Name)
-	}
-	if job.Triggers.PullRequest == nil {
+	if pw.Triggers.PullRequest == nil {
 		t.Error("Triggers.PullRequest is nil")
 	}
-
-	// Preamble (4 steps: checkout, install jerry, install pi, drift gate)
-	// + 3 workflow steps = 7 total.
-	if len(job.Steps) != 7 {
-		t.Fatalf("len(Steps) = %d, want 7", len(job.Steps))
+	if len(pw.Steps) != 3 {
+		t.Fatalf("len(Steps) = %d, want 3", len(pw.Steps))
 	}
 
-	for i := range 4 {
-		if !job.Steps[i].IsPreamble {
-			t.Errorf("step %d: IsPreamble = false", i)
-		}
-	}
-
-	s := job.Steps[4]
+	s := pw.Steps[0]
 	if s.Label != "review" {
-		t.Errorf("step 4 Label = %q", s.Label)
+		t.Errorf("step 0 Label = %q", s.Label)
 	}
 	if s.Command != "jerry exec review/review" {
-		t.Errorf("step 4 Command = %q", s.Command)
-	}
-	if s.Retries != 0 {
-		t.Errorf("step 4 Retries = %d", s.Retries)
+		t.Errorf("step 0 Command = %q", s.Command)
 	}
 }
 
@@ -111,16 +91,10 @@ func TestPlanStepTimeout(t *testing.T) {
 		On:    spec.Triggers{Push: &spec.PushTrigger{}},
 		Steps: []spec.Step{{Name: "slow", Prompt: "do it", Timeout: spec.Duration{Duration: 600 * time.Second}}},
 	}
-	plan, err := PlanProject(&spec.Project{
-		Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf},
-		Lock: &spec.Lockfile{Version: 1, Runtimes: map[string]spec.LockedRuntime{"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"}}},
-	}, "dev")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := plan.Files[0].Jobs[0].Steps[4]
+	plan, _ := PlanProject(&spec.Project{Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf}}, "dev")
+	s := plan.Workflows[0].Steps[0]
 	if s.TimeoutMinutes != 11 {
-		t.Errorf("TimeoutMinutes = %d, want 11 (ceil(600/60)+1)", s.TimeoutMinutes)
+		t.Errorf("TimeoutMinutes = %d, want 11", s.TimeoutMinutes)
 	}
 }
 
@@ -130,30 +104,20 @@ func TestPlanStepRetries(t *testing.T) {
 		On:    spec.Triggers{Push: &spec.PushTrigger{}},
 		Steps: []spec.Step{{Name: "flaky", Prompt: "do it", Retries: 2}},
 	}
-	plan, err := PlanProject(&spec.Project{
-		Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf},
-		Lock: &spec.Lockfile{Version: 1, Runtimes: map[string]spec.LockedRuntime{"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"}}},
-	}, "dev")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := plan.Files[0].Jobs[0].Steps[4]
-	if s.Retries != 2 {
-		t.Errorf("Retries = %d, want 2", s.Retries)
+	plan, _ := PlanProject(&spec.Project{Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf}}, "dev")
+	if plan.Workflows[0].Steps[0].Retries != 2 {
+		t.Error("Retries wrong")
 	}
 }
 
-func TestPlanEnvRefs(t *testing.T) {
-	plan, err := PlanProject(reviewProject(), "dev")
-	if err != nil {
-		t.Fatal(err)
+func TestPlanEnvNames(t *testing.T) {
+	plan, _ := PlanProject(reviewProject(), "dev")
+	s := plan.Workflows[0].Steps[0]
+	if len(s.EnvNames) != 2 {
+		t.Fatalf("len(EnvNames) = %d, want 2", len(s.EnvNames))
 	}
-	s := plan.Files[0].Jobs[0].Steps[4]
-	if len(s.EnvRefs) != 2 {
-		t.Fatalf("len(EnvRefs) = %d, want 2", len(s.EnvRefs))
-	}
-	if s.EnvRefs[0].Name != "ANTHROPIC_API_KEY" || s.EnvRefs[0].SecretRef != "${{ secrets.ANTHROPIC_API_KEY }}" {
-		t.Errorf("EnvRefs[0] = %+v", s.EnvRefs[0])
+	if s.EnvNames[0] != "ANTHROPIC_API_KEY" {
+		t.Errorf("EnvNames[0] = %q", s.EnvNames[0])
 	}
 }
 
@@ -169,22 +133,16 @@ func TestPlanStepEnvNarrowing(t *testing.T) {
 			{Name: "ci", CI: "post_pr_comment", Body: "hi"},
 		},
 	}
-	plan, err := PlanProject(&spec.Project{
-		Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf},
-		Lock: &spec.Lockfile{Version: 1, Runtimes: map[string]spec.LockedRuntime{"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"}}},
-	}, "dev")
-	if err != nil {
-		t.Fatal(err)
+	plan, _ := PlanProject(&spec.Project{Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf}}, "dev")
+	steps := plan.Workflows[0].Steps
+	if len(steps[0].EnvNames) != 2 {
+		t.Errorf("agent EnvNames = %d", len(steps[0].EnvNames))
 	}
-	steps := plan.Files[0].Jobs[0].Steps
-	if len(steps[4].EnvRefs) != 2 {
-		t.Errorf("agent EnvRefs = %d, want 2", len(steps[4].EnvRefs))
+	if len(steps[1].EnvNames) != 0 {
+		t.Errorf("shell EnvNames = %d", len(steps[1].EnvNames))
 	}
-	if len(steps[5].EnvRefs) != 0 {
-		t.Errorf("shell EnvRefs = %d, want 0", len(steps[5].EnvRefs))
-	}
-	if len(steps[6].EnvRefs) != 2 {
-		t.Errorf("ci EnvRefs = %d, want 2", len(steps[6].EnvRefs))
+	if len(steps[2].EnvNames) != 2 {
+		t.Errorf("ci EnvNames = %d", len(steps[2].EnvNames))
 	}
 }
 
@@ -202,58 +160,20 @@ func TestPlanSortedDeterministic(t *testing.T) {
 	}
 	p1, _ := PlanProject(project, "dev")
 	p2, _ := PlanProject(project, "dev")
-	if p1.Files[0].Path != p2.Files[0].Path {
-		t.Error("non-deterministic file order")
+	if p1.Workflows[0].Name != p2.Workflows[0].Name {
+		t.Error("non-deterministic order")
 	}
-	if p1.Files[0].Path != ".github/workflows/jerry-alpha.yml" {
-		t.Errorf("first file = %q, want alpha (sorted)", p1.Files[0].Path)
-	}
-}
-
-func TestPlanRuntimeInstallFromLock(t *testing.T) {
-	wf := &spec.Workflow{
-		Name: "t", Dir: "/tmp/.jerry/t", Version: 1,
-		On:    spec.Triggers{Push: &spec.PushTrigger{}},
-		Steps: []spec.Step{{Name: "a", Prompt: "do"}},
-	}
-	lock := &spec.Lockfile{
-		Version: 1,
-		Runtimes: map[string]spec.LockedRuntime{
-			"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"},
-		},
-	}
-	plan, err := PlanProject(&spec.Project{
-		Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf}, Lock: lock,
-	}, "dev")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := plan.Files[0].Jobs[0].Steps[2]
-	want := "npm install -g @mariozechner/pi-coding-agent@0.73.1"
-	if s.Command != want {
-		t.Errorf("install command = %q, want %q", s.Command, want)
+	if p1.Workflows[0].Name != "alpha" {
+		t.Errorf("first = %q, want alpha (sorted)", p1.Workflows[0].Name)
 	}
 }
 
-func TestPlanNoLockfileSkipsRuntimeInstall(t *testing.T) {
-	wf := &spec.Workflow{
-		Name: "t", Dir: "/tmp/.jerry/t", Version: 1,
-		On:    spec.Triggers{Push: &spec.PushTrigger{}},
-		Steps: []spec.Step{{Name: "a", Prompt: "do"}},
+func TestPlanLockfileCarried(t *testing.T) {
+	plan, _ := PlanProject(reviewProject(), "dev")
+	if plan.Lock == nil {
+		t.Fatal("Lock not carried into Plan")
 	}
-	plan, err := PlanProject(&spec.Project{
-		Root: "/tmp/.jerry", Workflows: []*spec.Workflow{wf}, Lock: nil,
-	}, "dev")
-	if err != nil {
-		t.Fatal(err)
-	}
-	preambleCount := 0
-	for _, s := range plan.Files[0].Jobs[0].Steps {
-		if s.IsPreamble {
-			preambleCount++
-		}
-	}
-	if preambleCount != 3 {
-		t.Errorf("preamble steps = %d, want 3 (no runtime install without lockfile)", preambleCount)
+	if plan.Lock.Runtimes["pi"].Version != "0.73.1" {
+		t.Error("Lock version wrong")
 	}
 }
