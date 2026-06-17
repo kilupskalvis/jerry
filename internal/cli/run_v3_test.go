@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/output"
@@ -82,5 +83,37 @@ steps:
 		Printer:  output.NewPrinter(io.Discard, io.Discard)}
 	if err := runLocal(app, "demo", "x", false); err == nil {
 		t.Fatal("want error from failing step")
+	}
+}
+
+func TestRunLocalBudgetBreachStops(t *testing.T) {
+	repo, jerryDir := v3Project(t)
+
+	budgetWF := `
+version: 1
+on: { push: {} }
+steps:
+  - name: plan
+    prompt: "Plan it"
+    budget: { max_cost: 0.10 }
+  - name: next
+    run: echo "should not run"
+`
+	if err := os.WriteFile(filepath.Join(jerryDir, "demo", "workflow.yaml"), []byte(budgetWF), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fake := runtime.NewFake("pi")
+	fake.Script(runtime.Result{Text: "expensive", Usage: &runtime.Usage{CostUSD: 0.50}})
+
+	app := &App{JerryDir: jerryDir, RepoRoot: repo,
+		Registry: runtime.NewRegistry(fake),
+		Printer:  output.NewPrinter(io.Discard, io.Discard)}
+	err := runLocal(app, "demo", "x", false)
+	if err == nil {
+		t.Fatal("want error from budget breach")
+	}
+	if !strings.Contains(err.Error(), "exit 4") {
+		t.Errorf("error = %v, want mention of exit 4", err)
 	}
 }
