@@ -12,6 +12,7 @@ import (
 
 	"github.com/kilupskalvis/jerry/internal/compile"
 	"github.com/kilupskalvis/jerry/internal/compile/github"
+	"github.com/kilupskalvis/jerry/internal/compile/gitlab"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/spec"
 )
@@ -19,8 +20,9 @@ import (
 // @lattice:flow generate
 func newGenerateCmd(app *App) *cobra.Command {
 	var (
-		check  bool
-		stdout bool
+		check   bool
+		stdout  bool
+		backend string
 	)
 	cmd := &cobra.Command{
 		Use:   "generate",
@@ -32,15 +34,16 @@ func newGenerateCmd(app *App) *cobra.Command {
 				return jerrerr.New(jerrerr.CodeJerryDirNotFound,
 					"not in a Jerry project (no .jerry/ directory found)")
 			}
-			return runGenerate(app, check, stdout)
+			return runGenerate(app, check, stdout, backend)
 		},
 	}
 	cmd.Flags().BoolVar(&check, "check", false, "Verify generated files match disk (exit 2 on drift)")
 	cmd.Flags().BoolVar(&stdout, "stdout", false, "Print generated files to stdout instead of writing")
+	cmd.Flags().StringVar(&backend, "backend", "github", "Target CI platform: github, gitlab, or all")
 	return cmd
 }
 
-func runGenerate(app *App, check, stdout bool) error {
+func runGenerate(app *App, check, stdout bool, backend string) error {
 	project, err := spec.LoadProject(app.JerryDir)
 	if err != nil {
 		return err
@@ -53,7 +56,26 @@ func runGenerate(app *App, check, stdout bool) error {
 	if err != nil {
 		return err
 	}
-	files, err := github.Emit(plan)
+
+	var files []compile.GeneratedFile
+	switch backend {
+	case "github":
+		files, err = github.Emit(plan)
+	case "gitlab":
+		files, err = gitlab.Emit(plan)
+	case "all":
+		files, err = github.Emit(plan)
+		if err != nil {
+			return err
+		}
+		glFiles, glErr := gitlab.Emit(plan)
+		if glErr != nil {
+			return glErr
+		}
+		files = append(files, glFiles...)
+	default:
+		return fmt.Errorf("unknown backend %q (available: github, gitlab, all)", backend)
+	}
 	if err != nil {
 		return err
 	}
