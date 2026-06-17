@@ -104,3 +104,86 @@ func TestCIStepLivePostPRComment(t *testing.T) {
 		t.Errorf("body = %q", payload["body"])
 	}
 }
+
+const checkWorkflow = `
+version: 1
+on: { push: {} }
+steps:
+  - name: plan
+    prompt: "Plan inline"
+    outputs: { verdict: string }
+  - name: gate
+    ci: add_check_status
+    status: "${{ steps.plan.outputs.verdict }}"
+    body: "Jerry check"
+`
+
+func TestCIStepLiveAddCheckStatus(t *testing.T) {
+	var payload map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(data, &payload)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	repo, jerryDir := testProject(t, checkWorkflow, "")
+	td := &trigger.TriggerData{Type: "pull_request", Source: "github",
+		Intent: "review", Number: 1, HeadSHA: "sha1",
+		RepoOwner: "o", RepoName: "r"}
+
+	client, err := citools.NewClient(td, citools.Config{Token: "tok", BaseURL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fake := runtime.NewFake("pi")
+	fake.Script(runtime.Result{Text: "ok", Outputs: map[string]any{"verdict": "success"}})
+
+	e := New(Options{RepoRoot: repo, JerryDir: jerryDir,
+		Registry: runtime.NewRegistry(fake), Out: io.Discard,
+		CIClient: client})
+
+	ctxDir := filepath.Join(repo, ".jerry-run")
+	if code := e.Run(context.Background(), Request{
+		Workflow: "wf", Step: "plan", CtxDir: ctxDir, Trigger: td}); code != 0 {
+		t.Fatalf("plan exit %d", code)
+	}
+
+	code := e.Run(context.Background(), Request{
+		Workflow: "wf", Step: "gate", CtxDir: ctxDir, Trigger: td, CILive: true})
+	if code != 0 {
+		t.Fatalf("gate exit %d", code)
+	}
+	if payload["conclusion"] != "success" || payload["head_sha"] != "sha1" {
+		t.Errorf("payload = %v", payload)
+	}
+}
+
+const reviewCommentWorkflow = `
+version: 1
+on: { push: {} }
+steps:
+  - name: annotate
+    ci: post_review_comment
+    body: "nit: fix this"
+`
+
+func TestCIStepLivePostReviewCommentUnsupported(t *testing.T) {
+	repo, jerryDir := testProject(t, reviewCommentWorkflow, "")
+	td := &trigger.TriggerData{Type: "pull_request", Source: "github",
+		Intent: "review", Number: 1, HeadSHA: "sha",
+		RepoOwner: "o", RepoName: "r"}
+
+	client, _ := citools.NewClient(td, citools.Config{Token: "tok", BaseURL: "http://unused"})
+	e := New(Options{RepoRoot: repo, JerryDir: jerryDir,
+		Registry: runtime.NewRegistry(runtime.NewFake("pi")), Out: io.Discard,
+		CIClient: client})
+
+	ctxDir := filepath.Join(repo, ".jerry-run")
+	code := e.Run(context.Background(), Request{
+		Workflow: "wf", Step: "annotate", CtxDir: ctxDir, Trigger: td, CILive: true})
+	if code != ExitConfig {
+		t.Errorf("exit = %d, want %d (unsupported action)", code, ExitConfig)
+	}
+}
