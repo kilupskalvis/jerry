@@ -173,6 +173,9 @@ func printInitOutput(template string) {
 	}
 
 	fmt.Println()
-	fmt.Println("Validate:    jerry validate")
-	fmt.Printf("Run locally: jerry run %s \"your task\"\n", template)
+	fmt.Println("Next steps:")
+	fmt.Println("  jerry validate              Check the spec is valid")
+	fmt.Printf("  jerry run %s \"your task\"   Run locally in preview mode\n", template)
+	fmt.Println("  jerry generate              Compile to CI config (.github/workflows/)")
+	fmt.Println("  git add .jerry .github && git push")
 }
