@@ -168,6 +168,26 @@ func TestAgentStepBudgetBreachExit4AndUsageRecorded(t *testing.T) {
 	}
 }
 
+func TestAgentStepStructuredOutputsFromText(t *testing.T) {
+	repo, jerryDir := testProject(t, agentWorkflow, "Plan it")
+	fake := runtime.NewFake("pi").WithoutStructuredOutput()
+	fake.Script(runtime.Result{Text: "Sure!\n" + `{"approach":"small steps"}`})
+
+	e := newTestExecutor(repo, jerryDir, fake)
+	ctxDir := filepath.Join(repo, ".jerry-run")
+	code := e.Run(context.Background(), Request{
+		Workflow: "wf", Step: "plan", CtxDir: ctxDir,
+		Trigger: &trigger.TriggerData{Type: "manual", Source: "cli", Intent: "x"},
+	})
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	rec, _ := handoff.NewCtxDir(ctxDir).ReadStep("plan")
+	if rec.Outputs["approach"] != "small steps" {
+		t.Errorf("structured output not parsed from text: %+v", rec.Outputs)
+	}
+}
+
 func TestUnknownWorkflowExit2(t *testing.T) {
 	repo, jerryDir := testProject(t, agentWorkflow, "Plan it")
 	e := newTestExecutor(repo, jerryDir, runtime.NewFake("pi"))

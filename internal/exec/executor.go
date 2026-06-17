@@ -161,6 +161,9 @@ func (e *Executor) runAgentStep(ctx context.Context, project *spec.Project, wf *
 	if err != nil {
 		return ExitConfig, err
 	}
+	if len(step.Outputs) > 0 && !adapter.Capabilities().StructuredOutput {
+		instructions += handoff.StructuredOutputDirective(step.Outputs)
+	}
 	prompt, err := handoff.BuildPrompt(instructions, step.Context, runCtx)
 	if err != nil {
 		return ExitConfig, err
@@ -209,6 +212,14 @@ func (e *Executor) runAgentStep(ctx context.Context, project *spec.Project, wf *
 	}
 	if err != nil {
 		return ExitRuntime, fmt.Errorf("runtime %s failed: %w", adapter.Name(), err)
+	}
+
+	if len(step.Outputs) > 0 && result.Outputs == nil {
+		parsed, perr := handoff.ParseStructuredText(result.Text)
+		if perr != nil {
+			return ExitStep, fmt.Errorf("step %q: %w", step.Name, perr)
+		}
+		result.Outputs = parsed
 	}
 
 	if err := validateOutputs(step, result.Outputs); err != nil {

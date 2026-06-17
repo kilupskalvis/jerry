@@ -5,11 +5,16 @@ import "context"
 // Fake is a scriptable in-memory adapter for tests. It records every
 // InvocationSpec and replays scripted results in order.
 type Fake struct {
-	name        string
-	results     []Result
-	errs        []error
-	Invocations []InvocationSpec
+	name         string
+	results      []Result
+	errs         []error
+	noStructured bool
+	Invocations  []InvocationSpec
 }
+
+// WithoutStructuredOutput makes the fake report no native structured-output
+// support, exercising exec's text-parsing fallback.
+func (f *Fake) WithoutStructuredOutput() *Fake { f.noStructured = true; return f }
 
 // NewFake returns a Fake that answers to name.
 func NewFake(name string) *Fake {
@@ -27,7 +32,7 @@ func (f *Fake) ScriptErr(err error) {
 func (f *Fake) Name() string { return f.name }
 
 func (f *Fake) Capabilities() Capabilities {
-	return Capabilities{StructuredOutput: true, CostReporting: true, Permissions: true}
+	return Capabilities{StructuredOutput: !f.noStructured, CostReporting: true, Permissions: true}
 }
 
 func (f *Fake) Invoke(_ context.Context, inv InvocationSpec) (Result, error) {
