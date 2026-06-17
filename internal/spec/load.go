@@ -19,6 +19,7 @@ type Project struct {
 	Workflows []*Workflow
 	Settings  *Settings
 	Lock      *Lockfile
+	Adapters  []AdapterSpec
 }
 
 // LoadProject loads every directory under root that contains a
@@ -51,6 +52,9 @@ func LoadProject(root string) (*Project, error) {
 		return nil, err
 	}
 	if p.Lock, err = LoadLock(root); err != nil {
+		return nil, err
+	}
+	if p.Adapters, err = LoadAdapters(root); err != nil {
 		return nil, err
 	}
 	return p, nil
