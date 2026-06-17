@@ -72,6 +72,93 @@ func TestEmitMinimal(t *testing.T) {
 	assertGolden(t, "minimal.yml", files[0].Content)
 }
 
+func piLock() *spec.Lockfile {
+	return &spec.Lockfile{
+		Version:  1,
+		Runtimes: map[string]spec.LockedRuntime{"pi": {Package: "@mariozechner/pi-coding-agent", Version: "0.73.1"}},
+	}
+}
+
+func TestEmitReviewWorkflow(t *testing.T) {
+	plan, err := compile.PlanProject(&spec.Project{
+		Root: "/tmp/.jerry",
+		Workflows: []*spec.Workflow{
+			{
+				Name: "review", Dir: "/tmp/.jerry/review", Version: 1,
+				On: spec.Triggers{
+					PullRequest: &spec.PullRequestTrigger{Types: []string{"opened", "synchronize"}},
+				},
+				Env: []string{"ANTHROPIC_API_KEY", "GITHUB_TOKEN"},
+				Steps: []spec.Step{
+					{Name: "review", Prompt: "reviewer.md", Model: "claude-sonnet-4-6",
+						Permissions: spec.PermissionSet{Allow: []string{"read", "bash(go test:*)", "bash(go vet:*)"}},
+						Budget:      spec.Budget{MaxCost: 1.50},
+						Outputs:     map[string]string{"verdict": "string", "findings": "string"}},
+					{Name: "report", CI: "post_pr_comment",
+						Body: "## Jerry Review\n${{ steps.review.outputs.findings }}"},
+					{Name: "gate", CI: "add_check_status",
+						Status: "${{ steps.review.outputs.verdict }}"},
+				},
+			},
+		},
+		Lock: piLock(),
+	}, "0.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Emit(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("len = %d", len(files))
+	}
+	assertGolden(t, "review.yml", files[0].Content)
+}
+
+func TestEmitFeatureWorkflow(t *testing.T) {
+	empty := []string{}
+	plan, err := compile.PlanProject(&spec.Project{
+		Root: "/tmp/.jerry",
+		Workflows: []*spec.Workflow{
+			{
+				Name: "feature", Dir: "/tmp/.jerry/feature", Version: 1,
+				On:       spec.Triggers{Dispatch: &spec.DispatchTrigger{Types: []string{"jerry-ticket"}}},
+				Env:      []string{"ANTHROPIC_API_KEY", "GITHUB_TOKEN"},
+				Defaults: spec.Defaults{Model: "claude-sonnet-4-6"},
+				Steps: []spec.Step{
+					{Name: "plan", Prompt: "planner.md", Model: "claude-haiku-4-5",
+						Budget:  spec.Budget{MaxCost: 0.50},
+						Outputs: map[string]string{"approach": "string", "files": "list"}},
+					{Name: "implement", Prompt: "generator.md",
+						Context:     []string{"trigger", "steps.plan"},
+						Permissions: spec.PermissionSet{Allow: []string{"read", "edit", "bash(go test:*)", "bash(go build:*)", "bash(go vet:*)"}},
+						Budget:      spec.Budget{MaxCost: 3.00},
+						Timeout:     spec.Duration{Duration: 900_000_000_000}},
+					{Name: "test", Run: "go test ./...",
+						Timeout: spec.Duration{Duration: 300_000_000_000},
+						Env:     &empty},
+					{Name: "open-pr", CI: "create_pull_request",
+						Title: "jerry: ${{ trigger.intent }}",
+						Body:  "Automated implementation for: ${{ trigger.intent }}\n\nPlan: ${{ steps.plan.outputs.approach }}\n${{ steps.implement.diff_stat }}"},
+				},
+			},
+		},
+		Lock: piLock(),
+	}, "0.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Emit(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("len = %d", len(files))
+	}
+	assertGolden(t, "feature.yml", files[0].Content)
+}
+
 func TestEmitDeterministic(t *testing.T) {
 	plan := minimalPlan()
 	f1, _ := Emit(plan)
