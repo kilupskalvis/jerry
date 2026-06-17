@@ -159,6 +159,40 @@ func TestEmitFeatureWorkflow(t *testing.T) {
 	assertGolden(t, "feature.yml", files[0].Content)
 }
 
+func TestEmitRetryLoop(t *testing.T) {
+	plan := &compile.Plan{
+		JerryVersion: "0.1.0",
+		Files: []compile.PlannedFile{
+			{
+				Path: ".github/workflows/jerry-retry.yml",
+				Jobs: []compile.PlannedJob{
+					{
+						Name:     "retry",
+						Triggers: spec.Triggers{Push: &spec.PushTrigger{}},
+						Steps: []compile.PlannedStep{
+							{Label: "Checkout", Command: "actions/checkout@v4", IsPreamble: true},
+							{Label: "Drift check", Command: "jerry generate --check", IsPreamble: true},
+							{Label: "flaky", Command: "jerry exec retry/flaky",
+								Retries:        2,
+								TimeoutMinutes: 11,
+								EnvRefs: []compile.EnvRef{
+									{Name: "ANTHROPIC_API_KEY", SecretRef: "${{ secrets.ANTHROPIC_API_KEY }}"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	files, err := Emit(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "retry.yml", files[0].Content)
+}
+
 func TestEmitDeterministic(t *testing.T) {
 	plan := minimalPlan()
 	f1, _ := Emit(plan)
