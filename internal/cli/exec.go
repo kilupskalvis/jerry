@@ -73,7 +73,7 @@ func runExecCtx(app *App, ref string, t execTrigger, ciLive bool, ctxDir string)
 		return err
 	}
 
-	if !ciLive && os.Getenv("GITHUB_ACTIONS") == "true" {
+	if !ciLive && (os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("GITLAB_CI") == "true") {
 		ciLive = true
 	}
 
