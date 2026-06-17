@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // PiOptions configures the pi adapter.
@@ -66,9 +67,23 @@ func (p *Pi) Invoke(ctx context.Context, inv InvocationSpec) (Result, error) {
 	return Result{Text: parsed.Text, Usage: parsed.Usage}, nil
 }
 
-// preflight verifies the installed pi version matches the lockfile pin
-// (filled in by the version-preflight task).
-func (p *Pi) preflight() error { return nil }
+// preflight verifies the installed pi version matches the lockfile pin.
+// An empty PinnedVersion (local --allow-unpinned) skips the check.
+func (p *Pi) preflight() error {
+	if p.opts.PinnedVersion == "" {
+		return nil
+	}
+	out, err := exec.Command(p.opts.Binary, "--version").Output()
+	if err != nil {
+		return fmt.Errorf("cannot run %s --version (is pi installed?): %w", p.opts.Binary, err)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != p.opts.PinnedVersion {
+		return fmt.Errorf("pi version mismatch: jerry.lock pins %s but %s is installed — run `jerry lock` or pass --allow-unpinned",
+			p.opts.PinnedVersion, got)
+	}
+	return nil
+}
 
 // piEnv builds the child environment: the caller's allowlist (API keys)
 // plus PATH and HOME so the binary and its config resolve.

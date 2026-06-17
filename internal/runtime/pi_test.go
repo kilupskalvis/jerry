@@ -51,6 +51,39 @@ func TestPiName(t *testing.T) {
 	}
 }
 
+func TestPiPreflightMatch(t *testing.T) {
+	dir := writeFakePi(t, `[ "$1" = "--version" ] && { echo "0.73.1"; exit 0; }; cat <<'EOF'
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"ok"}],"usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"total":0}},"stopReason":"stop"}}
+EOF`)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pi := NewPi(PiOptions{PinnedVersion: "0.73.1"})
+	if _, err := pi.Invoke(context.Background(), InvocationSpec{Prompt: "x", Model: "m"}); err != nil {
+		t.Fatalf("matching version should pass: %v", err)
+	}
+}
+
+func TestPiPreflightMismatch(t *testing.T) {
+	dir := writeFakePi(t, `[ "$1" = "--version" ] && { echo "0.99.0"; exit 0; }; echo unused`)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pi := NewPi(PiOptions{PinnedVersion: "0.73.1"})
+	_, err := pi.Invoke(context.Background(), InvocationSpec{Prompt: "x", Model: "m"})
+	if err == nil {
+		t.Fatal("version mismatch must error")
+	}
+	if !strings.Contains(err.Error(), "0.73.1") || !strings.Contains(err.Error(), "0.99.0") {
+		t.Errorf("error should name both versions: %v", err)
+	}
+}
+
+func TestPiPreflightMissingBinary(t *testing.T) {
+	pi := NewPi(PiOptions{PinnedVersion: "0.73.1", Binary: "definitely-not-a-real-binary-xyz"})
+	if _, err := pi.Invoke(context.Background(), InvocationSpec{Prompt: "x"}); err == nil {
+		t.Fatal("missing pi binary must error")
+	}
+}
+
 func TestBuildArgs(t *testing.T) {
 	args := buildArgs(InvocationSpec{
 		Prompt:      "do the thing",
