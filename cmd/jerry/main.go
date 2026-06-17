@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	"github.com/kilupskalvis/jerry/internal/cli"
-	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/output"
 	"github.com/kilupskalvis/jerry/internal/runtime"
 	"github.com/kilupskalvis/jerry/internal/spec"
@@ -36,9 +35,9 @@ func run() int {
 	if execErr := rootCmd.ExecuteContext(ctx); execErr != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "jerry: error: %s\n", execErr.Error())
 
-		var jerryErr *jerrerr.Error
-		if errors.As(execErr, &jerryErr) {
-			return jerryErr.ExitCode()
+		var coder interface{ ExitCode() int }
+		if errors.As(execErr, &coder) {
+			return coder.ExitCode()
 		}
 		return 1
 	}
