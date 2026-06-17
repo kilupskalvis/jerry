@@ -1,0 +1,3 @@
+{"type":"session","version":1,"id":"s3","timestamp":1,"cwd":"/repo"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"line one"},{"type":"toolCall","id":"t1","name":"read","arguments":{}},{"type":"text","text":"line two"}],"model":"m","provider":"anthropic","usage":{"input":5,"output":3,"cacheRead":0,"cacheWrite":0,"totalTokens":8,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.5}},"stopReason":"stop"}}
+{"type":"agent_end","messages":[]}

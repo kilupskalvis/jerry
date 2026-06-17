@@ -1,7 +1,9 @@
 package runtime
 
 import (
+	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/spec"
@@ -33,6 +35,78 @@ func TestBuildArgsOmitsModelWhenEmpty(t *testing.T) {
 	args := buildArgs(InvocationSpec{Prompt: "p"})
 	if slices.Contains(args, "--model") {
 		t.Errorf("must not emit --model when empty: %v", args)
+	}
+}
+
+func TestParseSessionSuccess(t *testing.T) {
+	data, err := os.ReadFile("testdata/pi-success.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := parseSession(data)
+	if err != nil {
+		t.Fatalf("parseSession: %v", err)
+	}
+	if res.Text != "hello from jerry" {
+		t.Errorf("Text = %q", res.Text)
+	}
+	if res.Usage == nil {
+		t.Fatal("Usage nil")
+	}
+	if res.Usage.InputTokens != 150 || res.Usage.OutputTokens != 8 {
+		t.Errorf("tokens = %d/%d, want 150/8", res.Usage.InputTokens, res.Usage.OutputTokens)
+	}
+	if res.Usage.CostUSD != 0.00163 {
+		t.Errorf("cost = %v, want 0.00163", res.Usage.CostUSD)
+	}
+}
+
+func TestParseSessionError(t *testing.T) {
+	data, err := os.ReadFile("testdata/pi-error.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = parseSession(data)
+	if err == nil {
+		t.Fatal("want error for stopReason=error session")
+	}
+	if !strings.Contains(err.Error(), "invalid x-api-key") {
+		t.Errorf("error should surface pi errorMessage, got: %v", err)
+	}
+}
+
+func TestParseSessionMultilineConcatsTextOnly(t *testing.T) {
+	data, err := os.ReadFile("testdata/pi-multiline.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := parseSession(data)
+	if err != nil {
+		t.Fatalf("parseSession: %v", err)
+	}
+	if res.Text != "line one\nline two" {
+		t.Errorf("Text = %q, want two text blocks joined by newline", res.Text)
+	}
+}
+
+func TestParseSessionNoAssistant(t *testing.T) {
+	_, err := parseSession([]byte(`{"type":"session","version":1}` + "\n" + `{"type":"agent_end","messages":[]}` + "\n"))
+	if err == nil {
+		t.Fatal("want error when no assistant message present")
+	}
+}
+
+func TestParseSessionSkipsBlankAndBadLines(t *testing.T) {
+	good := `{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"ok"}],"usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"total":0}},"stopReason":"stop"}}`
+	res, err := parseSession([]byte("\n" + good + "\n\n"))
+	if err != nil {
+		t.Fatalf("blank lines should be tolerated: %v", err)
+	}
+	if res.Text != "ok" {
+		t.Errorf("Text = %q", res.Text)
+	}
+	if _, err := parseSession([]byte("not json\n")); err == nil {
+		t.Fatal("want error on non-JSON line")
 	}
 }
 
