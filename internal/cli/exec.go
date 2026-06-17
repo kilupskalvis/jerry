@@ -73,6 +73,10 @@ func runExecCtx(app *App, ref string, t execTrigger, ciLive bool, ctxDir string)
 		return err
 	}
 
+	if !ciLive && os.Getenv("GITHUB_ACTIONS") == "true" {
+		ciLive = true
+	}
+
 	executor := exec.New(exec.Options{
 		RepoRoot: app.RepoRoot,
 		JerryDir: app.JerryDir,
