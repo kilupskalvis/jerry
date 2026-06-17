@@ -1,13 +1,55 @@
 package runtime
 
 import (
+	"context"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/kilupskalvis/jerry/internal/spec"
 )
+
+func writeFakePi(t *testing.T, script string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pi")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestPiInvokeSpawnsAndParses(t *testing.T) {
+	line := `{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"spawned ok"}],"usage":{"input":2,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":3,"cost":{"total":0.01}},"stopReason":"stop"}}`
+	dir := writeFakePi(t, "cat <<'EOF'\n"+line+"\nEOF")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pi := NewPi(PiOptions{})
+	res, err := pi.Invoke(context.Background(), InvocationSpec{Prompt: "hi", Model: "claude-haiku-4-5"})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if res.Text != "spawned ok" || res.Usage == nil || res.Usage.CostUSD != 0.01 {
+		t.Errorf("result = %+v usage=%+v", res, res.Usage)
+	}
+}
+
+func TestPiInvokeNonZeroExit(t *testing.T) {
+	dir := writeFakePi(t, "echo 'boom' >&2; exit 1")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	pi := NewPi(PiOptions{})
+	if _, err := pi.Invoke(context.Background(), InvocationSpec{Prompt: "x", Model: "m"}); err == nil {
+		t.Fatal("want error when pi exits non-zero")
+	}
+}
+
+func TestPiName(t *testing.T) {
+	if NewPi(PiOptions{}).Name() != "pi" {
+		t.Error("Name must be pi")
+	}
+}
 
 func TestBuildArgs(t *testing.T) {
 	args := buildArgs(InvocationSpec{
