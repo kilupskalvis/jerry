@@ -48,7 +48,7 @@ func run() int {
 // buildApp wires the CLI dependencies. The runtime registry is empty until
 // the pi adapter lands; agent steps error with "unknown runtime" until then.
 func buildApp(printer *output.Printer) *cli.App {
-	app := &cli.App{Printer: printer, Registry: runtime.NewRegistry()}
+	app := &cli.App{Printer: printer, Registry: buildRegistry("")}
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -60,9 +60,24 @@ func buildApp(printer *output.Printer) *cli.App {
 	}
 	app.JerryDir = jerryDir
 	app.RepoRoot = repoRoot
+	app.Registry = buildRegistry(jerryDir)
 
 	loadDotEnvIntoProcess(repoRoot, printer)
 	return app
+}
+
+// buildRegistry constructs the runtime registry. pi is the only adapter
+// today; its version pin comes from jerry.lock when the project has one.
+func buildRegistry(jerryDir string) *runtime.Registry {
+	var pin string
+	if jerryDir != "" {
+		if lock, err := spec.LoadLock(jerryDir); err == nil && lock != nil {
+			if rt, ok := lock.Runtimes["pi"]; ok {
+				pin = rt.Version
+			}
+		}
+	}
+	return runtime.NewRegistry(runtime.NewPi(runtime.PiOptions{PinnedVersion: pin}))
 }
 
 // loadDotEnvIntoProcess loads .env values into the process environment so
