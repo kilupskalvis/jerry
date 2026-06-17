@@ -51,5 +51,7 @@ See the [5-minute quickstart](quickstart.md) to set up a PR review pipeline.
 - **[Settings + lockfile](spec/settings.md)** — org policy and runtime pinning
 - **[CLI commands](cli/validate.md)** — validate, generate, run, exec, init, lock
 - **[pi adapter](adapters/pi.md)** — how Jerry invokes pi
+- **[Claude Code adapter](adapters/claude-code.md)** — Claude Code as a runtime
+- **[Custom adapters](adapters/custom.md)** — define runtimes in YAML, no Go required
 - **[Local development](guides/local-development.md)** — `jerry run`, debugging, preview mode
 - **[FAQ](faq.md)** — comparisons, limitations, security, cost model
