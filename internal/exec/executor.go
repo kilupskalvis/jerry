@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/kilupskalvis/jerry/internal/budget"
+	"github.com/kilupskalvis/jerry/internal/citools"
 	jerrerr "github.com/kilupskalvis/jerry/internal/errors"
 	"github.com/kilupskalvis/jerry/internal/handoff"
 	"github.com/kilupskalvis/jerry/internal/runtime"
@@ -35,6 +36,8 @@ type Options struct {
 	JerryDir string
 	Registry *runtime.Registry
 	Out      io.Writer
+	CIClient *citools.Client
+	CIConfig citools.Config
 }
 
 // Executor runs exactly one step per Run call. Stateless between calls.
