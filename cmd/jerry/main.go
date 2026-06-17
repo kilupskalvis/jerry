@@ -47,7 +47,7 @@ func run() int {
 // buildApp wires the CLI dependencies. The runtime registry is empty until
 // the pi adapter lands; agent steps error with "unknown runtime" until then.
 func buildApp(printer *output.Printer) *cli.App {
-	app := &cli.App{Printer: printer, Registry: buildRegistry("")}
+	app := &cli.App{Printer: printer, Registry: buildRegistry(""), Version: Version}
 
 	cwd, err := os.Getwd()
 	if err != nil {

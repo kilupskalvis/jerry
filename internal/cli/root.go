@@ -16,6 +16,7 @@ type App struct {
 	Printer  *output.Printer
 	JerryDir string
 	RepoRoot string
+	Version  string
 }
 
 // NewRootCmd creates the root cobra command with all subcommands.
@@ -47,6 +48,7 @@ func NewRootCmd(app *App) *cobra.Command {
 		newInitCmd(),
 		newRunCmd(app),
 		newExecCmd(app),
+		newGenerateCmd(app),
 		newValidateCmd(app),
 		newLockCmd(app),
 		newSetupCmd(app),
