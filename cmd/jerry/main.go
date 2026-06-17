@@ -65,18 +65,35 @@ func buildApp(printer *output.Printer) *cli.App {
 	return app
 }
 
-// buildRegistry constructs the runtime registry. pi is the only adapter
-// today; its version pin comes from jerry.lock when the project has one.
+// buildRegistry constructs the runtime registry with built-in adapters
+// (pi, claude-code) and any custom adapters from .jerry/adapters/.
 func buildRegistry(jerryDir string) *runtime.Registry {
-	var pin string
+	var piPin, ccPin string
 	if jerryDir != "" {
 		if lock, err := spec.LoadLock(jerryDir); err == nil && lock != nil {
 			if rt, ok := lock.Runtimes["pi"]; ok {
-				pin = rt.Version
+				piPin = rt.Version
+			}
+			if rt, ok := lock.Runtimes["claude-code"]; ok {
+				ccPin = rt.Version
 			}
 		}
 	}
-	return runtime.NewRegistry(runtime.NewPi(runtime.PiOptions{PinnedVersion: pin}))
+
+	adapters := []runtime.Adapter{
+		runtime.NewPi(runtime.PiOptions{PinnedVersion: piPin}),
+		runtime.NewClaudeCode(runtime.ClaudeCodeOptions{PinnedVersion: ccPin}),
+	}
+
+	if jerryDir != "" {
+		if customs, err := spec.LoadAdapters(jerryDir); err == nil {
+			for _, c := range customs {
+				adapters = append(adapters, runtime.NewCustom(c))
+			}
+		}
+	}
+
+	return runtime.NewRegistry(adapters...)
 }
 
 // loadDotEnvIntoProcess loads .env values into the process environment so

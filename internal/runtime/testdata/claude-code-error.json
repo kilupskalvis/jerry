@@ -1,0 +1,17 @@
+{
+  "type": "result",
+  "subtype": "error_max_turns",
+  "result": "Hit maximum turn limit",
+  "cost_usd": 0.10,
+  "session_id": "sess-456",
+  "is_error": true,
+  "duration_ms": 30000,
+  "duration_api_ms": 29000,
+  "num_turns": 10,
+  "usage": {
+    "input_tokens": 5000,
+    "output_tokens": 1000,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}

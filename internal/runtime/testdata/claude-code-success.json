@@ -1,0 +1,17 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "result": "Reviewed the code. No critical issues found.\n{\"verdict\":\"success\",\"findings\":\"No findings.\"}",
+  "cost_usd": 0.042,
+  "session_id": "sess-123",
+  "is_error": false,
+  "duration_ms": 5200,
+  "duration_api_ms": 4800,
+  "num_turns": 1,
+  "usage": {
+    "input_tokens": 1500,
+    "output_tokens": 200,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}
