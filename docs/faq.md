@@ -37,9 +37,9 @@ pi allows or disables tools at the tool level (`--tools read,bash` or `--no-tool
 
 When a step declares `outputs:`, Jerry appends a directive to the prompt asking the model to emit JSON with the declared keys. It then parses the response text for the outermost `{...}` block. This works reliably with current models but is a convention, not a schema-enforced contract. A future pi version may support native structured output.
 
-### GitHub Actions only
+### CI platform support
 
-The compiler currently emits GitHub Actions YAML. GitLab CI support is planned (phase 6). The spec format is already platform-neutral — only the backend changes.
+GitHub Actions and GitLab CI are supported. Use `jerry generate --backend github` (default) or `jerry generate --backend gitlab`. The spec format is platform-neutral — only the backend output changes. See the [GitLab guide](guides/gitlab.md).
 
 ### post_review_comment not yet live
 

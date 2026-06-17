@@ -2,7 +2,7 @@
 
 **Terraform for AI agents in CI.**
 
-Declare agent pipelines once — review agents, security scans, ticket-to-PR automation — in a small spec that lives in your repo. Jerry compiles it to native CI config for GitHub Actions and gives your agents typed handoffs, budgets, permissions, and an audit trail. Any agent runtime. Any CI. Zero new infrastructure.
+Declare agent pipelines once — review agents, security scans, ticket-to-PR automation — in a small spec that lives in your repo. Jerry compiles it to native CI config for GitHub Actions or GitLab CI and gives your agents typed handoffs, budgets, permissions, and an audit trail. Any agent runtime. Any CI. Zero new infrastructure.
 
 ```
 .jerry/review/workflow.yaml   ──jerry generate──▶   .github/workflows/jerry-review.yml
